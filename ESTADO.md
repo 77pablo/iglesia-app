@@ -5,6 +5,25 @@ Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, c�
 
 ---
 
+## 🚀 EN PRODUCCIÓN (26 jun 2026)
+- **URL pública:** https://iglesia-app-production-a3c1.up.railway.app  (verificada: API + login + frontend OK)
+- **Repositorio GitHub:** https://github.com/77pablo/iglesia-app  (rama `main`; se sube con **GitHub Desktop**)
+- **Host:** Railway (Docker), proyecto "elegant-communication / production". Cada `push` a GitHub → **redeploy automático**.
+- **Variables en Railway:** `JWT_SECRET`, `SEED_ON_EMPTY=1`, `DB_PATH=/data/iglesia.db`, `UPLOADS_DIR=/data/uploads`. Volumen `iglesia-app-data` montado en `/data` (persistencia BD + uploads).
+- Archivos de deploy en `app/`: `Dockerfile`, `.dockerignore`, `.gitignore`, `render.yaml`, `DEPLOY.md`.
+
+### ⏳ Pendientes para uso real (no demo)
+1. **Cambiar contraseñas** de los usuarios (hoy todas `1234`) y poner `SEED_ON_EMPTY=0` en Railway.
+2. Vigilar el **crédito de Railway** ("$5.00 left"); pasar a plan si será permanente.
+3. **Reconocimiento facial** (Python, carpeta `facial/`) NO está en el contenedor → desplegar aparte si se quiere usar `/inscribir.html` y `/kiosko.html`.
+4. **Transpositor de tono dentro del cancionero** (la lógica existe y se reusa en el Himnario; falta cablear el visor en el cancionero).
+5. Considerar **OAuth de Google Drive** (hoy es vinculación por enlace de carpeta).
+
+### 🎨 Rediseño visual (aplicado)
+Sidebar verde azulado oscuro (`#113438`), fondo crema (`#f4f3f0`), hero degradado verde→dorado, tarjetas gris cálido radius 16, números negro sólido, **iconos de línea** + logo de cruz, render de auditorio en Anuncios. Acento por defecto "Pino". Hay **Ajustes** (tema claro/oscuro/auto, color de acento, tamaño de texto).
+
+---
+
 ## 🆕 FASE 4 (26 jun 2026): 4 funcionalidades nuevas — IMPLEMENTADAS Y PROBADAS
 
 Todo respeta el aislamiento multi-iglesia (`iglesia_id`) y los permisos por grupo.
