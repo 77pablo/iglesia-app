@@ -23,6 +23,19 @@ const NAV = [
   ['ajustes','🎨','Ajustes'],
   ['admin','⚙️','Administración'],
 ];
+// Render minimalista de un auditorio/iglesia moderno (líneas rectas, luz difusa) para Anuncios.
+const IMG_AUDITORIO=`<svg viewBox="0 0 400 180" preserveAspectRatio="xMidYMid slice" style="width:100%;height:150px;display:block">
+  <defs>
+    <linearGradient id="au-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#efece5"/><stop offset="1" stop-color="#ddd9d0"/></linearGradient>
+    <radialGradient id="au-glow" cx="50%" cy="14%" r="62%"><stop offset="0" stop-color="#f8f1de"/><stop offset="1" stop-color="#efece5" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="400" height="180" fill="url(#au-sky)"/><rect width="400" height="180" fill="url(#au-glow)"/>
+  <path d="M150 30 Q200 10 250 30 L250 96 L150 96 Z" fill="#fbf7ec" stroke="#cfc8b6" stroke-width="1"/>
+  <line x1="200" y1="22" x2="200" y2="96" stroke="#dcd5c4" stroke-width="1"/>
+  <g stroke="#d5cdbb" stroke-width="1"><line x1="60" y1="38" x2="60" y2="92"/><line x1="92" y1="34" x2="92" y2="94"/><line x1="308" y1="34" x2="308" y2="94"/><line x1="340" y1="38" x2="340" y2="92"/></g>
+  <g stroke="#bcb4a0" stroke-width="2.4" stroke-linecap="round"><line x1="122" y1="112" x2="278" y2="112"/><line x1="106" y1="130" x2="294" y2="130"/><line x1="86" y1="150" x2="314" y2="150"/><line x1="64" y1="172" x2="336" y2="172"/></g>
+  <path d="M196 106 L188 178 M204 106 L212 178" stroke="#d8d1c0" stroke-width="1"/>
+</svg>`;
 const TIPO_ICON = { predicar:'🎤', ofrenda:'💰', devocional:'🙏', musica:'🎵', aseo:'🧹' };
 const ESTADO = { pendiente:['⏳','Pendiente'], aceptado:['✅','Aceptado'], rechazado:['❌','No puedo'], cumplido:['☑️','Cumplido'] };
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -126,12 +139,32 @@ function abrirApp(){
   actualizarCampana();
   navTo('inicio');
 }
+// Iconos de línea (outline, heredan el color del texto del menú)
+const _ic=(p)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const NAV_ICON={
+  inicio:_ic('<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/>'),
+  calendario:_ic('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>'),
+  anuncios:_ic('<path d="m3 11 18-5v12L3 14v-3Z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),
+  mi_servicio:_ic('<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/><path d="M9 12h6M9 16h6"/>'),
+  mi_grupo:_ic('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>'),
+  servicio_gestion:_ic('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'),
+  asistencia:_ic('<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'),
+  panel_pastor:_ic('<path d="M3 3v18h18"/><path d="M7 16v-5M12 16V8M17 16v-3"/>'),
+  musicos:_ic('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'),
+  cuidado_pastoral:_ic('<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/>'),
+  ninos:_ic('<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/>'),
+  tesoreria:_ic('<line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+  predica:_ic('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>'),
+  panel_obispo:_ic('<path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z"/><path d="M2 20h20"/>'),
+  ajustes:_ic('<line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/>'),
+  admin:_ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>'),
+};
 function buildNav(){
   const nav=$('nav'); nav.innerHTML='';
   NAV.filter(n=>tieneModulo(n[0])).forEach(([key,ic,label])=>{
     const el=document.createElement('div');
     el.className='nav-item'; el.dataset.key=key;
-    el.innerHTML=`<span class="ic">${ic}</span> ${labelDe(key)}`;
+    el.innerHTML=`<span class="ic">${NAV_ICON[key]||ic}</span> ${labelDe(key)}`;
     el.onclick=()=>navTo(key);
     nav.appendChild(el);
   });
@@ -227,11 +260,13 @@ async function renderDashboard(){
     : '<div class="empty">Sin anuncios.</div>';
   const columnas=`<div class="widgets">
     <div class="widget"><div class="widget-head">📅 Próximos eventos</div>${listaEventos}</div>
-    <div class="widget"><div class="widget-head">📢 Anuncios recientes</div>${listaAnuncios}</div>
+    <div class="widget"><div class="widget-head">📢 Anuncios recientes</div>${listaAnuncios}
+      <div class="anuncio-img">${IMG_AUDITORIO}</div></div>
   </div>`;
 
   $('dash').className='';
-  $('dash').innerHTML = resumen + accionables + columnas;
+  const tagline=`<p style="text-align:center;color:var(--muted);margin-top:30px;padding-top:20px;border-top:1px solid var(--border);letter-spacing:.04em;font-weight:500">Comunidad, Fe, Futuro</p>`;
+  $('dash').innerHTML = resumen + accionables + columnas + tagline;
 }
 
 // Confirmar/rechazar un servicio desde el Inicio (sin salir del dashboard)
@@ -1759,6 +1794,7 @@ function modalReason(cb){
 //  AJUSTES — apariencia (tema, color de acento, tamaño de texto)
 // ============================================================
 const ACENTOS={
+  pino:     {nombre:'Pino',     p:'#0F5C57',p7:'#0B4745',p6:'#0E5450',turq:'#C19E55'},
   azul:     {nombre:'Azul',     p:'#2563EB',p7:'#1D4ED8',p6:'#1E54D9',turq:'#0EA5E9'},
   esmeralda:{nombre:'Esmeralda',p:'#059669',p7:'#047857',p6:'#059669',turq:'#10B981'},
   violeta:  {nombre:'Violeta',  p:'#7C3AED',p7:'#6D28D9',p6:'#7C3AED',turq:'#A855F7'},
@@ -1769,7 +1805,7 @@ const ACENTOS={
 function ajustes(){ try{ return JSON.parse(localStorage.getItem('ajustes')||'{}'); }catch{ return {}; } }
 function aplicarAjustes(){
   const a=ajustes(), root=document.documentElement;
-  const ac=ACENTOS[a.acento]||ACENTOS.azul;
+  const ac=ACENTOS[a.acento]||ACENTOS.pino;
   root.style.setProperty('--primary',ac.p);
   root.style.setProperty('--primary-700',ac.p7);
   root.style.setProperty('--primary-600',ac.p6);
@@ -1781,7 +1817,7 @@ function aplicarAjustes(){
 }
 function setAjuste(k,v){ const a=ajustes(); a[k]=v; localStorage.setItem('ajustes',JSON.stringify(a)); aplicarAjustes(); vistaAjustes(); }
 function vistaAjustes(){
-  const a=ajustes(), acSel=a.acento||'azul', temaSel=a.tema||'light', txtSel=a.texto||'md';
+  const a=ajustes(), acSel=a.acento||'pino', temaSel=a.tema||'light', txtSel=a.texto||'md';
   const opt=(g,val,act,label)=>`<button class="ajuste-opt ${val===act?'sel':''}" onclick="setAjuste('${g}','${val}')">${label}</button>`;
   $('content').innerHTML=`
     <div class="card" style="max-width:560px">
