@@ -1,0 +1,19 @@
+{
+  "name": "Iglesia App",
+  "short_name": "Iglesia",
+  "description": "Plataforma de tu iglesia: calendario, servicios, anuncios, devocionales y notas.",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2D9CDB",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

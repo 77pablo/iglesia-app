@@ -1,0 +1,106 @@
+// ============================================================
+//  Fase 2.2: Panel del pastor + ausentes
+//  Soporta filtro por grupo (?grupo_id=) y exportación CSV.
+// ============================================================
+import { Router } from 'express';
+import db from './db.js';
+import { authMiddleware, esPastor, esObispo, auditar } from './auth.js';
+
+const r = Router();
+r.use(authMiddleware);
+
+// Miembros del grupo (distintos, activos)
+function miembrosDeGrupo(grupoId) {
+  return db.prepare(
+    `SELECT DISTINCT p.id, p.nombre FROM persona p
+       JOIN pertenencia pe ON pe.persona_id = p.id
+      WHERE pe.grupo_id = ? AND p.activo = 1 ORDER BY p.nombre`
+  ).all(grupoId);
+}
+
+r.get('/', (req, res) => {
+  const { persona_id, iglesia_id } = req.user;
+  if (!esPastor(persona_id) && !esObispo(persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
+
+  // Filtro opcional por grupo (debe ser un grupo de la iglesia)
+  const grupos = db.prepare('SELECT id, nombre FROM grupo WHERE iglesia_id = ? ORDER BY nombre').all(iglesia_id);
+  const grupoId = grupos.some(g => g.id === Number(req.query.grupo_id)) ? Number(req.query.grupo_id) : null;
+
+  // Miembros: del grupo si hay filtro, o de toda la iglesia
+  const miembros = grupoId
+    ? miembrosDeGrupo(grupoId).length
+    : db.prepare('SELECT COUNT(*) AS n FROM persona WHERE iglesia_id = ? AND activo = 1').get(iglesia_id).n;
+
+  // Reuniones recientes CON asistencia (para la tendencia), filtradas por grupo si aplica
+  const reuniones = db.prepare(
+    `SELECT e.id, e.titulo, e.fecha,
+            (SELECT COUNT(*) FROM asistencia a WHERE a.evento_id = e.id) AS total
+       FROM evento e
+      WHERE e.iglesia_id = ? ${grupoId ? 'AND e.grupo_id = ?' : ''}
+      ORDER BY e.fecha DESC, e.id DESC`
+  ).all(...(grupoId ? [iglesia_id, grupoId] : [iglesia_id])).filter(x => x.total > 0).slice(0, 6);
+
+  const totales = reuniones.map(x => x.total);
+  const promedio = totales.length ? Math.round(totales.reduce((a, b) => a + b, 0) / totales.length) : 0;
+  const ultima = reuniones[0] || null;
+
+  // Ausentes de la ultima reunion (miembros del grupo que no asistieron)
+  let ausentes = [];
+  if (ultima) {
+    const ev = db.prepare('SELECT * FROM evento WHERE id = ?').get(ultima.id);
+    if (ev.grupo_id) {
+      const miembrosG = miembrosDeGrupo(ev.grupo_id);
+      const presentes = new Set(
+        db.prepare('SELECT persona_id FROM asistencia WHERE evento_id = ?').all(ev.id).map(x => x.persona_id)
+      );
+      ausentes = miembrosG.filter(m => !presentes.has(m.id));
+    }
+  }
+
+  res.json({
+    miembros, promedio, ultima,
+    reuniones: reuniones.slice().reverse(),  // cronologico para la grafica
+    ausentes, grupos, grupoId
+  });
+});
+
+// --- Exportar asistencia a CSV (abre en Excel) ---
+function csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+r.get('/export.csv', (req, res) => {
+  const { persona_id, iglesia_id } = req.user;
+  if (!esPastor(persona_id) && !esObispo(persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
+
+  const grupos = db.prepare('SELECT id FROM grupo WHERE iglesia_id = ?').all(iglesia_id);
+  const grupoId = grupos.some(g => g.id === Number(req.query.grupo_id)) ? Number(req.query.grupo_id) : null;
+
+  // Eventos (con grupo) de la iglesia, filtrados por grupo si aplica
+  const eventos = db.prepare(
+    `SELECT e.id, e.titulo, e.fecha, e.grupo_id, g.nombre AS grupo
+       FROM evento e JOIN grupo g ON g.id = e.grupo_id
+      WHERE e.iglesia_id = ? ${grupoId ? 'AND e.grupo_id = ?' : ''}
+      ORDER BY e.fecha, e.id`
+  ).all(...(grupoId ? [iglesia_id, grupoId] : [iglesia_id]));
+
+  const filas = [['Fecha', 'Evento', 'Grupo', 'Persona', 'Asistio']];
+  for (const ev of eventos) {
+    const miembros = miembrosDeGrupo(ev.grupo_id);
+    if (!miembros.length) continue;
+    const presentes = new Set(
+      db.prepare('SELECT persona_id FROM asistencia WHERE evento_id = ?').all(ev.id).map(x => x.persona_id)
+    );
+    for (const m of miembros)
+      filas.push([ev.fecha, ev.titulo, ev.grupo || '', m.nombre, presentes.has(m.id) ? 'Si' : 'No']);
+  }
+
+  const csv = filas.map(f => f.map(csvCell).join(',')).join('\r\n');
+  auditar(iglesia_id, persona_id, 'exportar_asistencia', 'panel', grupoId ? 'grupo ' + grupoId : 'todos');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="asistencia.csv"');
+  res.send('﻿' + csv);  // BOM para que Excel respete los acentos
+});
+
+export default r;

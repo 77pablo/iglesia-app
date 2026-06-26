@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inscribir rostro · Iglesia App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="facial.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <span class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v6M9.5 4.5h5"/><path d="M5 21V11l7-4 7 4v10"/>
+        </svg>
+      </span>
+      Inscripción facial
+    </div>
+
+    <!-- ===== LOGIN ===== -->
+    <div id="loginCard" class="card">
+      <h2>Iniciar sesión</h2>
+      <p class="sub">Necesitas ser pastor o líder para inscribir rostros.</p>
+      <label for="iglesia">Iglesia (código o nombre)</label>
+      <input id="iglesia" type="text" autocomplete="organization" placeholder="Ej. central-01" />
+      <label for="usuario">Usuario</label>
+      <input id="usuario" type="text" autocomplete="username" />
+      <label for="password">Contraseña</label>
+      <input id="password" type="password" autocomplete="current-password" />
+      <div class="btn-row">
+        <button id="btnLogin" class="btn">Entrar</button>
+      </div>
+      <div id="loginMsg"></div>
+    </div>
+
+    <!-- ===== PANEL DE INSCRIPCION ===== -->
+    <div id="panel" class="hidden">
+      <div class="card">
+        <h2>1. Elige la persona</h2>
+        <p class="sub">Sesión iniciada como <b id="quien"></b>. <a href="#" id="salir">Salir</a></p>
+        <label for="persona">Persona</label>
+        <select id="persona"><option value="">Cargando…</option></select>
+      </div>
+
+      <div class="card">
+        <h2>2. Captura el rostro</h2>
+        <p class="sub">Mira a la cámara, con buena luz y la cara despejada.</p>
+        <div class="cam-box" id="camBox">
+          <div class="cam-placeholder" id="camPlaceholder">La cámara aparecerá aquí.</div>
+          <video id="video" autoplay playsinline class="hidden"></video>
+          <img id="snap" class="hidden" alt="Captura" />
+        </div>
+        <canvas id="canvas" class="hidden"></canvas>
+        <div class="btn-row">
+          <button id="btnCam" class="btn ghost">Abrir cámara</button>
+          <button id="btnCapture" class="btn" disabled>Capturar</button>
+        </div>
+        <div class="btn-row">
+          <button id="btnRetake" class="btn ghost hidden">Repetir</button>
+          <button id="btnSave" class="btn hidden">Guardar rostro</button>
+        </div>
+        <div id="msg"></div>
+      </div>
+
+      <p class="muted small" style="text-align:center;">
+        ¿Es una pantalla de entrada? Abre el <a href="kiosko.html">modo Kiosko</a>.
+      </p>
+    </div>
+  </div>
+
+  <script src="inscribir.js"></script>
+</body>
+</html>

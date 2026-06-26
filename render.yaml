@@ -1,0 +1,30 @@
+# ============================================================
+#  Render Blueprint — despliegue 1-click (Docker)
+#  En Render: New + → Blueprint → apunta a este repo (raíz = carpeta app/).
+# ============================================================
+services:
+  - type: web
+    name: iglesia-app
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true          # Render genera un secreto seguro
+      - key: SEED_ON_EMPTY
+        value: "1"                    # siembra datos de demo si la BD está vacía
+      - key: DB_PATH
+        value: /data/iglesia.db
+      - key: UPLOADS_DIR
+        value: /data/uploads
+    # Disco persistente (requiere plan de pago en Render).
+    # En plan free, comenta este bloque: los datos se reinician al reiniciar
+    # el servicio, pero SEED_ON_EMPTY los vuelve a sembrar.
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1

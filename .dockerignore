@@ -1,0 +1,9 @@
+# No enviar al build: dependencias locales, BD/uploads locales, basura
+**/node_modules
+backend/iglesia.db
+backend/iglesia.db-journal
+backend/uploads
+**/*.log
+.git
+.DS_Store
+facial

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Iglesia App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- PWA (Fase 4.2): manifest + tema + service worker -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2D9CDB" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW no registrado', err));
+      });
+    }
+  </script>
+</head>
+<body>
+
+  <!-- ===================== LOGIN ===================== -->
+  <div id="login" class="auth">
+    <div class="auth-brand">
+      <div class="auth-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v6M9.5 4.5h5"/><path d="M5 21V11l7-4 7 4v10"/><path d="M9.5 21v-4.5a2.5 2.5 0 0 1 5 0V21"/>
+        </svg>
+      </div>
+      <h1>Iglesia App</h1>
+      <p>Toda tu comunidad, organizada y conectada en un solo lugar.</p>
+      <ul class="auth-features">
+        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span> Calendario y eventos</li>
+        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span> Tus servicios al instante</li>
+        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></span> Anuncios y avisos</li>
+        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Asistencia inteligente</li>
+      </ul>
+    </div>
+
+    <div class="auth-form">
+      <div class="login-card">
+        <div class="login-head">
+          <div class="brand-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M9.5 4.5h5"/><path d="M5 21V11l7-4 7 4v10"/><path d="M9.5 21v-4.5a2.5 2.5 0 0 1 5 0V21"/></svg> Iglesia App</div>
+          <h2>Iniciar sesión</h2>
+          <p class="login-sub muted small">Accede a tu cuenta en tres pasos.</p>
+          <div class="stepper"><span class="dot active" data-d="1"></span><span class="dot" data-d="2"></span><span class="dot" data-d="3"></span></div>
+        </div>
+
+        <div class="step" data-step="1">
+          <label>Tu iglesia</label>
+          <input id="iglesia" placeholder="Nombre o código (ej. MONTESION)" autofocus
+                 onkeydown="if(event.key==='Enter')next(2)" />
+          <button class="btn" onclick="next(2)">Siguiente</button>
+        </div>
+
+        <div class="step hidden" data-step="2">
+          <label>Tu usuario <span class="muted" id="ig-label"></span></label>
+          <input id="usuario" placeholder="Nombre de usuario"
+                 onkeydown="if(event.key==='Enter')next(3)" />
+          <div class="row">
+            <button class="btn ghost" onclick="next(1)">Atrás</button>
+            <button class="btn" onclick="next(3)">Siguiente</button>
+          </div>
+        </div>
+
+        <div class="step hidden" data-step="3">
+          <label>Tu contraseña</label>
+          <input id="password" type="password" placeholder="Contraseña"
+                 onkeydown="if(event.key==='Enter')entrar()" />
+          <div class="row">
+            <button class="btn ghost" onclick="next(2)">Atrás</button>
+            <button class="btn" onclick="entrar()">Entrar</button>
+          </div>
+        </div>
+
+        <p id="error" class="error"></p>
+        <p class="login-hint muted small">Prueba: <b>MONTESION</b> · usuario <b>pastor</b> · clave <b>1234</b></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== APP ===================== -->
+  <div id="app" class="layout hidden">
+    <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="logo"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M9.5 4.5h5"/><path d="M5 21V11l7-4 7 4v10"/><path d="M9.5 21v-4.5a2.5 2.5 0 0 1 5 0V21"/></svg></span> <span>Iglesia App</span></div>
+      <nav id="nav" class="nav"></nav>
+      <div class="sidebar-foot">
+        <div class="userbox">
+          <div class="avatar" id="avatar">?</div>
+          <div class="userbox-info">
+            <div id="u-nombre" class="u-nombre"></div>
+            <div id="u-rol" class="muted small"></div>
+          </div>
+        </div>
+        <button class="logout" onclick="salir()">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <button class="hamb" onclick="toggleSidebar()" aria-label="Abrir menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+        <h1 id="page-title">Inicio</h1>
+        <div class="topbar-actions">
+          <button class="icon-btn" onclick="verNotificaciones()" title="Notificaciones" aria-label="Notificaciones">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span id="bell-count" class="badge hidden">0</span>
+          </button>
+        </div>
+      </header>
+      <main id="content"></main>
+    </div>
+  </div>
+
+  <div id="toast-wrap"></div>
+  <div id="modal-root"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

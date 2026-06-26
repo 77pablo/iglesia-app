@@ -1,0 +1,20 @@
+{
+  "name": "iglesia-backend",
+  "version": "0.1.0",
+  "description": "Backend de la App Organizadora de Iglesia (Fase 1A - Fundacion)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "node src/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0"
+  }
+}

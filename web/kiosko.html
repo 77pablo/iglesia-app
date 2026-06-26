@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kiosko · Iglesia App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="facial.css" />
+</head>
+<body class="kiosko">
+
+  <!-- Mini-login (solo si no hay sesion) -->
+  <div id="loginGate" class="kiosko-stage hidden">
+    <div class="card" style="max-width:380px;width:100%;color:var(--text);">
+      <h2>Modo Kiosko</h2>
+      <p class="sub">Inicia sesión una vez para activar esta pantalla.</p>
+      <label for="iglesia">Iglesia (código o nombre)</label>
+      <input id="iglesia" type="text" />
+      <label for="usuario">Usuario</label>
+      <input id="usuario" type="text" />
+      <label for="password">Contraseña</label>
+      <input id="password" type="password" />
+      <div class="btn-row"><button id="btnLogin" class="btn">Activar kiosko</button></div>
+      <div id="loginMsg"></div>
+    </div>
+  </div>
+
+  <!-- Escenario del kiosko -->
+  <div id="stage" class="kiosko-stage hidden">
+    <a href="inscribir.html" class="kiosko-link">Inscribir / Salir</a>
+    <div class="kiosko-cam">
+      <video id="video" autoplay playsinline muted></video>
+    </div>
+    <div class="kiosko-title" id="title">Mira a la cámara</div>
+    <div class="kiosko-sub" id="sub"><span class="kiosko-dot"></span>Reconocimiento activo…</div>
+    <canvas id="canvas" class="hidden"></canvas>
+  </div>
+
+  <!-- Overlay de saludo -->
+  <div id="greet" class="greet">
+    <div class="check">✅</div>
+    <div class="hello" id="greetName">Hola</div>
+    <div class="welcome">¡Bienvenido/a!</div>
+  </div>
+
+  <script src="kiosko.js"></script>
+</body>
+</html>
