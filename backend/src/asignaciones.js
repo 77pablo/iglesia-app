@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin, auditar } from './auth.js';
+import { enviarPush } from './push.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -45,9 +46,10 @@ r.post('/', (req, res) => {
     "INSERT INTO asignacion (evento_id, persona_id, tipo, estado) VALUES (?,?,?, 'pendiente')"
   ).run(evento_id, aPersona, tipo);
 
-  // Avisar al asignado (notificacion + base para push)
+  // Avisar al asignado (notificacion in-app + push real)
   db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
     .run(aPersona, 'asignacion', 'Te asignaron: ' + tipo, ev.titulo + ' · ' + ev.fecha);
+  enviarPush([aPersona], { titulo: 'Te asignaron: ' + tipo, texto: ev.titulo + ' · ' + ev.fecha }).catch(() => {});
 
   auditar(iglesia_id, persona_id, 'asignar_servicio', 'servicio', tipo + ' -> persona ' + aPersona);
   res.json({

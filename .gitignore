@@ -5,3 +5,5 @@ backend/iglesia.db-journal
 backend/uploads/
 *.log
 .DS_Store
+.env
+backend/.env

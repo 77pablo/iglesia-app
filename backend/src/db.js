@@ -129,12 +129,23 @@ CREATE TABLE IF NOT EXISTS recurso (
   nombre      TEXT NOT NULL
 );
 
--- DISPOSITIVO PUSH: token del telefono para notificaciones
+-- DISPOSITIVO PUSH: token del telefono para notificaciones (legacy)
 CREATE TABLE IF NOT EXISTS dispositivo_push (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   persona_id  INTEGER NOT NULL REFERENCES persona(id),
   token       TEXT NOT NULL,
   plataforma  TEXT
+);
+
+-- SUSCRIPCION WEB PUSH (VAPID): el navegador del usuario para push real.
+-- endpoint es unico (un mismo navegador = una suscripcion); si caduca, se borra.
+CREATE TABLE IF NOT EXISTS push_sub (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  persona_id  INTEGER NOT NULL REFERENCES persona(id),
+  endpoint    TEXT NOT NULL UNIQUE,
+  p256dh      TEXT NOT NULL,
+  auth        TEXT NOT NULL,
+  creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- NOTIFICACION: un aviso a una persona

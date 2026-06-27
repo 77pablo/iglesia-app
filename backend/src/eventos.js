@@ -7,6 +7,7 @@ import {
   authMiddleware, esPastor, esAdminDeGrupo, esEncargadoGrupo, veCalendarioCompleto,
   gruposDeUsuario, auditar
 } from './auth.js';
+import { enviarPush } from './push.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -79,6 +80,7 @@ r.post('/', (req, res) => {
     const pastores = db.prepare('SELECT id FROM persona WHERE iglesia_id = ? AND es_pastor = 1').all(iglesia_id);
     const st = db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)');
     for (const p of pastores) st.run(p.id, 'aprobacion', 'Solicitud de fecha', titulo + ' · ' + fecha);
+    enviarPush(pastores.map(p => p.id), { titulo: 'Solicitud de fecha', texto: titulo + ' · ' + fecha }).catch(() => {});
   }
   auditar(iglesia_id, persona_id, 'crear_evento', 'calendario', titulo);
   res.json({ ok: true, id: info.lastInsertRowid, estado });
@@ -102,8 +104,11 @@ r.patch('/:id/aprobar', (req, res) => {
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, req.user.iglesia_id);
   if (!ev) return res.status(404).json({ error: 'No encontrado' });
   db.prepare("UPDATE evento SET estado = 'aprobado' WHERE id = ?").run(ev.id);
-  if (ev.creado_por) db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
-    .run(ev.creado_por, 'aprobacion', '✅ Tu fecha fue aprobada', ev.titulo + ' · ' + ev.fecha);
+  if (ev.creado_por) {
+    db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
+      .run(ev.creado_por, 'aprobacion', '✅ Tu fecha fue aprobada', ev.titulo + ' · ' + ev.fecha);
+    enviarPush([ev.creado_por], { titulo: '✅ Tu fecha fue aprobada', texto: ev.titulo + ' · ' + ev.fecha }).catch(() => {});
+  }
   auditar(req.user.iglesia_id, req.user.persona_id, 'aprobar_fecha', 'calendario', ev.titulo);
   res.json({ ok: true });
 });
@@ -114,8 +119,11 @@ r.patch('/:id/rechazar', (req, res) => {
   if (!ev) return res.status(404).json({ error: 'No encontrado' });
   const motivo = (req.body || {}).motivo;
   db.prepare("UPDATE evento SET estado = 'rechazado' WHERE id = ?").run(ev.id);
-  if (ev.creado_por) db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
-    .run(ev.creado_por, 'aprobacion', '🔴 Tu fecha fue rechazada', ev.titulo + (motivo ? ' · ' + motivo : ''));
+  if (ev.creado_por) {
+    db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
+      .run(ev.creado_por, 'aprobacion', '🔴 Tu fecha fue rechazada', ev.titulo + (motivo ? ' · ' + motivo : ''));
+    enviarPush([ev.creado_por], { titulo: '🔴 Tu fecha fue rechazada', texto: ev.titulo + (motivo ? ' · ' + motivo : '') }).catch(() => {});
+  }
   auditar(req.user.iglesia_id, req.user.persona_id, 'rechazar_fecha', 'calendario', ev.titulo);
   res.json({ ok: true });
 });
@@ -163,6 +171,8 @@ r.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM setlist_item WHERE evento_id=?').run(ev.id);
   db.prepare('DELETE FROM equipo_musica WHERE evento_id=?').run(ev.id);
   db.prepare('DELETE FROM ensayo WHERE evento_id=?').run(ev.id);
+  // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
+  db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
   db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
   auditar(iglesia_id, persona_id, 'eliminar_evento', 'calendario', ev.titulo);
   res.json({ ok: true });

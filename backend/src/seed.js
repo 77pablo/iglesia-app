@@ -2,6 +2,7 @@
 //  Datos de prueba  -  crea una iglesia, pastor y feligreses
 //  Ejecutar:  npm run seed
 // ============================================================
+import './env.js';   // por si DB_PATH viene de .env
 import db from './db.js';
 import { hashPassword } from './auth.js';
 
@@ -12,7 +13,7 @@ for (const t of ['asistencia_nino','leccion','nino','clase_ed','movimiento','cam
                  'nota_personal','sermon','devocional','recordatorio_enviado',
                  'equipo_musica','ensayo','material_musica','setlist_item','cancion',
                  'tarea_grupo','recurso_grupo','aviso_grupo','predica_recurso','predica','rol_temporal',
-                 'biometria_persona','notificacion','dispositivo_push','fecha_no_disp',
+                 'biometria_persona','notificacion','dispositivo_push','push_sub','fecha_no_disp',
                  'asistencia','asignacion','evento','anuncio','pertenencia','recurso','grupo','persona','auditoria','iglesia']) {
   try { db.exec(`DELETE FROM ${t};`); } catch (e) { /* tabla puede no existir en BD vieja */ }
 }
@@ -86,9 +87,18 @@ db.prepare(`INSERT INTO evento (iglesia_id, grupo_id, titulo, fecha, hora_inicio
 db.prepare("INSERT INTO asistencia (evento_id, persona_id, metodo) VALUES (?,?, 'lista')").run(evNoche, abel);
 db.prepare("INSERT INTO asistencia (evento_id, persona_id, metodo) VALUES (?,?, 'lista')").run(evNoche, joaquin);
 
-// 10) Cancionero de ejemplo
+// 10) Cancionero de ejemplo (una con acordes/letra para probar el transpositor)
+const _letraSublime =
+`RE         RE7        SOL    RE
+Sublime gracia del Señor
+        RE              LA
+que a un infeliz salvó;
+RE        RE7      SOL      RE
+fui ciego mas hoy miro yo,
+       RE     LA     RE
+perdido y Él me halló.`;
 db.prepare('INSERT INTO cancion (iglesia_id, titulo, autor, tono) VALUES (?,?,?,?)').run(iglesiaId, 'Cuan Grande es El', 'Himno', 'G');
-db.prepare('INSERT INTO cancion (iglesia_id, titulo, autor, tono) VALUES (?,?,?,?)').run(iglesiaId, 'Sublime Gracia', 'Himno', 'D');
+db.prepare('INSERT INTO cancion (iglesia_id, titulo, autor, tono, letra) VALUES (?,?,?,?,?)').run(iglesiaId, 'Sublime Gracia', 'Himno', 'RE', _letraSublime);
 db.prepare('INSERT INTO cancion (iglesia_id, titulo, autor, tono) VALUES (?,?,?,?)').run(iglesiaId, 'Renuevame', 'Marcos Witt', 'A');
 
 // 10b) Material de música siempre disponible: el himnario (archivo empaquetado en web/assets)

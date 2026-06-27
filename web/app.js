@@ -286,6 +286,37 @@ async function responderDash(id,accion){
 // ============================================================
 const MESES_LARGO=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const CAL_DOW=['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM'];
+
+// ---------- SELECTOR DE FECHA: día / mes / año ----------
+// Reemplaza al <input type="date"> nativo para que SIEMPRE sea día-mes-año
+// (de izquierda a derecha: día, luego mes, luego año), sin depender del idioma
+// del navegador. Pinta con fechaSelectHTML(prefijo, valor, opts) y lee el valor
+// 'YYYY-MM-DD' con fechaSelectValor(prefijo). opts: {opcional, desde, hasta}.
+function fechaSelectHTML(prefijo, valor, opts){
+  const o=opts||{};
+  const hoy=new Date();
+  const p=(valor && /^\d{4}-\d{2}-\d{2}/.test(valor)) ? valor.split('-').map(Number) : [];
+  // Sin valor: si es opcional queda "en blanco"; si no, por defecto hoy.
+  const yDef=p[0] || (o.opcional?undefined:hoy.getFullYear());
+  const mDef=p[1] || (o.opcional?undefined:hoy.getMonth()+1);
+  const dDef=p[2] || (o.opcional?undefined:hoy.getDate());
+  const blanco=!p.length && o.opcional;
+  const aDesde=o.desde!=null?o.desde:hoy.getFullYear()-2;
+  const aHasta=o.hasta!=null?o.hasta:hoy.getFullYear()+3;
+  const ph=(t)=> o.opcional ? `<option value="" ${blanco?'selected':''}>${t}</option>` : '';
+  const diaOpts=ph('Día')+Array.from({length:31},(_,i)=>i+1).map(d=>`<option ${d===dDef?'selected':''}>${d}</option>`).join('');
+  const mesOpts=ph('Mes')+MESES_LARGO.map((nm,i)=>`<option value="${i+1}" ${(i+1)===mDef?'selected':''}>${nm}</option>`).join('');
+  let anioOpts=ph('Año'); for(let a=aDesde;a<=aHasta;a++) anioOpts+=`<option ${a===yDef?'selected':''}>${a}</option>`;
+  return `<span class="fecha-select" style="display:inline-flex;gap:8px;flex-wrap:wrap">
+    <select id="${prefijo}-dia" title="Día" style="max-width:90px">${diaOpts}</select>
+    <select id="${prefijo}-mes" title="Mes" style="max-width:140px">${mesOpts}</select>
+    <select id="${prefijo}-anio" title="Año" style="max-width:110px">${anioOpts}</select></span>`;
+}
+function fechaSelectValor(prefijo){
+  const d=$(prefijo+'-dia'), m=$(prefijo+'-mes'), a=$(prefijo+'-anio');
+  if(!d||!m||!a||!d.value||!m.value||!a.value) return '';
+  return `${a.value}-${String(m.value).padStart(2,'0')}-${String(d.value).padStart(2,'0')}`;
+}
 let _calRef=null;            // {y, m}  mes que se está mostrando
 let _calDiaSel=null;         // fecha seleccionada (YYYY-MM-DD)
 
@@ -413,12 +444,6 @@ function toggleFormEvento(ev){
   const opts=(window._grupos||[]).map(g=>`<option value="${g.id}" ${ev&&ev.grupo_id===g.id?'selected':''}>${escHtml(g.nombre)}</option>`).join('');
   // Fecha como tres listas: día / mes / año (en vez del input nativo)
   const fBase = ev&&ev.fecha ? ev.fecha : (_calDiaSel||'');
-  const p = fBase ? fBase.split('-').map(Number) : [];
-  const hoy=new Date();
-  const yDef=p[0]||hoy.getFullYear(), mDef=p[1]||(hoy.getMonth()+1), dDef=p[2]||hoy.getDate();
-  const diaOpts=Array.from({length:31},(_,i)=>i+1).map(d=>`<option ${d===dDef?'selected':''}>${d}</option>`).join('');
-  const mesOpts=MESES_LARGO.map((nm,i)=>`<option value="${i+1}" ${(i+1)===mDef?'selected':''}>${nm}</option>`).join('');
-  let anioOpts=''; for(let a=hoy.getFullYear()-1;a<=hoy.getFullYear()+3;a++) anioOpts+=`<option ${a===yDef?'selected':''}>${a}</option>`;
   const esPastorUI = ME.persona.es_pastor;
   const titulo = ev ? 'Editar evento' : (esPastorUI ? 'Nuevo evento' : 'Pedir fecha');
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:4px">${titulo}</h3>
@@ -426,10 +451,7 @@ function toggleFormEvento(ev){
     <label>Grupo</label><select id="ev-grupo">${opts}</select>
     <label>Nombre del evento</label><input id="ev-titulo" value="${ev?v(ev.titulo):''}" placeholder="Ej. Noche de Jóvenes" />
     <label>Fecha</label>
-    <div class="row" style="gap:8px">
-      <select id="ev-dia" title="Día">${diaOpts}</select>
-      <select id="ev-mes" title="Mes">${mesOpts}</select>
-      <select id="ev-anio" title="Año">${anioOpts}</select></div>
+    <div>${fechaSelectHTML('ev', fBase)}</div>
     <div class="row" style="margin-top:10px"><div style="flex:1"><label>Hora inicio</label><input id="ev-ini" type="time" value="${ev&&ev.hora_inicio?ev.hora_inicio:''}" /></div>
       <div style="flex:1"><label>Hora fin</label><input id="ev-fin" type="time" value="${ev&&ev.hora_fin?ev.hora_fin:''}" /></div></div>
     <label>Lugar</label><input id="ev-lugar" value="${ev?v(ev.lugar):''}" placeholder="Ej. Salón principal" />
@@ -440,7 +462,7 @@ function editarEvento(id){ const ev=(window._eventos||[]).find(e=>e.id===id); if
 function borrarEvento(id){ modalConfirm('¿Eliminar este evento? No se puede deshacer.', async()=>{
   try{ await api('/eventos/'+id,{method:'DELETE'}); cargarEventos(); toast('Evento eliminado'); }catch(e){ toast(e.message); } }); }
 async function guardarEvento(){
-  const fecha=`${$('ev-anio').value}-${String($('ev-mes').value).padStart(2,'0')}-${String($('ev-dia').value).padStart(2,'0')}`;
+  const fecha=fechaSelectValor('ev');
   const body={grupo_id:$('ev-grupo').value,titulo:$('ev-titulo').value.trim(),fecha,
     hora_inicio:$('ev-ini').value,hora_fin:$('ev-fin').value,lugar:$('ev-lugar').value.trim()};
   const e=$('ev-error'); e.textContent='';
@@ -864,8 +886,8 @@ function renderCanciones(q){
   if(!lista.length){ cont.className='muted'; cont.innerHTML='<p class="small">'+(todas.length?'Sin resultados para “'+(q||'')+'”.':'Aún no hay canciones.')+'</p>'; return; }
   cont.className='list';
   const puede=esLiderMusicaUI();
-  cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(c.titulo)}</b>
-    <span class="estado-chip">${c.tono||'—'}</span><div class="muted small">${c.autor||''}</div></div>
+  cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1;cursor:pointer" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
+    <span class="estado-chip">${c.tono||'—'}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${c.autor||''}</div></div>
     ${puede?`<button class="link" style="color:var(--red)" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
 }
 function borrarCancion(id){ modalConfirm('¿Eliminar esta canción del cancionero?', async()=>{
@@ -874,13 +896,15 @@ function toggleFormCancion(){
   const z=$('form-cancion'); if(z.innerHTML){ z.innerHTML=''; return; }
   z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:14px">
     <div class="row"><input id="cn-titulo" placeholder="Título de la canción" />
-      <input id="cn-tono" placeholder="Tono" style="max-width:110px" /></div>
+      <input id="cn-tono" placeholder="Tono (ej. SOL, G)" style="max-width:130px" /></div>
     <input id="cn-autor" placeholder="Autor (opcional)" style="margin-top:10px" />
+    <label style="margin-top:10px">Acordes / letra (opcional)</label>
+    <textarea id="cn-letra" rows="8" style="width:100%;font-family:monospace;white-space:pre" placeholder="Pega aquí los acordes y la letra. Ej.:&#10;SOL        RE&#10;Cuán grande es Él&#10;Las líneas con acordes se transponen solas."></textarea>
     <p id="cn-error" class="error"></p>
     <button class="btn small-btn" style="margin-top:10px" onclick="guardarCancion()">Guardar</button></div>`;
 }
 async function guardarCancion(){
-  const body={titulo:$('cn-titulo').value.trim(),tono:$('cn-tono').value.trim(),autor:$('cn-autor').value.trim()};
+  const body={titulo:$('cn-titulo').value.trim(),tono:$('cn-tono').value.trim(),autor:$('cn-autor').value.trim(),letra:$('cn-letra').value};
   if(!body.titulo){ $('cn-error').textContent='Pon un título'; return; }
   try{ await api('/musica/canciones',{method:'POST',body:JSON.stringify(body)}); $('form-cancion').innerHTML=''; cargarCanciones(); toast('🎵 Canción agregada'); }
   catch(e){ $('cn-error').textContent=e.message; }
@@ -892,7 +916,7 @@ async function cargarSetlist(eventoId){
     let html = items.length
       ? '<div class="list">'+items.map((s,i)=>`<div class="item-card flex">
           <span class="mini-date" style="min-width:34px"><b>${i+1}</b></span>
-          <div style="flex:1"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${s.tono_dia||s.tono||'—'}</span>
+          <div style="flex:1;cursor:pointer" onclick="abrirVisorSetlist(${s.cancion_id},'${(s.tono_dia||'').replace(/'/g,'')}')" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${s.tono_dia||s.tono||'—'}</span>${(s.letra||'').trim()?' 🎸':''}
           <div class="muted small">${s.autor||''}</div></div>
           ${lider?`<button class="link" onclick="quitarSetlist(${s.id})">Quitar</button>`:''}</div>`).join('')+'</div>'
       : '<p class="muted small">Sin canciones en este servicio.</p>';
@@ -923,7 +947,7 @@ async function cargarPlan(eventoId){
     // Ensayo
     let ensayoHtml = lider
       ? `<div class="row" style="flex-wrap:wrap;gap:8px">
-          <input id="en-fecha" type="date" value="${en.fecha||''}" style="max-width:160px"/>
+          ${fechaSelectHTML('en', en.fecha||'', {opcional:true})}
           <input id="en-hora" type="time" value="${en.hora||''}" style="max-width:120px"/>
           <input id="en-lugar" placeholder="Lugar" value="${(en.lugar||'').replace(/"/g,'&quot;')}" style="max-width:180px"/>
           <button class="btn small-btn" onclick="guardarEnsayo()">Guardar ensayo</button></div>`
@@ -961,7 +985,7 @@ async function cargarPlan(eventoId){
   }catch{ $('plan').innerHTML='<p class="error">No se pudo cargar el plan.</p>'; }
 }
 async function guardarEnsayo(){
-  const body={fecha:$('en-fecha').value,hora:$('en-hora').value,lugar:$('en-lugar').value.trim()};
+  const body={fecha:fechaSelectValor('en'),hora:$('en-hora').value,lugar:$('en-lugar').value.trim()};
   try{ await api('/musica/plan/'+window._planEv+'/ensayo',{method:'POST',body:JSON.stringify(body)}); toast('🗓️ Ensayo guardado'); cargarPlan(window._planEv); }
   catch(e){ toast(e.message); }
 }
@@ -1114,6 +1138,83 @@ function renderHimno(){
     <div class="acordes">${_renderAcordes(_hmSel.contenido||'', _hmTrans)}</div>`;
 }
 
+// ---------- VISOR DE CANCIÓN DEL CANCIONERO (con transpositor) ----------
+// Reusa la misma maquinaria de acordes que el Himnario (_renderAcordes/_transAcorde).
+// Semitonos para pasar de un tono base a otro (ej. base SOL → tono del día LA = +2).
+function _semitonosEntre(base, destino){
+  const idx=t=>{ const s=String(t||'').toUpperCase(); let m=s.match(_RAIZ); if(m) return _ES2I[m[0]];
+    m=s.match(/^([A-G](#|B)?)/); return m?_EN2I[m[0]]:undefined; };
+  const a=idx(base), b=idx(destino);
+  if(a===undefined||b===undefined) return 0;
+  return ((b-a)%12+12)%12;
+}
+let _vcSel=null, _vcTrans=0;
+function abrirVisorCancion(id, trans){
+  const c=(window._canciones||[]).find(x=>x.id===id); if(!c){ toast('Canción no disponible'); return; }
+  _vcSel=c; _vcTrans=trans||0;
+  let ov=$('vc-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='vc-ov'; ov.className='hmodal-ov'; document.body.appendChild(ov); }
+  const puede=esLiderMusicaUI();
+  ov.innerHTML=`<div class="hmodal" onclick="event.stopPropagation()">
+    <div class="hmodal-head">
+      <b style="flex:1;font-size:16px">🎵 ${_esc(c.titulo)}</b>
+      ${puede?`<button class="cal-navbtn" onclick="editarLetraCancion(${c.id})" title="Editar acordes">✏️</button>`:''}
+      <button class="cal-navbtn" onclick="cerrarVisorCancion()" aria-label="Cerrar" style="margin-left:8px">✕</button>
+    </div>
+    <div class="hmodal-body"><div class="hmodal-ver" id="vc-ver" style="width:100%">…</div></div></div>`;
+  ov.onclick=cerrarVisorCancion;
+  renderVisorCancion();
+}
+// Abre desde el setlist: transpone al tono del día (si hay) respecto al tono base.
+function abrirVisorSetlist(cancionId, tonoDia){
+  const c=(window._canciones||[]).find(x=>x.id===cancionId);
+  const n=(c&&tonoDia)?_semitonosEntre(c.tono, tonoDia):0;
+  abrirVisorCancion(cancionId, n);
+}
+function cerrarVisorCancion(){ const ov=$('vc-ov'); if(ov) ov.remove(); }
+function visorCancionTrans(d){ _vcTrans+=d; renderVisorCancion(); }
+function visorCancionReset(){ _vcTrans=0; renderVisorCancion(); }
+function renderVisorCancion(){
+  const v=$('vc-ver'); if(!v||!_vcSel) return;
+  const c=_vcSel;
+  if(!(c.letra||'').trim()){
+    v.innerHTML=`<p class="muted small">Esta canción aún no tiene acordes cargados.${esLiderMusicaUI()?' Toca ✏️ arriba para agregarlos.':''}</p>`;
+    return;
+  }
+  const tonoBase=c.tono||'';
+  const tonoAhora=tonoBase?_transAcorde(tonoBase,_vcTrans):'';
+  v.innerHTML=`<div class="transbar">
+      <span class="muted small">${c.autor?_esc(c.autor)+' · ':''}Tono:</span> <b style="color:var(--primary)">${_esc(tonoAhora)||'—'}</b>
+      <button class="cal-navbtn" onclick="visorCancionTrans(-1)" title="Bajar ½ tono">−</button>
+      <button class="cal-navbtn" onclick="visorCancionTrans(1)" title="Subir ½ tono">+</button>
+      ${_vcTrans!==0?`<button class="btn ghost small-btn" onclick="visorCancionReset()">Original${tonoBase?' ('+_esc(tonoBase)+')':''}</button>`:''}
+      <span class="muted small">${_vcTrans>0?'+'+_vcTrans:_vcTrans} semitono(s)</span>
+    </div>
+    <div class="acordes">${_renderAcordes(c.letra||'', _vcTrans)}</div>`;
+}
+function editarLetraCancion(id){
+  const c=(window._canciones||[]).find(x=>x.id===id); if(!c) return;
+  const v=$('vc-ver'); if(!v) return;
+  v.innerHTML=`<label>Tono base</label>
+    <input id="vc-tono" value="${(c.tono||'').replace(/"/g,'&quot;')}" placeholder="ej. SOL, G" style="max-width:140px"/>
+    <label style="margin-top:10px">Acordes / letra</label>
+    <textarea id="vc-letra" rows="14" style="width:100%;font-family:monospace;white-space:pre">${_esc(c.letra||'')}</textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn small-btn" onclick="guardarLetraCancion(${id})">Guardar</button>
+      <button class="btn ghost small-btn" onclick="renderVisorCancion()">Cancelar</button></div>`;
+}
+async function guardarLetraCancion(id){
+  const c=(window._canciones||[]).find(x=>x.id===id); if(!c) return;
+  const body={titulo:c.titulo, autor:c.autor, enlace:c.enlace, tono:$('vc-tono').value.trim(), letra:$('vc-letra').value};
+  try{
+    await api('/musica/canciones/'+id,{method:'PATCH',body:JSON.stringify(body)});
+    c.tono=body.tono; c.letra=body.letra;   // refresca la copia en memoria/caché
+    try{ localStorage.setItem(_claveCanciones(), JSON.stringify(window._canciones||[])); }catch{}
+    toast('✅ Acordes guardados'); _vcTrans=0; renderVisorCancion();
+    renderCanciones($('buscar-cancion')?$('buscar-cancion').value:'');
+  }catch(e){ toast(e.message); }
+}
+
 // ============================================================
 //  FASE 2.5: CUIDADO PASTORAL (solo el pastor)
 // ============================================================
@@ -1252,11 +1353,10 @@ async function cargarMasMovimientos(){
 function formMov(tipo){
   const z=$('mov-form');
   const cats=tipo==='ingreso'?['ofrenda','diezmo','donacion','otro']:['servicios','eventos','ayuda','otro'];
-  const hoy=new Date().toISOString().slice(0,10);
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${tipo==='ingreso'?'Nuevo ingreso':'Nuevo gasto'}</h3>
     <label>Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c}">${cap(c)}</option>`).join('')}</select>
     <label>Monto</label><input id="mv-monto" type="number" placeholder="0" />
-    <label>Fecha ${tipo==='ingreso'?'del ingreso':'del gasto'}</label><input id="mv-fecha" type="date" value="${hoy}" />
+    <label>Fecha ${tipo==='ingreso'?'del ingreso':'del gasto'}</label><div>${fechaSelectHTML('mv','')}</div>
     <label>${tipo==='ingreso'?'Descripción / origen':'¿En qué se gastó?'}</label>
     <input id="mv-desc" placeholder="${tipo==='ingreso'?'Ej. Ofrenda dominical':'Ej. Compra de materiales para el evento'}" />
     <label>📎 Comprobante / voucher (foto o archivo)</label>
@@ -1271,7 +1371,7 @@ async function guardarMov(tipo){
     let comprobante_url='';
     const f=$('mv-file').files[0];
     if(f){ toast('Subiendo comprobante…'); comprobante_url=await uploadArchivo(f); }
-    const body={tipo,categoria:$('mv-cat').value,monto,descripcion:$('mv-desc').value.trim(),fecha:$('mv-fecha').value,comprobante_url};
+    const body={tipo,categoria:$('mv-cat').value,monto,descripcion:$('mv-desc').value.trim(),fecha:fechaSelectValor('mv'),comprobante_url};
     await api('/tesoreria/movimientos',{method:'POST',body:JSON.stringify(body)}); toast('💰 Registrado'); vistaTesoreria();
   }catch(e){ $('mv-error').textContent=e.message; }
 }
@@ -1331,7 +1431,7 @@ async function cargarMaterial(){
 function formMaterial(){ const z=$('form-material'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
     <input id="m-titulo" placeholder="Título de la lección"/>
-    <div class="row" style="margin-top:10px"><input id="m-fecha" type="date"/><input id="m-vers" placeholder="Versículo"/></div>
+    <div class="row" style="margin-top:10px;align-items:center">${fechaSelectHTML('m','',{opcional:true})}<input id="m-vers" placeholder="Versículo"/></div>
     <label style="margin-top:10px">📎 Subir documento (PDF, imagen, Word…)</label>
     <input id="m-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"/>
     <button class="btn small-btn" style="margin-top:12px" onclick="guardarMaterial()">Guardar</button></div>`; }
@@ -1342,7 +1442,7 @@ async function guardarMaterial(){
   try{
     let material_url='';
     if(file){ toast('Subiendo documento…'); material_url=await uploadArchivo(file); }
-    await api('/ninos/material',{method:'POST',body:JSON.stringify({clase_id:_claseActual,titulo,fecha:$('m-fecha').value,versiculo:$('m-vers').value.trim(),material_url})});
+    await api('/ninos/material',{method:'POST',body:JSON.stringify({clase_id:_claseActual,titulo,fecha:fechaSelectValor('m'),versiculo:$('m-vers').value.trim(),material_url})});
     $('form-material').innerHTML=''; cargarMaterial(); toast('📖 Lección agregada');
   }catch(e){ toast(e.message); }
 }
@@ -1369,13 +1469,13 @@ function renderAsistNinos(){
   if(!ninos.length){ c.className='muted'; c.innerHTML='<p class="small">Agrega niños primero.</p>'; return; }
   c.className='';
   const editar=esLiderEdUI();
-  c.innerHTML=`<label>Fecha</label><input id="asist-fecha" type="date" style="max-width:200px"/>
+  c.innerHTML=`<label>Fecha</label><div>${fechaSelectHTML('asist','')}</div>
     <div class="list" style="margin-top:10px">${ninos.map(n=>`<div class="item-card flex">
       <label class="check" style="margin:0;flex:1"><input type="checkbox" class="nino-chk" data-id="${n.id}" ${editar?'':'disabled'}/> ${n.nombre}</label></div>`).join('')}</div>
     ${editar?`<button class="btn" style="margin-top:12px" onclick="guardarAsistNinos()">Guardar asistencia</button>`:''}`;
 }
 async function guardarAsistNinos(){
-  const fecha=$('asist-fecha').value; if(!fecha) return toast('Pon la fecha');
+  const fecha=fechaSelectValor('asist'); if(!fecha) return toast('Pon la fecha');
   const presentes=[...document.querySelectorAll('.nino-chk')].filter(c=>c.checked).map(c=>({ nino_id:c.dataset.id }));
   if(!presentes.length) return toast('Marca al menos un niño');
   try{ const r=await api('/ninos/asistencia',{method:'POST',body:JSON.stringify({clase_id:_claseActual,fecha,presentes})});
@@ -1451,15 +1551,15 @@ async function cargarAvisosGrupo(){
 }
 function formAvisoGrupo(){ const z=$('mg-aviso-form'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
-    <div class="row" style="gap:8px"><select id="ag-tipo" style="max-width:170px"><option value="aviso">📢 Aviso</option><option value="recordatorio">⏰ Recordatorio</option></select>
-      <input id="ag-fecha" type="date" style="max-width:170px"/></div>
+    <div class="row" style="gap:8px;align-items:center"><select id="ag-tipo" style="max-width:170px"><option value="aviso">📢 Aviso</option><option value="recordatorio">⏰ Recordatorio</option></select>
+      ${fechaSelectHTML('ag','',{opcional:true})}</div>
     <input id="ag-titulo" placeholder="Título del aviso" style="margin-top:10px"/>
     <textarea id="ag-texto" placeholder="Detalle (opcional)" style="margin-top:10px"></textarea>
     <button class="btn small-btn" style="margin-top:10px" onclick="guardarAvisoGrupo()">Publicar y avisar al grupo</button></div>`;
 }
 async function guardarAvisoGrupo(){
   const titulo=$('ag-titulo').value.trim(); if(!titulo) return toast('Pon un título');
-  try{ const r=await api('/grupo/'+_grupoSel+'/avisos',{method:'POST',body:JSON.stringify({tipo:$('ag-tipo').value,titulo,texto:$('ag-texto').value.trim(),fecha:$('ag-fecha').value})});
+  try{ const r=await api('/grupo/'+_grupoSel+'/avisos',{method:'POST',body:JSON.stringify({tipo:$('ag-tipo').value,titulo,texto:$('ag-texto').value.trim(),fecha:fechaSelectValor('ag')})});
     $('mg-aviso-form').innerHTML=''; cargarAvisosGrupo(); toast('📢 Publicado · avisados '+r.avisados); }catch(e){ toast(e.message); }
 }
 function borrarAvisoGrupo(id){ modalConfirm('¿Eliminar este aviso?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/avisos/'+id,{method:'DELETE'}); cargarAvisosGrupo(); }catch(e){ toast(e.message);} }); }
@@ -1594,14 +1694,14 @@ async function formPredica(id){
   $('content').innerHTML=`<button class="link" onclick="${id?`verPredica(${id})`:'vistaPredica()'}">‹ Volver</button>
    <div class="card" style="margin-top:8px"><h2 style="font-size:18px">${id?'Editar prédica':'Nueva prédica'}</h2>
     <label>Nombre de la prédica</label><input id="pp-titulo" value="${v(p.titulo)}" placeholder="Ej. El amor de Dios"/>
-    <label>Fecha</label><input id="pp-fecha" type="date" value="${p.fecha||''}"/>
+    <label>Fecha</label><div>${fechaSelectHTML('pp', p.fecha||'')}</div>
     <label>Predicador</label><input id="pp-predicador" value="${v(p.predicador)}" placeholder="Quién predicó"/>
     <label>Notas / bosquejo</label><textarea id="pp-notas" style="min-height:150px">${p.notas||''}</textarea>
     <p id="pp-error" class="error"></p>
     <button class="btn" style="margin-top:12px" onclick="guardarPredica(${id||0})">${id?'Guardar cambios':'Crear prédica'}</button></div>`;
 }
 async function guardarPredica(id){
-  const body={titulo:$('pp-titulo').value.trim(),fecha:$('pp-fecha').value,predicador:$('pp-predicador').value.trim(),notas:$('pp-notas').value};
+  const body={titulo:$('pp-titulo').value.trim(),fecha:fechaSelectValor('pp'),predicador:$('pp-predicador').value.trim(),notas:$('pp-notas').value};
   if(!body.titulo){ $('pp-error').textContent='Pon el nombre de la prédica'; return; }
   try{
     if(id){ await api('/predica/'+id,{method:'PATCH',body:JSON.stringify(body)}); toast('Prédica actualizada'); verPredica(id); }
@@ -1637,16 +1737,16 @@ async function cargarPredicadores(){
   let list=[]; try{ list=await api('/predica/predicadores'); }catch{}
   const personas=window._personasCache||(window._personasCache=await api('/personas').catch(()=>[]));
   cont.innerHTML=`<div class="card" style="margin-bottom:16px"><div class="widget-head">🎤 Predicadores (rol con vigencia)</div>
-    <div class="row" style="flex-wrap:wrap;gap:8px;margin:10px 0">
+    <div class="row" style="flex-wrap:wrap;gap:8px;margin:10px 0;align-items:center">
       <select id="prp-persona" style="max-width:200px">${personas.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}</select>
-      <input id="prp-desde" type="date" title="Desde" style="max-width:160px"/>
-      <input id="prp-hasta" type="date" title="Hasta" style="max-width:160px"/>
+      <span class="muted small">Desde:</span>${fechaSelectHTML('prp-desde','')}
+      <span class="muted small">Hasta:</span>${fechaSelectHTML('prp-hasta','')}
       <button class="btn small-btn" onclick="asignarPredicador()">Asignar</button></div>
     ${list.length?'<div class="list">'+list.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.nombre}</b> ${x.vigente?'<span class="estado-chip estado-aceptado">Vigente</span>':'<span class="estado-chip">Inactivo</span>'}<div class="muted small">${fechaTxt(x.desde)} → ${fechaTxt(x.hasta)}</div></div><button class="link" style="color:var(--red)" onclick="quitarPredicador(${x.id})">Quitar</button></div>`).join('')+'</div>':'<p class="muted small">Nadie con rol predicador todavía.</p>'}
   </div>`;
 }
 async function asignarPredicador(){
-  const body={persona_id:$('prp-persona').value,desde:$('prp-desde').value,hasta:$('prp-hasta').value};
+  const body={persona_id:$('prp-persona').value,desde:fechaSelectValor('prp-desde'),hasta:fechaSelectValor('prp-hasta')};
   if(!body.desde||!body.hasta) return toast('Indica desde y hasta qué fecha');
   try{ await api('/predica/predicadores',{method:'POST',body:JSON.stringify(body)}); toast('🎤 Predicador asignado'); cargarPredicadores(); }catch(e){ toast(e.message); }
 }
@@ -1816,6 +1916,65 @@ function aplicarAjustes(){
   root.setAttribute('data-theme', dark?'dark':'light');
 }
 function setAjuste(k,v){ const a=ajustes(); a[k]=v; localStorage.setItem('ajustes',JSON.stringify(a)); aplicarAjustes(); vistaAjustes(); }
+
+// ---------- WEB PUSH (notificaciones reales) ----------
+function _urlB64ToUint8(base64){
+  const pad='='.repeat((4-base64.length%4)%4);
+  const b=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(b), arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+function pushSoportado(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+async function pushEstado(){
+  if(!pushSoportado()) return {soportado:false};
+  try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription();
+    return {soportado:true, permiso:Notification.permission, suscrito:!!sub}; }
+  catch{ return {soportado:true, permiso:Notification.permission, suscrito:false}; }
+}
+async function activarPush(){
+  if(!pushSoportado()){ toast('Tu navegador no soporta notificaciones push'); return; }
+  try{
+    const info=await api('/push/clave-publica');
+    if(!info.activo||!info.clave){ toast('El servidor aún no tiene push configurado'); return; }
+    const permiso=await Notification.requestPermission();
+    if(permiso!=='granted'){ toast('Permiso de notificaciones denegado'); return; }
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_urlB64ToUint8(info.clave)});
+    await api('/push/suscribir',{method:'POST',body:JSON.stringify(sub)});
+    toast('🔔 Notificaciones activadas'); vistaAjustes();
+  }catch(e){ toast('No se pudo activar: '+(e.message||e)); }
+}
+async function desactivarPush(){
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.getSubscription();
+    if(sub){ await api('/push/baja',{method:'POST',body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{}); await sub.unsubscribe(); }
+    toast('Notificaciones desactivadas'); vistaAjustes();
+  }catch(e){ toast(e.message); }
+}
+async function probarPush(){
+  try{ await api('/push/probar',{method:'POST'}); toast('Enviado — debería llegar la notificación 🔔'); }
+  catch(e){ toast(e.message); }
+}
+async function renderPushAjuste(){
+  const cont=$('push-ajuste'); if(!cont) return;
+  const st=await pushEstado();
+  if(!st.soportado){ cont.innerHTML='<p class="muted small" style="margin:0">Este navegador no soporta notificaciones push.</p>'; return; }
+  let info={activo:false}; try{ info=await api('/push/clave-publica'); }catch{}
+  if(!info.activo){ cont.innerHTML='<p class="muted small" style="margin:0">El servidor aún no tiene las notificaciones push configuradas.</p>'; return; }
+  if(st.permiso==='denied'){ cont.innerHTML='<p class="muted small" style="margin:0">Bloqueaste las notificaciones en el navegador. Habilítalas para este sitio desde los ajustes del navegador.</p>'; return; }
+  if(st.suscrito){
+    cont.innerHTML=`<p class="small" style="margin:0 0 10px">🔔 Activadas en este dispositivo.</p>
+      <div class="ajuste-opts"><button class="btn small-btn" onclick="probarPush()">Probar</button>
+      <button class="btn ghost small-btn" onclick="desactivarPush()">Desactivar</button></div>`;
+  } else {
+    cont.innerHTML=`<p class="muted small" style="margin:0 0 10px">Recibe avisos aunque tengas la app cerrada.</p>
+      <button class="btn small-btn" onclick="activarPush()">Activar notificaciones</button>`;
+  }
+}
+
 function vistaAjustes(){
   const a=ajustes(), acSel=a.acento||'pino', temaSel=a.tema||'light', txtSel=a.texto||'md';
   const opt=(g,val,act,label)=>`<button class="ajuste-opt ${val===act?'sel':''}" onclick="setAjuste('${g}','${val}')">${label}</button>`;
@@ -1830,7 +1989,13 @@ function vistaAjustes(){
       <div class="ajuste-grupo"><label style="margin:0">Tamaño del texto</label>
         <div class="ajuste-opts">${opt('texto','sm',txtSel,'A− Pequeño')}${opt('texto','md',txtSel,'A Normal')}${opt('texto','lg',txtSel,'A+ Grande')}</div></div>
       <button class="btn ghost small-btn" style="margin-top:8px" onclick="localStorage.removeItem('ajustes');aplicarAjustes();vistaAjustes();toast('Ajustes restablecidos')">Restablecer</button>
+    </div>
+    <div class="card" style="max-width:560px;margin-top:16px">
+      <h2 style="font-size:1.3rem;margin-bottom:4px">🔔 Notificaciones</h2>
+      <p class="muted small" style="margin-bottom:14px">Avisos push en este dispositivo (servicios, música, recordatorios, anuncios…).</p>
+      <div id="push-ajuste"><p class="muted small" style="margin:0">Cargando…</p></div>
     </div>`;
+  renderPushAjuste();
 }
 
 // Al abrir

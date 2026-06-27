@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import db from './db.js';
 import { authMiddleware, esLiderMusicaEstricto, esDelMinisterioMusica, auditar } from './auth.js';
+import { enviarPush } from './push.js';
 
 const SOLO_LIDER = 'Solo el líder de música puede editar (el pastor solo observa).';
 
@@ -44,7 +45,7 @@ r.get('/setlist/:eventoId', (req, res) => {
   const ev = db.prepare('SELECT id FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.eventoId, req.user.iglesia_id);
   if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
   const items = db.prepare(
-    `SELECT s.id, s.tono_dia, s.orden, c.titulo, c.autor, c.tono, c.enlace
+    `SELECT s.id, s.tono_dia, s.orden, s.cancion_id, c.titulo, c.autor, c.tono, c.enlace, c.letra
        FROM setlist_item s JOIN cancion c ON c.id = s.cancion_id
       WHERE s.evento_id = ? ORDER BY s.orden, s.id`
   ).all(req.params.eventoId);
@@ -139,8 +140,10 @@ r.post('/plan/:eventoId/equipo', (req, res) => {
   } catch {
     return res.status(409).json({ error: 'Esa persona ya está en el equipo con ese instrumento' });
   }
+  const txtTocar = `${inst} en "${ev.titulo}" · ${ev.fecha}`;
   db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
-    .run(persona.id, 'musica', '🎵 Te toca tocar', `${inst} en "${ev.titulo}" · ${ev.fecha}`);
+    .run(persona.id, 'musica', '🎵 Te toca tocar', txtTocar);
+  enviarPush([persona.id], { titulo: '🎵 Te toca tocar', texto: txtTocar }).catch(() => {});
   auditar(iglesia_id, actor, 'equipo_musica_add', 'musica', `${persona.nombre} (${inst}) en ${ev.titulo}`);
   res.json({ ok: true });
 });
@@ -188,6 +191,7 @@ r.post('/plan/:eventoId/avisar', (req, res) => {
   const st = db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)');
   for (const m of equipo)
     st.run(m.persona_id, 'musica', '🎵 Recordatorio de música', `${m.instrumento} en "${ev.titulo}" · ${ev.fecha}${txtEnsayo}`);
+  enviarPush(equipo.map(m => m.persona_id), { titulo: '🎵 Recordatorio de música', texto: `"${ev.titulo}" · ${ev.fecha}${txtEnsayo}` }).catch(() => {});
   auditar(iglesia_id, actor, 'avisar_equipo_musica', 'musica', `${ev.titulo}: ${equipo.length}`);
   res.json({ ok: true, avisados: equipo.length });
 });

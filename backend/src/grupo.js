@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import db from './db.js';
 import { authMiddleware, esEncargadoGrupo, esPastor, auditar } from './auth.js';
+import { enviarPush } from './push.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -23,6 +24,7 @@ function puedeVer(personaId, grupoId) {
 function notificar(personaId, titulo, texto) {
   db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
     .run(personaId, 'grupo', titulo, texto || '');
+  enviarPush([personaId], { titulo, texto: texto || '' }).catch(() => {});
 }
 function miembrosIds(grupoId) {
   return db.prepare('SELECT DISTINCT persona_id FROM pertenencia WHERE grupo_id = ?').all(grupoId).map(x => x.persona_id);

@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin } from './auth.js';
+import { enviarPush } from './push.js';
 
 const r = Router();
 
@@ -45,6 +46,7 @@ export function notificarSegmento(iglesiaId, segmento, tipo, titulo, texto) {
   const ids = personasDeSegmento(iglesiaId, segmento);
   const stmt = db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)');
   for (const id of ids) stmt.run(id, tipo, titulo, texto);
+  enviarPush(ids, { titulo, texto }).catch(() => {});   // push real (no bloquea)
   return ids.length;
 }
 

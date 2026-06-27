@@ -2,6 +2,7 @@
 //  Servidor (API REST)  -  Fase 1A
 //  Endpoints base: salud, login en 3 pasos, perfil + modulos.
 // ============================================================
+import './env.js';   // carga backend/.env antes que nada (db, push leen process.env)
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
@@ -27,6 +28,7 @@ import recordatoriosRouter, { generarRecordatorios } from './recordatorios.js';
 import grupoRouter from './grupo.js';
 import predicaRouter from './predica.js';
 import obispoRouter from './obispo.js';
+import pushRouter from './push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -184,6 +186,7 @@ app.use('/api/recordatorios', recordatoriosRouter);
 app.use('/api/grupo', grupoRouter);
 app.use('/api/predica', predicaRouter);
 app.use('/api/obispo', obispoRouter);
+app.use('/api/push', pushRouter);
 
 // Lista de personas de la iglesia (para asignar servicios)
 app.get('/api/personas', authMiddleware, (req, res) => {

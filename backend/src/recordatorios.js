@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import db from './db.js';
 import { authMiddleware } from './auth.js';
+import { enviarPush } from './push.js';
 
 const r = Router();
 
@@ -39,6 +40,7 @@ function enviarRecordatorio(iglesiaId, personaId, clave, titulo, texto) {
   if (ins.changes === 0) return false;   // ya se habia enviado
   db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
     .run(personaId, 'recordatorio', titulo, texto);
+  enviarPush([personaId], { titulo, texto }).catch(() => {});
   return true;
 }
 

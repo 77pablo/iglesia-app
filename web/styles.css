@@ -362,12 +362,14 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
 .cal-dow{text-align:center;font-size:0.6875rem;font-weight:700;color:var(--muted);
   text-transform:uppercase;letter-spacing:.04em;padding:4px 0 8px;}
+/* Todas las casillas se ven igual: con el resaltado de color (sin distinguir
+   fin de semana ni si tienen evento). Las casillas vacías del mes quedan sin fondo. */
 .cal-cell{min-height:96px;border:1px solid var(--border);border-radius:10px;padding:6px;
-  background:var(--surface);display:flex;flex-direction:column;gap:3px;overflow:hidden;cursor:pointer;transition:.12s;}
+  background:var(--primary-50);display:flex;flex-direction:column;gap:3px;overflow:hidden;cursor:pointer;transition:.12s;}
 .cal-cell:hover{border-color:var(--primary);box-shadow:var(--shadow-xs);}
 .cal-cell.empty{background:transparent;border:none;cursor:default;}
 .cal-cell.empty:hover{box-shadow:none;}
-.cal-cell.finde{background:var(--bg);}
+.cal-cell.finde{background:var(--primary-50);}
 .cal-cell.tiene{background:var(--primary-50);}
 .cal-cell.sel{box-shadow:inset 0 0 0 2px var(--primary-600);border-color:var(--primary-600);}
 .cal-daynum{font-size:0.7813rem;font-weight:700;color:var(--muted-2);}
@@ -443,7 +445,7 @@ body{transition:background-color .3s ease,color .3s ease;}
 }
 [data-theme="dark"] .sidebar,[data-theme="dark"] .login-card,[data-theme="dark"] .modal,
 [data-theme="dark"] .hmodal,[data-theme="dark"] .item-card,[data-theme="dark"] .notif-item,
-[data-theme="dark"] .module-card,[data-theme="dark"] .cal-cell,[data-theme="dark"] .icon-btn,
+[data-theme="dark"] .module-card,[data-theme="dark"] .icon-btn,
 [data-theme="dark"] .logout,[data-theme="dark"] input,[data-theme="dark"] select,
 [data-theme="dark"] textarea,[data-theme="dark"] .btn.ghost,[data-theme="dark"] .cal-ev{
   background:var(--surface);}
@@ -453,7 +455,7 @@ body{transition:background-color .3s ease,color .3s ease;}
 [data-theme="dark"] .nav-item:hover{color:var(--text);}
 [data-theme="dark"] .btn.ghost{color:#cfe0ff;}
 [data-theme="dark"] .estado-chip{background:#232f3d;color:#cdd9e5;}
-[data-theme="dark"] .trend-track,[data-theme="dark"] .cal-cell.finde{background:#10171f;}
+[data-theme="dark"] .trend-track{background:#10171f;}
 [data-theme="dark"] .bandeja{background:#1f1c10 !important;}
 
 /* Selector de ajustes */

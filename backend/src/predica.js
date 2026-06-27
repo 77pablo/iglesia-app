@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import db from './db.js';
 import { authMiddleware, esPastor, esPredicador, auditar } from './auth.js';
+import { enviarPush } from './push.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -96,8 +97,10 @@ r.post('/predicadores', (req, res) => {
   if (!desde || !hasta) return res.status(400).json({ error: 'Indica desde y hasta qué fecha' });
   db.prepare('INSERT INTO rol_temporal (iglesia_id, persona_id, rol, desde, hasta, creado_por) VALUES (?,?,?,?,?,?)')
     .run(req.user.iglesia_id, persona.id, 'predicador', desde, hasta, req.user.persona_id);
+  const txtPred = `Del ${desde} al ${hasta} puedes gestionar el módulo Predica.`;
   db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
-    .run(persona.id, 'predica', '🎤 Eres predicador', `Del ${desde} al ${hasta} puedes gestionar el módulo Predica.`);
+    .run(persona.id, 'predica', '🎤 Eres predicador', txtPred);
+  enviarPush([persona.id], { titulo: '🎤 Eres predicador', texto: txtPred }).catch(() => {});
   auditar(req.user.iglesia_id, req.user.persona_id, 'asignar_predicador', 'predica', `${persona.nombre} ${desde}→${hasta}`);
   res.json({ ok: true });
 });

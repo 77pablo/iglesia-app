@@ -37,6 +37,32 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// --- Web Push (Fase 5): muestra la notificacion aunque la app este cerrada ---
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { texto: e.data && e.data.text ? e.data.text() : '' }; }
+  const titulo = d.titulo || 'Iglesia';
+  const opts = {
+    body: d.texto || '',
+    icon: '/icon.svg',
+    badge: '/icon.svg',
+    data: { url: d.url || '/' }
+  };
+  e.waitUntil(self.registration.showNotification(titulo, opts));
+});
+
+// Al tocar la notificacion: enfoca una pestaña abierta o abre una nueva.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const destino = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cli) => {
+      for (const c of cli) { if ('focus' in c) return c.focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow(destino);
+    })
+  );
+});
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
