@@ -30,6 +30,7 @@ import predicaRouter from './predica.js';
 import obispoRouter from './obispo.js';
 import pushRouter from './push.js';
 import cuentaRouter from './cuenta.js';
+import adminRouter from './admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -189,6 +190,7 @@ app.use('/api/predica', predicaRouter);
 app.use('/api/obispo', obispoRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/cuenta', cuentaRouter);
+app.use('/api/admin', adminRouter);
 
 // Lista de personas de la iglesia (para asignar servicios)
 app.get('/api/personas', authMiddleware, (req, res) => {

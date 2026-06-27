@@ -148,6 +148,20 @@ CREATE TABLE IF NOT EXISTS push_sub (
   creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- HISTORIAL de aprobaciones/rechazos de fechas por el pastor. Fase 5.2
+CREATE TABLE IF NOT EXISTS aprobacion_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  iglesia_id    INTEGER NOT NULL REFERENCES iglesia(id),
+  evento_titulo TEXT,
+  fecha_evento  TEXT,
+  grupo         TEXT,
+  accion        TEXT NOT NULL,           -- 'aprobado' | 'rechazado'
+  motivo        TEXT,
+  actor_id      INTEGER REFERENCES persona(id),
+  actor_nombre  TEXT,
+  creado_en     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- CODIGO DE RECUPERACION de contrasena (6 digitos, expira). Fase 5.
 CREATE TABLE IF NOT EXISTS reset_codigo (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

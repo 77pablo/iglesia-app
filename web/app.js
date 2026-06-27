@@ -192,6 +192,7 @@ function navTo(key){
   if(key==='ninos') return vistaNinos();
   if(key==='predica') return vistaPredica();
   if(key==='panel_obispo') return vistaPanelObispo();
+  if(key==='admin') return vistaAdmin();
   if(key==='ajustes') return vistaAjustes();
   $('content').innerHTML=`<div class="placeholder"><div class="big">${iconDe(key)}</div>
     <h2>${labelDe(key)}</h2><p>Este módulo se construye en una próxima fase.</p></div>`;
@@ -332,8 +333,10 @@ async function vistaCalendario(){
     <div class="head-row"><h2>Calendario</h2><span id="crear-zona"></span></div>
     <div id="form-zona"></div>
     <div id="cal" class="muted">Cargando…</div>
-    <div id="cal-dia"></div>`;
+    <div id="cal-dia"></div>
+    <div id="cal-historial"></div>`;
   cargarBandeja();
+  cargarHistorialAprob();
   try{
     const grupos=await api('/eventos/grupos-gestionables');
     if(grupos.length){ // solo líderes/pastor pueden pedir fecha
@@ -775,6 +778,20 @@ async function cargarBandeja(){
           <button class="btn small-btn" onclick="aprobarFecha(${e.id})">Aprobar</button>
           <button class="btn ghost small-btn" onclick="rechazarFecha(${e.id})">Rechazar</button>
         </div></div>`).join('')}</div>`;
+  }catch{}
+}
+async function cargarHistorialAprob(){
+  if(!ME.persona.es_pastor) return;
+  const z=$('cal-historial'); if(!z) return;
+  try{
+    const h=await api('/eventos/historial/aprobaciones');
+    if(!h.length){ z.innerHTML=''; return; }
+    z.innerHTML=`<div class="card" style="margin-top:16px"><div class="widget-head">Historial de aprobaciones</div>
+      <div class="list" style="margin-top:8px">${h.slice(0,30).map(x=>`<div class="item-card flex">
+        <div style="flex:1"><b>${escHtml(x.evento_titulo||'')}</b>
+          ${x.accion==='aprobado'?'<span class="estado-chip estado-aceptado">Aprobado</span>':'<span class="estado-chip estado-rechazado">Rechazado</span>'}
+          <div class="muted small">${x.grupo?escHtml(x.grupo)+' · ':''}${x.fecha_evento||''}${x.motivo?' · '+escHtml(x.motivo):''}</div></div>
+        <span class="muted small">${(x.creado_en||'').slice(0,10)}</span></div>`).join('')}</div></div>`;
   }catch{}
 }
 async function aprobarFecha(id){
@@ -1901,6 +1918,162 @@ function modalReason(cb){
     const motivo=otro||sel||'Sin especificar';
     cerrarModal(); cb(motivo);
   };
+}
+
+// ============================================================
+//  ADMINISTRACIÓN (solo el pastor): usuarios, roles y grupos
+// ============================================================
+// Cada rol y los accesos/permisos que otorga (para el "agregado rápido").
+const ROL_INFO={
+  admin:        {label:'Líder de cuerpo',        acc:['Calendario completo','Asistencia','Gestión de servicio','Mi Grupo']},
+  lider_musica: {label:'Líder de música',        acc:['Grupo de Alabanza (cancionero, equipo, material)','Calendario completo']},
+  musico:       {label:'Músico',                 acc:['Compartir material / partituras del ministerio']},
+  lider_ed:     {label:'Líder Esc. Dominical',   acc:['Niños / Escuela Dominical','Calendario completo']},
+  tesorero:     {label:'Tesorero',               acc:['Tesorería']},
+  miembro:      {label:'Miembro',                acc:['Pertenece al grupo (ve "Mi Grupo", recibe avisos)']},
+};
+function rolLabel(r){ return (ROL_INFO[r]&&ROL_INFO[r].label)||r; }
+
+async function vistaAdmin(){
+  $('content').innerHTML='<div id="adm" class="muted">Cargando…</div>';
+  try{
+    const d=await api('/admin/datos'); window._admin=d;
+    renderAdmin();
+  }catch(e){ $('adm').innerHTML='<p class="error">'+e.message+'</p>'; }
+}
+function renderAdmin(){
+  const d=window._admin; const cont=$('adm'); if(!cont) return;
+  cont.className='';
+  const gruposOpts=d.grupos.map(g=>`<option value="${g.id}">${escHtml(g.nombre)}</option>`).join('');
+  const rolesOpts=d.rolesDisponibles.map(r=>`<option value="${r}">${escHtml(rolLabel(r))}</option>`).join('');
+  window._admGruposOpts=gruposOpts; window._admRolesOpts=rolesOpts;
+  // --- Usuarios ---
+  const usuarios=d.usuarios.map(u=>{
+    const chips=u.roles.length
+      ? u.roles.map(r=>`<span class="estado-chip" style="margin:2px 4px 2px 0">${escHtml(r.grupo)} · ${escHtml(rolLabel(r.rol))}
+          <a href="javascript:adminQuitarRol(${r.pertenencia_id})" style="color:var(--red);margin-left:4px" title="Quitar">✕</a></span>`).join('')
+      : '<span class="muted small">Sin roles</span>';
+    const badges=`${u.es_pastor?'<span class="estado-chip estado-aceptado">⛪ Pastor</span> ':''}${!u.activo?'<span class="estado-chip estado-rechazado">Inactivo</span>':''}`;
+    return `<div class="item-card" style="margin-top:10px">
+      <div class="flex" style="align-items:flex-start">
+        <div style="flex:1">
+          <b>${escHtml(u.nombre)}</b> <span class="muted small">@${escHtml(u.usuario)}</span> ${badges}
+          <div class="muted small">${u.email?'✉️ '+escHtml(u.email):'sin correo'}</div>
+          <div style="margin-top:6px">${chips}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+          <button class="btn ghost small-btn" onclick="adminFormRol(${u.id})">+ Rol</button>
+          <button class="link" onclick="adminTogglePastor(${u.id},${u.es_pastor})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
+          <button class="link" style="color:${u.activo?'var(--red)':'var(--green)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>
+        </div>
+      </div>
+      <div id="adm-rolform-${u.id}"></div>
+    </div>`;
+  }).join('');
+  // --- Grupos ---
+  const grupos=d.grupos.map(g=>`<div class="item-card flex" style="margin-top:8px">
+      <span style="width:14px;height:14px;border-radius:4px;background:${g.color||'var(--primary)'};flex-shrink:0;margin-right:8px"></span>
+      <div style="flex:1"><b>${escHtml(g.nombre)}</b></div>
+      <button class="link" onclick="adminFormGrupo(${g.id})">✏️ Editar</button></div>`).join('');
+  // --- Leyenda de roles ---
+  const leyenda=Object.entries(ROL_INFO).map(([k,v])=>`<div style="margin:6px 0">
+      <b>${escHtml(v.label)}</b> <span class="muted small">(${k})</span>
+      <div class="muted small">Accesos: ${v.acc.map(escHtml).join(' · ')}</div></div>`).join('');
+
+  cont.innerHTML=`
+    <div class="card" style="margin-bottom:16px">
+      <div class="head-row"><h3 style="font-size:16px">👥 Usuarios</h3>
+        <button class="btn small-btn" onclick="adminFormUsuario()">+ Crear usuario</button></div>
+      <p class="muted small" style="margin:-2px 0 8px">Crea cuentas y asigna roles. Un mismo rol puede tener varios usuarios.</p>
+      <div id="adm-userform"></div>
+      ${usuarios||'<p class="muted small">Sin usuarios.</p>'}
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="head-row"><h3 style="font-size:16px">🏷️ Grupos / Ministerios</h3>
+        <button class="btn small-btn" onclick="adminFormGrupo(0)">+ Grupo</button></div>
+      <div id="adm-grupoform"></div>
+      ${grupos||'<p class="muted small">Sin grupos.</p>'}
+    </div>
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:6px">🔑 Roles y accesos</h3>
+      <p class="muted small" style="margin:-2px 0 8px">Qué permisos otorga cada rol al asignarlo.</p>
+      ${leyenda}
+    </div>`;
+}
+
+// --- Crear usuario ---
+function adminFormUsuario(){
+  const z=$('adm-userform'); if(z.innerHTML){ z.innerHTML=''; return; }
+  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+    <div class="row" style="gap:8px"><input id="au-nombre" placeholder="Nombre completo"/><input id="au-usuario" placeholder="Usuario (para entrar)"/></div>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <input id="au-pass" type="text" placeholder="Contraseña inicial"/>
+      <input id="au-email" type="email" placeholder="Correo (opcional)"/></div>
+    <p id="au-err" class="error"></p>
+    <button class="btn small-btn" style="margin-top:8px" onclick="adminCrearUsuario()">Crear</button></div>`;
+}
+async function adminCrearUsuario(){
+  const body={nombre:$('au-nombre').value.trim(),usuario:$('au-usuario').value.trim(),password:$('au-pass').value,email:$('au-email').value.trim()};
+  if(!body.nombre||!body.usuario){ $('au-err').textContent='Pon nombre y usuario'; return; }
+  if((body.password||'').length<4){ $('au-err').textContent='La contraseña debe tener al menos 4 caracteres'; return; }
+  try{ await api('/admin/usuarios',{method:'POST',body:JSON.stringify(body)}); toast('✅ Usuario creado'); vistaAdmin(); }
+  catch(e){ $('au-err').textContent=e.message; }
+}
+
+// --- Asignar rol (agregado rápido, con accesos visibles) ---
+function adminFormRol(personaId){
+  const z=$('adm-rolform-'+personaId); if(!z) return; if(z.innerHTML){ z.innerHTML=''; return; }
+  z.innerHTML=`<div style="background:var(--bg);padding:12px;border-radius:12px;margin-top:10px">
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <select id="ar-rol-${personaId}" onchange="adminPreviewRol(${personaId})">${window._admRolesOpts}</select>
+      <select id="ar-grupo-${personaId}">${window._admGruposOpts}</select>
+      <button class="btn small-btn" onclick="adminAsignarRol(${personaId})">Asignar</button>
+    </div>
+    <p class="muted small" id="ar-acc-${personaId}" style="margin:8px 0 0"></p></div>`;
+  adminPreviewRol(personaId);
+}
+function adminPreviewRol(personaId){
+  const rol=$('ar-rol-'+personaId).value; const info=ROL_INFO[rol];
+  const el=$('ar-acc-'+personaId); if(el&&info) el.innerHTML='Este rol otorga: <b>'+info.acc.map(escHtml).join(' · ')+'</b>';
+}
+async function adminAsignarRol(personaId){
+  const rol=$('ar-rol-'+personaId).value, grupo_id=$('ar-grupo-'+personaId).value;
+  try{ await api('/admin/usuarios/'+personaId+'/rol',{method:'POST',body:JSON.stringify({rol,grupo_id})}); toast('🔑 Rol asignado'); vistaAdmin(); }
+  catch(e){ toast(e.message); }
+}
+function adminQuitarRol(pertId){ modalConfirm('¿Quitar este rol al usuario?', async()=>{
+  try{ await api('/admin/rol/'+pertId,{method:'DELETE'}); toast('Rol quitado'); vistaAdmin(); }catch(e){ toast(e.message); } }); }
+
+function adminTogglePastor(id, actual){
+  const txt=actual?'¿Quitar el rol de Pastor a este usuario?':'¿Hacer Pastor a este usuario? Tendrá acceso total a la iglesia.';
+  modalConfirm(txt, async()=>{
+    try{ await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({es_pastor:!actual})}); toast('Listo'); vistaAdmin(); }catch(e){ toast(e.message); } });
+}
+function adminToggleActivo(id, actual){
+  modalConfirm(actual?'¿Desactivar esta cuenta? No podrá iniciar sesión.':'¿Reactivar esta cuenta?', async()=>{
+    try{ await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({activo:!actual})}); toast('Listo'); vistaAdmin(); }catch(e){ toast(e.message); } });
+}
+
+// --- Crear / editar grupo ---
+function adminFormGrupo(id){
+  const z=$('adm-grupoform'); const g=id?(window._admin.grupos.find(x=>x.id===id)||{}):{};
+  if(z.innerHTML && z.dataset.id===String(id)){ z.innerHTML=''; z.dataset.id=''; return; }
+  z.dataset.id=String(id);
+  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+    <div class="row" style="gap:8px">
+      <input id="ag-nombre" placeholder="Nombre del grupo" value="${(g.nombre||'').replace(/"/g,'&quot;')}"/>
+      <input id="ag-color" type="color" value="${g.color||'#1C61A6'}" style="max-width:60px;padding:4px"/></div>
+    <p id="ag-err" class="error"></p>
+    <button class="btn small-btn" style="margin-top:8px" onclick="adminGuardarGrupo(${id})">${id?'Guardar':'Crear'}</button></div>`;
+}
+async function adminGuardarGrupo(id){
+  const body={nombre:$('ag-nombre').value.trim(),color:$('ag-color').value};
+  if(!body.nombre){ $('ag-err').textContent='Pon un nombre'; return; }
+  try{
+    if(id) await api('/admin/grupos/'+id,{method:'PATCH',body:JSON.stringify(body)});
+    else await api('/admin/grupos',{method:'POST',body:JSON.stringify(body)});
+    toast('Listo'); vistaAdmin();
+  }catch(e){ $('ag-err').textContent=e.message; }
 }
 
 // ============================================================

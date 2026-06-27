@@ -109,6 +109,8 @@ r.patch('/:id/aprobar', (req, res) => {
       .run(ev.creado_por, 'aprobacion', '✅ Tu fecha fue aprobada', ev.titulo + ' · ' + ev.fecha);
     enviarPush([ev.creado_por], { titulo: '✅ Tu fecha fue aprobada', texto: ev.titulo + ' · ' + ev.fecha }).catch(() => {});
   }
+  limpiarSolicitud(ev);
+  registrarAprobacion(req, ev, 'aprobado');
   auditar(req.user.iglesia_id, req.user.persona_id, 'aprobar_fecha', 'calendario', ev.titulo);
   res.json({ ok: true });
 });
@@ -124,6 +126,8 @@ r.patch('/:id/rechazar', (req, res) => {
       .run(ev.creado_por, 'aprobacion', '🔴 Tu fecha fue rechazada', ev.titulo + (motivo ? ' · ' + motivo : ''));
     enviarPush([ev.creado_por], { titulo: '🔴 Tu fecha fue rechazada', texto: ev.titulo + (motivo ? ' · ' + motivo : '') }).catch(() => {});
   }
+  limpiarSolicitud(ev);
+  registrarAprobacion(req, ev, 'rechazado', motivo);
   auditar(req.user.iglesia_id, req.user.persona_id, 'rechazar_fecha', 'calendario', ev.titulo);
   res.json({ ok: true });
 });
@@ -152,6 +156,28 @@ function puedeBorrar(personaId, ev) {
   if (esPastor(personaId)) return true;
   return esEncargadoGrupo(personaId, ev.grupo_id) || ev.creado_por === personaId;
 }
+// Quita la notificacion-solicitud ("Revisar y aprobar") cuando la fecha ya se
+// resolvio o se borro, para que no quede activa.
+function limpiarSolicitud(ev) {
+  db.prepare("DELETE FROM notificacion WHERE tipo='aprobacion' AND titulo='Solicitud de fecha' AND texto = ?")
+    .run(ev.titulo + ' · ' + ev.fecha);
+}
+// Registra en el historial de aprobaciones/rechazos del pastor.
+function registrarAprobacion(req, ev, accion, motivo) {
+  const actor = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(req.user.persona_id);
+  const grupo = ev.grupo_id ? (db.prepare('SELECT nombre FROM grupo WHERE id = ?').get(ev.grupo_id) || {}).nombre : null;
+  db.prepare(`INSERT INTO aprobacion_log (iglesia_id, evento_titulo, fecha_evento, grupo, accion, motivo, actor_id, actor_nombre)
+              VALUES (?,?,?,?,?,?,?,?)`)
+    .run(req.user.iglesia_id, ev.titulo, ev.fecha, grupo, accion, motivo || null, req.user.persona_id, actor ? actor.nombre : null);
+}
+
+// --- Historial de aprobaciones/rechazos (pastor) ---
+r.get('/historial/aprobaciones', (req, res) => {
+  if (!esPastor(req.user.persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
+  res.json(db.prepare(
+    'SELECT * FROM aprobacion_log WHERE iglesia_id = ? ORDER BY id DESC LIMIT 100'
+  ).all(req.user.iglesia_id));
+});
 
 // --- Editar evento ---
 r.patch('/:id', (req, res) => {
@@ -179,6 +205,7 @@ r.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM ensayo WHERE evento_id=?').run(ev.id);
   // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
   db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
+  limpiarSolicitud(ev);   // quita la notificación "Revisar y aprobar" si seguía activa
   db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
   auditar(iglesia_id, persona_id, 'eliminar_evento', 'calendario', ev.titulo);
   res.json({ ok: true });
