@@ -146,6 +146,12 @@ function puedeGestionar(personaId, ev) {
   if (ev.estado === 'aprobado') return esPastor(personaId);
   return esEncargadoGrupo(personaId, ev.grupo_id) || ev.creado_por === personaId;
 }
+// Borrar es mas permisivo: el pastor puede ELIMINAR cualquier evento
+// (aprobado/rechazado/pendiente), util para limpiar el calendario.
+function puedeBorrar(personaId, ev) {
+  if (esPastor(personaId)) return true;
+  return esEncargadoGrupo(personaId, ev.grupo_id) || ev.creado_por === personaId;
+}
 
 // --- Editar evento ---
 r.patch('/:id', (req, res) => {
@@ -165,7 +171,7 @@ r.delete('/:id', (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'No encontrado' });
-  if (!puedeGestionar(persona_id, ev)) return res.status(403).json({ error: 'No tienes permiso' });
+  if (!puedeBorrar(persona_id, ev)) return res.status(403).json({ error: 'No tienes permiso' });
   db.prepare('DELETE FROM asignacion WHERE evento_id=?').run(ev.id);
   db.prepare('DELETE FROM asistencia WHERE evento_id=?').run(ev.id);
   db.prepare('DELETE FROM setlist_item WHERE evento_id=?').run(ev.id);

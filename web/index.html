@@ -4,13 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Iglesia App</title>
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <!-- PWA (Fase 4.2): manifest + tema + service worker -->
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#2D9CDB" />
+  <meta name="theme-color" content="#1C61A6" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <script>
     if ('serviceWorker' in navigator) {
@@ -68,12 +69,18 @@
 
         <div class="step hidden" data-step="3">
           <label>Tu contraseña</label>
-          <input id="password" type="password" placeholder="Contraseña"
-                 onkeydown="if(event.key==='Enter')entrar()" />
+          <div class="row" style="gap:8px">
+            <input id="password" type="password" placeholder="Contraseña"
+                   onkeydown="if(event.key==='Enter')entrar()" />
+            <button class="btn ghost" type="button" style="max-width:52px" onclick="toggleVerPass('password',this)" title="Ver/ocultar contraseña">👁️</button>
+          </div>
           <div class="row">
             <button class="btn ghost" onclick="next(2)">Atrás</button>
             <button class="btn" onclick="entrar()">Entrar</button>
           </div>
+          <p class="login-hint" style="margin-top:10px;text-align:center">
+            <a href="javascript:abrirRecuperar()" style="color:var(--primary);font-weight:600">¿Olvidaste tu contraseña?</a>
+          </p>
         </div>
 
         <p id="error" class="error"></p>

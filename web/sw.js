@@ -74,10 +74,21 @@ self.addEventListener('fetch', (e) => {
   // Datos dinamicos: nunca cachear (siempre red).
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/uploads')) return;
 
-  // Navegaciones (abrir la app): network-first, cae al shell si no hay red.
+  // Navegaciones (abrir la app): stale-while-revalidate.
+  // Muestra el shell cacheado AL INSTANTE y actualiza en segundo plano,
+  // así abrir la app no espera a la red (clave cuando Railway está lento/frío).
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req).catch(() => caches.match('/index.html'))
+      caches.match('/index.html').then((cached) => {
+        const red = fetch(req).then((resp) => {
+          if (resp && resp.status === 200) {
+            const copia = resp.clone();
+            caches.open(CACHE).then((c) => c.put('/index.html', copia));
+          }
+          return resp;
+        }).catch(() => cached);
+        return cached || red;
+      })
     );
     return;
   }

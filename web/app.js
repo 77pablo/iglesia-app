@@ -136,8 +136,13 @@ function abrirApp(){
     : ME.persona.es_pastor ? 'Pastor'
     : (ME.roles.pertenencias.map(p=>cap(p.rol.replace('_',' '))).join(', ') || 'Feligrés');
   buildNav();
-  actualizarCampana();
+  // (La campana la actualiza el dashboard con su propia carga; evitamos pedir /notificaciones dos veces.)
+  pushAutoResuscribir();   // mantiene el push activo entre sesiones (si ya dio permiso)
   navTo('inicio');
+}
+function setCampana(n){
+  const b=$('bell-count'); if(!b) return;
+  if(n>0){ b.textContent=n; b.classList.remove('hidden'); } else b.classList.add('hidden');
 }
 // Iconos de línea (outline, heredan el color del texto del menú)
 const _ic=(p)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
@@ -213,6 +218,7 @@ async function renderDashboard(){
   const pendientes=servicios.filter(a=>a.estado==='pendiente');
   const proximo=eventos[0]||null;
   const sinLeer=noti?(noti.noLeidas||0):0;
+  setCampana(sinLeer);   // actualiza la campana con esta misma carga (sin pedir /notificaciones aparte)
 
   // --- Resumen: 3 métricas clicables ---
   const resumen=`<div class="widgets" style="margin-bottom:20px">
@@ -410,19 +416,28 @@ function verDia(fecha){
   let inner=`<div class="head-row"><div class="widget-head" style="margin:0">📅 ${fechaTxt(fecha)}</div>${btnPedir}</div>`;
   if(!evs.length) inner+='<p class="muted small" style="margin-top:8px">Día libre — sin eventos.</p>';
   else inner+=evs.map(e=>{
-    const puede=puedeGestionarEvento(e);
+    const puede=puedeGestionarEvento(e), puedeBorrar=puedeBorrarEvento(e);
     const badge=e.estado==='pendiente'?'<span class="estado-chip estado-pendiente">⏳ Pendiente</span>':e.estado==='rechazado'?'<span class="estado-chip estado-rechazado">🔴 Rechazada</span>':'<span class="estado-chip estado-aceptado">✅ Aprobado</span>';
     return `<div class="item-card flex" style="margin-top:10px;border-left:4px solid ${e.grupo_color||'var(--primary)'}">
       <div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
         <div class="muted small">${e.grupo?'🏷️ '+e.grupo:''}${e.hora_inicio?' · 🕐 '+e.hora_inicio+(e.hora_fin?'–'+e.hora_fin:''):''}${e.lugar?' · 📍 '+e.lugar:''}</div>
         <div style="margin-top:6px">${badge}</div></div>
-      ${puede?accionesBtns('editarEvento','borrarEvento',e.id):''}</div>`;
+      ${(puede||puedeBorrar)?`<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+        ${puede?`<button class="link" onclick="editarEvento(${e.id})">✏️ Editar</button>`:''}
+        ${puedeBorrar?`<button class="link" style="color:var(--red)" onclick="borrarEvento(${e.id})">🗑️ Borrar</button>`:''}
+      </div>`:''}</div>`;
   }).join('');
   cont.innerHTML=`<div class="card" style="margin-top:16px">${inner}</div>`;
 }
-// Editar/borrar: si ya está aprobado, solo el pastor; si no, el encargado o el creador.
+// Editar: si ya está aprobado, solo el pastor; si no, el encargado o el creador.
 function puedeGestionarEvento(e){
   if(e.estado==='aprobado') return ME.persona.es_pastor;
+  return esEncargadoDe(e.grupo_id)||e.creado_por===ME.persona.id;
+}
+// Borrar: el pastor puede eliminar CUALQUIER evento (aprobado/rechazado/pendiente);
+// los demás, solo los suyos o los de su grupo.
+function puedeBorrarEvento(e){
+  if(ME.persona.es_pastor) return true;
   return esEncargadoDe(e.grupo_id)||e.creado_por===ME.persona.id;
 }
 function abrirEvento(id){
@@ -637,9 +652,7 @@ async function asignar(){
 //  NOTIFICACIONES
 // ============================================================
 async function actualizarCampana(){
-  try{ const d=await api('/notificaciones'); const b=$('bell-count');
-    if(d.noLeidas>0){ b.textContent=d.noLeidas; b.classList.remove('hidden'); } else b.classList.add('hidden');
-  }catch{}
+  try{ const d=await api('/notificaciones'); setCampana(d.noLeidas||0); }catch{}
 }
 async function verNotificaciones(){
   $('page-title').textContent='Notificaciones';
@@ -1894,6 +1907,7 @@ function modalReason(cb){
 //  AJUSTES — apariencia (tema, color de acento, tamaño de texto)
 // ============================================================
 const ACENTOS={
+  cielo:    {nombre:'Cielo',    p:'#1C61A6',p7:'#154E86',p6:'#1A5B9C',turq:'#F5A623'},  // paleta del logo
   pino:     {nombre:'Pino',     p:'#0F5C57',p7:'#0B4745',p6:'#0E5450',turq:'#C19E55'},
   azul:     {nombre:'Azul',     p:'#2563EB',p7:'#1D4ED8',p6:'#1E54D9',turq:'#0EA5E9'},
   esmeralda:{nombre:'Esmeralda',p:'#059669',p7:'#047857',p6:'#059669',turq:'#10B981'},
@@ -1905,7 +1919,7 @@ const ACENTOS={
 function ajustes(){ try{ return JSON.parse(localStorage.getItem('ajustes')||'{}'); }catch{ return {}; } }
 function aplicarAjustes(){
   const a=ajustes(), root=document.documentElement;
-  const ac=ACENTOS[a.acento]||ACENTOS.pino;
+  const ac=ACENTOS[a.acento]||ACENTOS.cielo;
   root.style.setProperty('--primary',ac.p);
   root.style.setProperty('--primary-700',ac.p7);
   root.style.setProperty('--primary-600',ac.p6);
@@ -1944,7 +1958,25 @@ async function activarPush(){
     if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_urlB64ToUint8(info.clave)});
     await api('/push/suscribir',{method:'POST',body:JSON.stringify(sub)});
     toast('🔔 Notificaciones activadas'); vistaAjustes();
-  }catch(e){ toast('No se pudo activar: '+(e.message||e)); }
+  }catch(e){
+    const m=(e&&e.message)||String(e);
+    if(/push service|Registration failed/i.test(m))
+      toast('No se pudo activar. Si usas Brave: abre brave://settings/privacy, activa "Usar los servicios de Google para mensajería push", reinicia Brave y reintenta. (En Chrome/Edge funciona directo.)');
+    else toast('No se pudo activar: '+m);
+  }
+}
+// Al abrir la app: si ya diste permiso, re-suscribe en silencio para que las
+// notificaciones sigan llegando sin tener que reactivar cada vez.
+async function pushAutoResuscribir(){
+  if(!pushSoportado() || Notification.permission!=='granted') return;
+  try{
+    const info=await api('/push/clave-publica');
+    if(!info.activo||!info.clave) return;
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_urlB64ToUint8(info.clave)});
+    await api('/push/suscribir',{method:'POST',body:JSON.stringify(sub)});
+  }catch{}
 }
 async function desactivarPush(){
   try{
@@ -1975,8 +2007,76 @@ async function renderPushAjuste(){
   }
 }
 
+// ---------- MI CUENTA (correo + contraseña) ----------
+function toggleVerPass(id, btn){
+  const i=$(id); if(!i) return;
+  i.type = i.type==='password' ? 'text' : 'password';
+  if(btn) btn.textContent = i.type==='password' ? '👁️' : '🙈';
+}
+async function guardarEmailCuenta(){
+  const email=$('cta-email').value.trim();
+  try{ const r=await api('/cuenta/email',{method:'PATCH',body:JSON.stringify({email})});
+    ME.persona.email=r.email; toast('✅ Correo guardado'); }
+  catch(e){ toast(e.message); }
+}
+async function cambiarPassCuenta(){
+  const actual=$('cta-actual').value, nueva=$('cta-nueva').value;
+  if(nueva.length<4){ toast('La nueva contraseña debe tener al menos 4 caracteres'); return; }
+  try{ await api('/cuenta/password',{method:'PATCH',body:JSON.stringify({actual,nueva})});
+    toast('🔒 Contraseña cambiada'); $('cta-actual').value=''; $('cta-nueva').value=''; }
+  catch(e){ toast(e.message); }
+}
+
+// ---------- RECUPERAR CONTRASEÑA (desde el login, por código al correo) ----------
+function abrirRecuperar(){
+  let ov=$('rec-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='rec-ov'; ov.className='hmodal-ov'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div class="hmodal" style="max-width:380px" onclick="event.stopPropagation()">
+    <div class="hmodal-head"><b style="flex:1;font-size:16px">🔑 Recuperar contraseña</b>
+      <button class="cal-navbtn" onclick="cerrarRecuperar()" aria-label="Cerrar">✕</button></div>
+    <div style="padding:16px">
+      <div id="rec-paso1">
+        <label>Tu correo (Gmail)</label>
+        <input id="rec-email" type="email" placeholder="tucorreo@gmail.com"/>
+        <p class="muted small" style="margin:6px 0 0">Te enviaremos un código de 6 dígitos.</p>
+        <button class="btn" style="width:100%;margin-top:10px" onclick="recEnviar()">Enviar código</button>
+      </div>
+      <div id="rec-paso2" class="hidden">
+        <label>Código (6 dígitos)</label>
+        <input id="rec-codigo" inputmode="numeric" maxlength="6" placeholder="000000"/>
+        <label style="margin-top:8px">Nueva contraseña</label>
+        <div class="row" style="gap:8px"><input id="rec-nueva" type="password" placeholder="Nueva contraseña"/>
+          <button class="btn ghost small-btn" type="button" onclick="toggleVerPass('rec-nueva',this)">👁️</button></div>
+        <button class="btn" style="width:100%;margin-top:10px" onclick="recConfirmar()">Cambiar contraseña</button>
+      </div>
+      <p id="rec-msg" class="error" style="margin-top:10px"></p>
+    </div></div>`;
+  ov.onclick=cerrarRecuperar;
+  setTimeout(()=>{ const i=$('rec-email'); if(i) i.focus(); },50);
+}
+function cerrarRecuperar(){ const ov=$('rec-ov'); if(ov) ov.remove(); }
+async function recEnviar(){
+  const email=$('rec-email').value.trim(), m=$('rec-msg'); m.className='error'; m.textContent='';
+  if(!email){ m.textContent='Escribe tu correo'; return; }
+  try{ await api('/cuenta/recuperar',{method:'POST',body:JSON.stringify({email})});
+    window._recEmail=email; $('rec-paso1').classList.add('hidden'); $('rec-paso2').classList.remove('hidden');
+    m.className='muted small'; m.textContent='Si el correo está registrado, te llegó un código. Revísalo.';
+    setTimeout(()=>{ const i=$('rec-codigo'); if(i) i.focus(); },50);
+  }catch(e){ m.textContent=e.message; }
+}
+async function recConfirmar(){
+  const m=$('rec-msg'); m.className='error'; m.textContent='';
+  const codigo=$('rec-codigo').value.trim(), nueva=$('rec-nueva').value;
+  if(!/^\d{6}$/.test(codigo)){ m.textContent='El código son 6 dígitos'; return; }
+  if(nueva.length<4){ m.textContent='La nueva contraseña debe tener al menos 4 caracteres'; return; }
+  try{ await api('/cuenta/recuperar/confirmar',{method:'POST',body:JSON.stringify({email:window._recEmail,codigo,nueva})});
+    cerrarRecuperar(); toast('🔒 Contraseña cambiada. Ya puedes iniciar sesión.');
+  }catch(e){ m.textContent=e.message; }
+}
+
 function vistaAjustes(){
-  const a=ajustes(), acSel=a.acento||'pino', temaSel=a.tema||'light', txtSel=a.texto||'md';
+  const a=ajustes(), acSel=a.acento||'cielo', temaSel=a.tema||'light', txtSel=a.texto||'md';
+  const emailActual=(ME.persona&&ME.persona.email)?String(ME.persona.email).replace(/"/g,'&quot;'):'';
   const opt=(g,val,act,label)=>`<button class="ajuste-opt ${val===act?'sel':''}" onclick="setAjuste('${g}','${val}')">${label}</button>`;
   $('content').innerHTML=`
     <div class="card" style="max-width:560px">
@@ -1994,6 +2094,24 @@ function vistaAjustes(){
       <h2 style="font-size:1.3rem;margin-bottom:4px">🔔 Notificaciones</h2>
       <p class="muted small" style="margin-bottom:14px">Avisos push en este dispositivo (servicios, música, recordatorios, anuncios…).</p>
       <div id="push-ajuste"><p class="muted small" style="margin:0">Cargando…</p></div>
+    </div>
+    <div class="card" style="max-width:560px;margin-top:16px">
+      <h2 style="font-size:1.3rem;margin-bottom:4px">👤 Mi cuenta</h2>
+      <p class="muted small" style="margin-bottom:14px">Tu correo y contraseña.</p>
+      <label>Correo (Gmail)</label>
+      <div class="row" style="gap:8px">
+        <input id="cta-email" type="email" value="${emailActual}" placeholder="tucorreo@gmail.com"/>
+        <button class="btn small-btn" onclick="guardarEmailCuenta()">Guardar</button>
+      </div>
+      <p class="muted small" style="margin:6px 0 0">Sirve para recuperar tu contraseña si la olvidas.</p>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>
+      <label>Cambiar contraseña</label>
+      <input id="cta-actual" type="password" placeholder="Contraseña actual" style="margin-bottom:8px"/>
+      <div class="row" style="gap:8px">
+        <input id="cta-nueva" type="password" placeholder="Nueva contraseña"/>
+        <button class="btn ghost small-btn" type="button" onclick="toggleVerPass('cta-nueva',this)" title="Ver/ocultar">👁️</button>
+      </div>
+      <button class="btn small-btn" style="margin-top:10px" onclick="cambiarPassCuenta()">Cambiar contraseña</button>
     </div>`;
   renderPushAjuste();
 }

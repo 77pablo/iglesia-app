@@ -123,6 +123,7 @@ export function perfilPublico(persona) {
     iglesia_id: persona.iglesia_id,
     usuario: persona.usuario,
     nombre: persona.nombre,
+    email: persona.email || null,
     es_pastor: !!persona.es_pastor,
     rol_global: persona.rol_global
   };

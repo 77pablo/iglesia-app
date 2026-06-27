@@ -148,6 +148,16 @@ CREATE TABLE IF NOT EXISTS push_sub (
   creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- CODIGO DE RECUPERACION de contrasena (6 digitos, expira). Fase 5.
+CREATE TABLE IF NOT EXISTS reset_codigo (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  persona_id  INTEGER NOT NULL REFERENCES persona(id),
+  codigo      TEXT NOT NULL,
+  expira      TEXT NOT NULL,
+  usado       INTEGER NOT NULL DEFAULT 0,
+  creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- NOTIFICACION: un aviso a una persona
 CREATE TABLE IF NOT EXISTS notificacion (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -447,6 +457,35 @@ agregarColumna('anuncio', 'rol', 'TEXT');
 agregarColumna('movimiento', 'comprobante_url', 'TEXT');
 // GRUPO: carpeta de Google Drive vinculada por el líder (compartir archivos/fotos)
 agregarColumna('grupo', 'drive_url', 'TEXT');
+
+// --- Índices: aceleran los filtros más usados (por iglesia, persona, evento, grupo) ---
+// Sin esto, cada consulta hace un escaneo completo; se nota al crecer los datos.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_evento_iglesia       ON evento(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_evento_grupo         ON evento(grupo_id);
+  CREATE INDEX IF NOT EXISTS idx_pertenencia_grupo    ON pertenencia(grupo_id);
+  CREATE INDEX IF NOT EXISTS idx_pertenencia_persona  ON pertenencia(persona_id);
+  CREATE INDEX IF NOT EXISTS idx_asignacion_evento    ON asignacion(evento_id);
+  CREATE INDEX IF NOT EXISTS idx_asignacion_persona   ON asignacion(persona_id);
+  CREATE INDEX IF NOT EXISTS idx_asistencia_evento    ON asistencia(evento_id);
+  CREATE INDEX IF NOT EXISTS idx_asistencia_persona   ON asistencia(persona_id);
+  CREATE INDEX IF NOT EXISTS idx_notificacion_persona ON notificacion(persona_id, leida);
+  CREATE INDEX IF NOT EXISTS idx_setlist_evento       ON setlist_item(evento_id);
+  CREATE INDEX IF NOT EXISTS idx_equipo_evento        ON equipo_musica(evento_id);
+  CREATE INDEX IF NOT EXISTS idx_equipo_persona       ON equipo_musica(persona_id);
+  CREATE INDEX IF NOT EXISTS idx_cancion_iglesia      ON cancion(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_material_iglesia     ON material_musica(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_movimiento_iglesia   ON movimiento(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_caso_iglesia         ON caso_cuidado(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_contacto_caso        ON contacto_cuidado(caso_id);
+  CREATE INDEX IF NOT EXISTS idx_sermon_iglesia       ON sermon(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_predica_iglesia      ON predica(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_auditoria_iglesia    ON auditoria(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_avisogrupo_grupo     ON aviso_grupo(grupo_id);
+  CREATE INDEX IF NOT EXISTS idx_recursogrupo_grupo   ON recurso_grupo(grupo_id);
+  CREATE INDEX IF NOT EXISTS idx_tareagrupo_persona   ON tarea_grupo(persona_id);
+  CREATE INDEX IF NOT EXISTS idx_pushsub_persona      ON push_sub(persona_id);
+`);
 
 // --- Auto-reparación: el himnario (material permanente) SIEMPRE disponible ---
 // Si en alguna iglesia falta el registro del himnario, se reinserta al arrancar.

@@ -24,11 +24,12 @@ import ninosRouter from './ninos.js';
 import facialRouter from './facial.js';
 import sermonesRouter from './sermones.js';
 import devocionalRouter from './devocional.js';
-import recordatoriosRouter, { generarRecordatorios } from './recordatorios.js';
+import recordatoriosRouter, { generarRecordatoriosThrottled } from './recordatorios.js';
 import grupoRouter from './grupo.js';
 import predicaRouter from './predica.js';
 import obispoRouter from './obispo.js';
 import pushRouter from './push.js';
+import cuentaRouter from './cuenta.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -137,7 +138,7 @@ app.get('/api/me', authMiddleware, (req, res) => {
   const persona = db.prepare('SELECT * FROM persona WHERE id = ?').get(req.user.persona_id);
   if (!persona) return res.status(404).json({ error: 'Persona no encontrada' });
   // Genera recordatorios pendientes de la iglesia al iniciar sesion (no duplica).
-  try { generarRecordatorios(persona.iglesia_id); } catch (e) { console.error('[recordatorios]', e.message); }
+  try { generarRecordatoriosThrottled(persona.iglesia_id); } catch (e) { console.error('[recordatorios]', e.message); }
   const iglesia = db.prepare('SELECT nombre, codigo_unico FROM iglesia WHERE id = ?').get(persona.iglesia_id);
   res.json({
     persona: perfilPublico(persona),
@@ -187,6 +188,7 @@ app.use('/api/grupo', grupoRouter);
 app.use('/api/predica', predicaRouter);
 app.use('/api/obispo', obispoRouter);
 app.use('/api/push', pushRouter);
+app.use('/api/cuenta', cuentaRouter);
 
 // Lista de personas de la iglesia (para asignar servicios)
 app.get('/api/personas', authMiddleware, (req, res) => {

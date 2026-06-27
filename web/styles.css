@@ -2,13 +2,14 @@
    Sistema de diseño — Iglesia App (Moderno y limpio, pro)
    ============================================================ */
 :root{
-  --primary:#0F5C57; --primary-700:#0B4745; --primary-600:#0E5450; --primary-50:#E8EFEE;
-  --turq:#C19E55; --grad:linear-gradient(135deg,#0F5C57 0%,#0B4745 100%);
-  --grad-hero:linear-gradient(100deg,#0b4745 0%,#0f5c57 38%,#c19e55 100%);
-  --sidebar:#113438; --gold:#c19e55;
-  --grad-soft:linear-gradient(135deg,#3B82F6 0%,#0EA5E9 100%);
-  --bg:#f4f3f0; --surface:#e6e4df; --text:#1a1a1a; --muted:#555555; --muted-2:#8a877f;
-  --border:#e2dfd7; --border-strong:#d3cfc5;
+  /* Paleta del logo: azul marino + azul medio + dorado (llama) */
+  --primary:#1C61A6; --primary-700:#154E86; --primary-600:#1A5B9C; --primary-50:#E7F0F9;
+  --turq:#F5A623; --grad:linear-gradient(135deg,#1C61A6 0%,#154E86 100%);
+  --grad-hero:linear-gradient(100deg,#123A63 0%,#1C61A6 42%,#F5A623 100%);
+  --sidebar:#123A63; --gold:#F5A623;
+  --grad-soft:linear-gradient(135deg,#1C61A6 0%,#4AA8E0 100%);
+  --bg:#eef2f7; --surface:#e3e9f1; --text:#16202b; --muted:#54607a; --muted-2:#8390a6;
+  --border:#dbe2ec; --border-strong:#c8d2e0;
   --green:#16A34A; --green-bg:#DCFCE7; --green-border:#86EFAC;
   --amber:#D97706; --amber-bg:#FEF3C7; --red:#DC2626; --red-bg:#FEE2E2;
 
