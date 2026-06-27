@@ -354,6 +354,11 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
   font-weight:700;display:flex;align-items:center;justify-content:flex-end;padding:0 10px;
   min-width:26px;transition:width .4s;}
 
+/* ---------- Íconos de línea que reemplazan a los emojis ---------- */
+.emi{display:inline-flex;align-items:center;justify-content:center;width:1.05em;height:1.05em;
+  vertical-align:-0.18em;flex-shrink:0;}
+.emi svg{width:100%;height:100%;display:block;}
+
 /* ---------- Calendario (vista de mes) ---------- */
 .cal-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
   padding:18px;box-shadow:var(--shadow-xs);}
