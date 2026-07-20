@@ -5,12 +5,15 @@
 import './env.js';   // carga backend/.env antes que nada (db, push leen process.env)
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import { z } from 'zod';
 import path from 'node:path';
 import fs from 'node:fs';
 import multer from 'multer';
 import { fileURLToPath } from 'node:url';
 import db from './db.js';
 import { login, authMiddleware, getRoles, modulosVisibles, perfilPublico, auditar } from './auth.js';
+import { limiterGeneral, limiterLogin, limiterSensible, validar } from './seguridad.js';
 import eventosRouter from './eventos.js';
 import anunciosRouter from './anuncios.js';
 import notificacionesRouter from './notificaciones.js';
@@ -40,7 +43,39 @@ const corsOrigin = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
   : true;
 app.use(cors({ origin: corsOrigin }));
+
+// --- Cabeceras de seguridad (helmet) ---
+// El frontend es una SPA/PWA clasica: usa un <script> inline en index.html,
+// atributos onclick/onkeydown inline (generados tambien desde app.js) y
+// estilos style="" inline, ademas de Google Fonts por <link>. Una CSP por
+// defecto (sin 'unsafe-inline') rompe el login y toda la interaccion, asi
+// que se define una CSP explicita que permite justo eso, sin abrirla a
+// terceros. connect-src 'self' cubre fetch()/EventSource hacia /api y
+// /uploads (mismo origen); no se usan CDNs externos para JS.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"]
+    }
+  },
+  // HSTS solo tiene efecto sobre HTTPS (el navegador lo ignora sobre HTTP en dev).
+  strictTransportSecurity: { maxAge: 15552000, includeSubDomains: true }
+}));
+
 app.use(express.json({ limit: '12mb' }));   // imagenes faciales en base64 pueden ser grandes
+
+// --- Rate limiting general para toda la API (100 req/IP cada 15 min) ---
+app.use('/api', limiterGeneral);
 
 const webDir = path.join(__dirname, '..', '..', 'web');
 
@@ -85,7 +120,8 @@ const upload = multer({
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res) => res.setHeader('Content-Disposition', 'attachment')
 }));
-app.post('/api/upload', authMiddleware, (req, res) => {
+// Endpoint sensible: 10 req/IP cada 15 min (subida de archivos).
+app.post('/api/upload', authMiddleware, limiterSensible, (req, res) => {
   upload.single('archivo')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message || 'No se pudo subir el archivo' });
     if (!req.file) return res.status(400).json({ error: 'No se subió archivo' });
@@ -101,35 +137,24 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, mensaje: 'Backend de la iglesia funcionando', hora: new Date().toISOString() });
 });
 
-// --- Rate limiting simple en memoria para /api/login (anti fuerza bruta) ---
-const LOGIN_VENTANA_MS = 15 * 60 * 1000;   // 15 minutos
-const LOGIN_MAX_INTENTOS = 10;             // intentos por IP en la ventana
-const intentosLogin = new Map();           // ip -> { count, reset }
-function limitarLogin(ip) {
-  const ahora = Date.now();
-  const reg = intentosLogin.get(ip);
-  if (!reg || ahora > reg.reset) {
-    intentosLogin.set(ip, { count: 1, reset: ahora + LOGIN_VENTANA_MS });
-    return true;
-  }
-  reg.count += 1;
-  return reg.count <= LOGIN_MAX_INTENTOS;
-}
-
 // --- LOGIN EN 3 PASOS (1A.3) ---
 // body: { iglesia, usuario, password }
-app.post('/api/login', (req, res) => {
-  const ip = req.ip || req.socket?.remoteAddress || 'desconocida';
-  if (!limitarLogin(ip))
-    return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' });
-  const { iglesia, usuario, password } = req.body || {};
-  if (!iglesia || !usuario || !password)
-    return res.status(400).json({ error: 'Faltan datos: iglesia, usuario y password' });
+// Rate limit: 5 intentos/IP cada 15 min (limiterLogin, express-rate-limit).
+// Validacion: zod exige los 3 campos como texto no vacio.
+const loginSchema = z.object({
+  iglesia: z.string().trim().min(1, 'falta la iglesia'),
+  usuario: z.string().trim().min(1, 'falta el usuario'),
+  password: z.string().min(1, 'falta la contraseña')
+});
+app.post('/api/login', limiterLogin, validar(loginSchema), (req, res) => {
+  const { iglesia, usuario, password } = req.body;
   try {
     const r = login(iglesia, usuario, password);
     auditar(r.persona.iglesia_id, r.persona.id, 'login', 'acceso');
     res.json(r);
   } catch (e) {
+    // No se loguea el password ni el intento completo: solo iglesia+usuario (identificadores, no secretos).
+    console.warn(`[seguridad] login fallido: iglesia="${iglesia}" usuario="${usuario}" ip=${req.ip}`);
     res.status(401).json({ error: e.message });
   }
 });
@@ -150,9 +175,12 @@ app.get('/api/me', authMiddleware, (req, res) => {
 });
 
 // --- Registro de token push (1A.5) ---
-app.post('/api/dispositivo', authMiddleware, (req, res) => {
-  const { token, plataforma } = req.body || {};
-  if (!token) return res.status(400).json({ error: 'Falta el token push' });
+const dispositivoSchema = z.object({
+  token: z.string().trim().min(1, 'falta el token push'),
+  plataforma: z.string().trim().max(50).optional()
+});
+app.post('/api/dispositivo', authMiddleware, validar(dispositivoSchema), (req, res) => {
+  const { token, plataforma } = req.body;
   db.prepare('INSERT INTO dispositivo_push (persona_id, token, plataforma) VALUES (?,?,?)')
     .run(req.user.persona_id, token, plataforma || 'desconocida');
   res.json({ ok: true });
@@ -174,6 +202,13 @@ app.use('/api/musica', musicaRouter);
 // --- Fase 2.5: Cuidado Pastoral ---
 app.use('/api/cuidado', cuidadoRouter);
 // --- Fase 3: Tesoreria ---
+// NOTA (trade-off documentado en INFORME-SEGURIDAD.md): el limite sensible
+// de 10 req/15min NO se aplica a todo el router porque la vista de
+// Tesoreria dispara 4 GET en paralelo al abrirla (resumen, movimientos,
+// campanias, transparencia) y agotaria la cuota con solo 2-3 visitas,
+// rompiendo la app. Se aplica el limite sensible SOLO a las rutas que
+// escriben dinero (POST/PATCH), dentro de tesoreria.js; las lecturas
+// quedan cubiertas por el limitador general (100 req/15min).
 app.use('/api/tesoreria', tesoreriaRouter);
 // --- Fase 3: Ninos / Escuela Dominical ---
 app.use('/api/ninos', ninosRouter);
@@ -190,7 +225,8 @@ app.use('/api/predica', predicaRouter);
 app.use('/api/obispo', obispoRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/cuenta', cuentaRouter);
-app.use('/api/admin', adminRouter);
+// Endpoint sensible: 10 req/IP cada 15 min (crear/editar usuarios y roles).
+app.use('/api/admin', limiterSensible, adminRouter);
 
 // Lista de personas de la iglesia (para asignar servicios)
 app.get('/api/personas', authMiddleware, (req, res) => {
