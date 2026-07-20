@@ -18,13 +18,16 @@ services:
       - key: SEED_ON_EMPTY
         value: "1"                    # siembra datos de demo si la BD está vacía
       - key: DB_PATH
-        value: /data/iglesia.db
+        value: /data/iglesia.db       # en free /data es EFÍMERO (se re-siembra al reiniciar)
       - key: UPLOADS_DIR
         value: /data/uploads
-    # Disco persistente (requiere plan de pago en Render).
-    # En plan free, comenta este bloque: los datos se reinician al reiniciar
-    # el servicio, pero SEED_ON_EMPTY los vuelve a sembrar.
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
+      # Push real (opcional): NO se define aquí para que el deploy sea sin fricción.
+      # Cuando quieras activarlo, añade en el panel de Render las 3 variables
+      # VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT. Genera el par con:
+      #   node -e "console.log(require('web-push').generateVAPIDKeys())"
+      # Sin ellas, el push queda apagado y las notificaciones siguen en la campana.
+    # NOTA (plan free): Render NO permite disco persistente en free, por eso se
+    # quitó el bloque `disk:`. La BD y los uploads son EFÍMEROS: se pierden al
+    # reiniciar/redeploy y SEED_ON_EMPTY los vuelve a sembrar (datos demo, pass 1234).
+    # Para persistir de verdad: sube el servicio a un plan con disco y re-añade:
+    #   disk: { name: data, mountPath: /data, sizeGB: 1 }
