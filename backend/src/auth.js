@@ -83,7 +83,7 @@ export function modulosVisibles(personaId) {
   if (r.rol_global === 'super_admin') {
     return ['inicio','mi_servicio','anuncios','calendario','calendario_completo',
             'asistencia','panel_pastor','musicos','servicio_gestion',
-            'cuidado_pastoral','ninos','tesoreria','admin','panel_obispo'];
+            'cuidado_pastoral','ninos','tesoreria','admin','panel_obispo','reportes'];
   }
   // Obispo: SOLO observa. Su centro es el Panel del Obispo (informe por iglesia).
   if (r.rol_global === 'obispo') {
@@ -92,7 +92,7 @@ export function modulosVisibles(personaId) {
   // Pastor: todo lo de su iglesia
   if (r.es_pastor) {
     ['calendario_completo','asistencia','panel_pastor','musicos','servicio_gestion',
-     'cuidado_pastoral','ninos','tesoreria','admin'].forEach(m => mods.add(m));
+     'cuidado_pastoral','ninos','tesoreria','admin','reportes'].forEach(m => mods.add(m));
     return [...mods];
   }
   // Por pertenencias (roles de grupo)

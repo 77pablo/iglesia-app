@@ -21,6 +21,7 @@ import notificacionesRouter from './notificaciones.js';
 import asignacionesRouter from './asignaciones.js';
 import asistenciaRouter from './asistencia.js';
 import panelRouter from './panel.js';
+import reportesRouter from './reportes.js';
 import musicaRouter from './musica.js';
 import cuidadoRouter from './cuidado.js';
 import tesoreriaRouter from './tesoreria.js';
@@ -217,6 +218,8 @@ app.use('/api/asignaciones', asignacionesRouter);
 app.use('/api/asistencia', asistenciaRouter);
 // --- Fase 2.2: Panel del pastor ---
 app.use('/api/panel', panelRouter);
+// --- Reportes y estadisticas del pastor (tendencias + export CSV) ---
+app.use('/api/reportes', reportesRouter);
 // --- Fase 2.3: Musicos ---
 app.use('/api/musica', musicaRouter);
 // --- Fase 2.5: Cuidado Pastoral ---
