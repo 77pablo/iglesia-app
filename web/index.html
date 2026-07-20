@@ -12,7 +12,7 @@
   <!-- PWA (Fase 4.2): manifest + tema + service worker -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#1C61A6" />
-  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png" />
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -37,7 +37,7 @@
       </ul>
     </div>
 
-    <div class="auth-form">
+    <div class="auth-form" style="flex-direction:column">
       <div class="login-card">
         <div class="login-head">
           <div class="brand-mini"><img src="/icon.svg" alt="" /> Iglesia App</div>
@@ -80,8 +80,12 @@
         </div>
 
         <p id="error" class="error"></p>
-        <p class="login-hint muted small">Prueba: <b>MONTESION</b> · usuario <b>pastor</b> · clave <b>1234</b></p>
       </div>
+      <p class="login-legal muted small" style="text-align:center;margin-top:16px">
+        <a href="/legal/privacidad.html" target="_blank" rel="noopener">Privacidad</a> ·
+        <a href="/legal/terminos.html" target="_blank" rel="noopener">Términos</a> ·
+        <a href="/legal/cookies.html" target="_blank" rel="noopener">Cookies</a>
+      </p>
     </div>
   </div>
 
