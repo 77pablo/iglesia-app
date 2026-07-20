@@ -1,0 +1,25 @@
+# ============================================================
+#  Litestream — réplica continua del SQLite (iglesia.db) a un
+#  bucket S3-compatible (Cloudflare R2). Da persistencia real
+#  al plan free de Render SIN cambiar la app (sigue usando
+#  node:sqlite síncrono).
+#
+#  TODO se toma de variables de entorno → NO hay secretos en el repo.
+#  Variables (se definen en Render → Environment):
+#    DB_PATH                      ruta local del .db (ej. /data/iglesia.db)
+#    R2_ENDPOINT                  https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+#    R2_BUCKET                    nombre del bucket
+#    LITESTREAM_ACCESS_KEY_ID     Access Key ID del token R2
+#    LITESTREAM_SECRET_ACCESS_KEY Secret Access Key del token R2
+# ============================================================
+dbs:
+  - path: ${DB_PATH}
+    replicas:
+      - type: s3
+        endpoint: ${R2_ENDPOINT}
+        bucket: ${R2_BUCKET}
+        path: iglesia-db
+        region: auto
+        force-path-style: true
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}

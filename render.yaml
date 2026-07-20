@@ -21,13 +21,20 @@ services:
         value: /data/iglesia.db       # en free /data es EFÍMERO (se re-siembra al reiniciar)
       - key: UPLOADS_DIR
         value: /data/uploads
-      # Push real (opcional): NO se define aquí para que el deploy sea sin fricción.
-      # Cuando quieras activarlo, añade en el panel de Render las 3 variables
-      # VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT. Genera el par con:
-      #   node -e "console.log(require('web-push').generateVAPIDKeys())"
-      # Sin ellas, el push queda apagado y las notificaciones siguen en la campana.
-    # NOTA (plan free): Render NO permite disco persistente en free, por eso se
-    # quitó el bloque `disk:`. La BD y los uploads son EFÍMEROS: se pierden al
-    # reiniciar/redeploy y SEED_ON_EMPTY los vuelve a sembrar (datos demo, pass 1234).
-    # Para persistir de verdad: sube el servicio a un plan con disco y re-añade:
-    #   disk: { name: data, mountPath: /data, sizeGB: 1 }
+      # --- Persistencia gratis con Litestream → Cloudflare R2 ---
+      # Rellena estas 4 en Render → Environment (secretas; NO van en el repo).
+      # Con ellas, el iglesia.db se respalda en tiempo real a R2 y se restaura
+      # al arrancar, así los datos SOBREVIVEN a los redeploys en plan free.
+      - key: R2_ENDPOINT                 # https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+        sync: false
+      - key: R2_BUCKET                   # nombre del bucket en R2
+        sync: false
+      - key: LITESTREAM_ACCESS_KEY_ID
+        sync: false
+      - key: LITESTREAM_SECRET_ACCESS_KEY
+        sync: false
+      # Push real (opcional): añade en Render VAPID_PUBLIC/PRIVATE/SUBJECT.
+    # NOTA: la persistencia real la da Litestream + R2 (ver arriba), NO un disco de
+    # Render. Mientras esas 4 variables no estén, el arranque degrada con elegancia
+    # (app normal, BD efímera). Cuando ya haya datos reales respaldados en R2,
+    # pon SEED_ON_EMPTY=0 para no re-sembrar demo.
