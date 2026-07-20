@@ -10,10 +10,10 @@ import { z } from 'zod';
 import path from 'node:path';
 import fs from 'node:fs';
 import multer from 'multer';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import db from './db.js';
 import { login, authMiddleware, getRoles, modulosVisibles, perfilPublico, auditar } from './auth.js';
-import { limiterGeneral, limiterLogin, limiterSensible, validar } from './seguridad.js';
+import { limiterGeneral, limiterLogin, limiterSensible, limiterChat, validar } from './seguridad.js';
 import eventosRouter from './eventos.js';
 import anunciosRouter from './anuncios.js';
 import notificacionesRouter from './notificaciones.js';
@@ -34,6 +34,7 @@ import obispoRouter from './obispo.js';
 import pushRouter from './push.js';
 import cuentaRouter from './cuenta.js';
 import adminRouter from './admin.js';
+import mensajesRouter from './mensajes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -75,7 +76,11 @@ app.use(helmet({
 app.use(express.json({ limit: '12mb' }));   // imagenes faciales en base64 pueden ser grandes
 
 // --- Rate limiting general para toda la API (100 req/IP cada 15 min) ---
-app.use('/api', limiterGeneral);
+// EXCEPCION: /api/mensajes queda fuera del limite general porque el chat
+// tiene su propio limitador mas holgado (limiterChat); si no, el trafico
+// legitimo del chat (SSE + envios + "escribiendo"/"leido") lo agotaria.
+app.use('/api', (req, res, next) =>
+  req.originalUrl.startsWith('/api/mensajes') ? next() : limiterGeneral(req, res, next));
 
 const webDir = path.join(__dirname, '..', '..', 'web');
 
@@ -227,6 +232,8 @@ app.use('/api/push', pushRouter);
 app.use('/api/cuenta', cuentaRouter);
 // Endpoint sensible: 10 req/IP cada 15 min (crear/editar usuarios y roles).
 app.use('/api/admin', limiterSensible, adminRouter);
+// Chat: limitador propio holgado (limiterChat), fuera del limite general.
+app.use('/api/mensajes', limiterChat, mensajesRouter);
 
 // Lista de personas de la iglesia (para asignar servicios)
 app.get('/api/personas', authMiddleware, (req, res) => {
@@ -254,6 +261,9 @@ if (process.env.SEED_ON_EMPTY === '1') {
 }
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`[server] API escuchando en el puerto ${PORT}`);
-});
+const ejecutadoDirecto = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (ejecutadoDirecto) {
+  app.listen(PORT, () => console.log(`[server] API escuchando en el puerto ${PORT}`));
+}
+
+export { app };

@@ -372,8 +372,9 @@ git commit -m "feat(chat): hub SSE en memoria (registrar/emitir/estaConectada)"
 1. `false` si el destino no existe, es el mismo actor, o es de otra iglesia.
 2. `true` si el actor es pastor o líder (`esLiderOAdmin(actorId)`).
 3. `true` si el destino es líder/pastor de algún grupo del actor (el feligrés puede escribir a su liderazgo).
-4. `true` si actor y destino comparten al menos un grupo.
-5. `false` en el resto.
+4. `true` si el destino es **el pastor de la iglesia del actor** (`esPastor(destinoId)`) — un feligrés siempre puede escribir a su pastor (decisión del brainstorming: "feligrés → a sus líderes/**pastor**").
+5. `true` si actor y destino comparten al menos un grupo.
+6. `false` en el resto.
 
 - [ ] **Step 1: Escribir el test que falla**
 

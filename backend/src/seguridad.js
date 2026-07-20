@@ -49,6 +49,24 @@ export const limiterSensible = rateLimit({
   }
 });
 
+// --- Limitador del chat: holgado a proposito ---
+// La mensajeria (SSE + envios + pings de "escribiendo"/"leido" + refresco de
+// la lista) genera muchas peticiones legitimas que el limite general de
+// 100/15min ahogaria. El stream SSE (/stream) se EXIME: es una conexion
+// abierta de larga duracion, no un pico de peticiones.
+export const limiterChat = rateLimit({
+  windowMs: QUINCE_MIN,
+  limit: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiada actividad de mensajeria. Espera unos segundos.' },
+  handler: (req, res, next, options) => {
+    console.warn(`[seguridad] rate-limit chat excedido: ip=${req.ip} ruta=${req.method} ${req.originalUrl}`);
+    res.status(options.statusCode).json(options.message);
+  },
+  skip: (req) => req.path === '/stream'
+});
+
 // --- Validacion de entrada con zod ---
 // Uso: r.post('/algo', validar(esquema), (req, res) => {...})
 // fuente: 'body' (por defecto), 'query' o 'params'.

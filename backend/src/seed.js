@@ -14,6 +14,7 @@ for (const t of ['asistencia_nino','leccion','nino','clase_ed','movimiento','cam
                  'equipo_musica','ensayo','material_musica','setlist_item','cancion',
                  'tarea_grupo','recurso_grupo','aviso_grupo','predica_recurso','predica','rol_temporal',
                  'biometria_persona','notificacion','dispositivo_push','push_sub','fecha_no_disp',
+                 'mensaje','conversacion_miembro','conversacion',
                  'asistencia','asignacion','evento','anuncio','pertenencia','recurso','grupo','persona','auditoria','iglesia']) {
   try { db.exec(`DELETE FROM ${t};`); } catch (e) { /* tabla puede no existir en BD vieja */ }
 }
@@ -178,6 +179,14 @@ db.prepare("INSERT INTO movimiento (iglesia_id, tipo, categoria, monto, descripc
 db.prepare("INSERT INTO movimiento (iglesia_id, tipo, categoria, monto, descripcion, creado_por) VALUES (?,?,?,?,?,?)").run(ig2, 'gasto', 'servicios', 400, 'Luz', pas2);
 db.prepare('INSERT INTO predica (iglesia_id, titulo, fecha, predicador, notas, creado_por) VALUES (?,?,?,?,?,?)')
   .run(ig2, 'La fe que vence', '2026-06-14', 'Pastor Daniel Soto', '1 Juan 5:4 — Esta es la victoria que vence al mundo: nuestra fe.', pas2);
+
+// 17) Fase 6: Chat demo (mensajeria interna) - 1:1 abel <-> maria
+const cvDemo = db.prepare("INSERT INTO conversacion (iglesia_id, tipo, creado_por) VALUES (?, 'directo', ?)")
+  .run(iglesiaId, abel).lastInsertRowid;
+db.prepare('INSERT INTO conversacion_miembro (conversacion_id, persona_id, rol) VALUES (?,?,?)').run(cvDemo, abel, 'miembro');
+db.prepare('INSERT INTO conversacion_miembro (conversacion_id, persona_id, rol) VALUES (?,?,?)').run(cvDemo, maria, 'miembro');
+db.prepare("INSERT INTO mensaje (conversacion_id, persona_id, texto) VALUES (?,?, 'Hola Maria, ¿vienes el sabado?')").run(cvDemo, abel);
+db.prepare("INSERT INTO mensaje (conversacion_id, persona_id, texto) VALUES (?,?, '¡Si! Ahi estare 🙌')").run(cvDemo, maria);
 
 console.log('\n[seed] Datos de prueba creados:');
 console.log('  Iglesia: Monte Sion  (codigo: MONTESION)');

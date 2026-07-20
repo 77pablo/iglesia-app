@@ -51,13 +51,19 @@ self.addEventListener('push', (e) => {
   e.waitUntil(self.registration.showNotification(titulo, opts));
 });
 
-// Al tocar la notificacion: enfoca una pestaña abierta o abre una nueva.
+// Al tocar la notificacion: navega una pestaña abierta a la conversacion (o abre una nueva).
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const destino = (e.notification.data && e.notification.data.url) || '/';
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cli) => {
-      for (const c of cli) { if ('focus' in c) return c.focus(); }
+      for (const c of cli) {
+        if ('focus' in c) {
+          // navigate() puede no existir en navegadores viejos; si falla, igual enfocamos.
+          if ('navigate' in c) { try { c.navigate(destino); } catch { /* ignorar */ } }
+          return c.focus();
+        }
+      }
       if (self.clients.openWindow) return self.clients.openWindow(destino);
     })
   );

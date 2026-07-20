@@ -9,6 +9,7 @@ const NAV = [
   ['inicio','🏠','Inicio'],
   ['calendario','📅','Calendario'],
   ['anuncios','📢','Anuncios'],
+  ['mensajes','💬','Mensajes'],
   ['mi_servicio','🙌','Mi Servicio'],
   ['mi_grupo','🧑‍🤝‍🧑','Mi Grupo'],
   ['servicio_gestion','🤝','Servicio'],
@@ -117,7 +118,7 @@ function esEncargadoDe(grupoId){
 function tieneModulo(k){
   if(k==='inicio') return true;
   // Biblia/Devocional y Notas del sermón: disponibles para toda la iglesia (Fase 4)
-  if(k==='predica'||k==='ajustes') return true;
+  if(k==='predica'||k==='ajustes'||k==='mensajes') return true;
   if(k==='calendario') return ME.modulos.includes('calendario')||ME.modulos.includes('calendario_completo');
   return ME.modulos.includes(k);
 }
@@ -138,6 +139,7 @@ function abrirApp(){
   buildNav();
   // (La campana la actualiza el dashboard con su propia carga; evitamos pedir /notificaciones dos veces.)
   pushAutoResuscribir();   // mantiene el push activo entre sesiones (si ya dio permiso)
+  Chat.refrescarBadge();  // badge de mensajes sin leer, visible aunque no se abra la vista
   navTo('inicio');
 }
 function setCampana(n){
@@ -163,6 +165,7 @@ const NAV_ICON={
   panel_obispo:_ic('<path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z"/><path d="M2 20h20"/>'),
   ajustes:_ic('<line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/>'),
   admin:_ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>'),
+  mensajes:_ic('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
 };
 // ============================================================
 //  EMOJIS → ÍCONOS DE LÍNEA (mismo estilo del menú lateral)
@@ -290,7 +293,7 @@ function buildNav(){
   NAV.filter(n=>tieneModulo(n[0])).forEach(([key,ic,label])=>{
     const el=document.createElement('div');
     el.className='nav-item'; el.dataset.key=key;
-    el.innerHTML=`<span class="ic">${NAV_ICON[key]||ic}</span> ${labelDe(key)}`;
+    el.innerHTML=`<span class="ic">${NAV_ICON[key]||ic}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
     el.onclick=()=>navTo(key);
     nav.appendChild(el);
   });
@@ -302,6 +305,7 @@ function navTo(key){
   if(key==='inicio') return renderDashboard();
   if(key==='calendario') return vistaCalendario();
   if(key==='anuncios') return vistaAnuncios();
+  if(key==='mensajes') return vistaMensajes();
   if(key==='mi_servicio') return vistaMiServicio();
   if(key==='mi_grupo') return vistaMiGrupo();
   if(key==='servicio_gestion') return vistaServicio();
@@ -2409,6 +2413,198 @@ function vistaAjustes(){
     </div>`;
   renderPushAjuste();
 }
+
+// ============================================================
+//  MENSAJES (chat) — lista de conversaciones + hilo + SSE en vivo
+// ============================================================
+function vistaMensajes(){
+  $('content').innerHTML=`<div class="chat-wrap">
+    <aside id="chatLista" class="chat-lista"><p class="muted small">Cargando…</p></aside>
+    <div id="chatHilo" class="chat-hilo"><div class="chat-vacio">Elige una conversación</div></div>
+  </div>`;
+  Chat.abrirVista();
+}
+const Chat = {
+  convActual: null,
+  escribiendoTimer: null,
+  es: null,
+  async abrirVista(){
+    await this.cargarLista();
+    this.conectarSSE();
+  },
+  async actualizarBadgeNav(n){
+    const b=$('nav-badge-mensajes'); if(!b) return;
+    b.classList.toggle('hidden', !n); b.textContent=n;
+  },
+  // Trae solo el total de no-leidos, sin tocar la vista (se llama desde abrirApp).
+  async refrescarBadge(){
+    try{
+      const convs=await api('/mensajes/conversaciones');
+      this.actualizarBadgeNav(convs.reduce((a,c)=>a+(c.no_leidos||0),0));
+    }catch{ /* sin conexion aun (p.ej. antes del login) */ }
+  },
+  async cargarLista(){
+    let convs=[];
+    try{ convs=await api('/mensajes/conversaciones'); }
+    catch(e){ const c=$('chatLista'); if(c) c.innerHTML='<p class="error small">'+escHtml(e.message)+'</p>'; return; }
+    const cont=$('chatLista'); if(!cont) return;
+    cont.innerHTML='<button id="btnNuevoChat" class="btn ghost small-btn" style="width:100%;margin-bottom:10px">+ Nuevo chat</button><div id="nuevoChatForm"></div>';
+    let totalNoLeidos=0;
+    for(const c of convs){
+      totalNoLeidos+=c.no_leidos||0;
+      const el=document.createElement('div');
+      el.className='chat-item'+(c.no_leidos?' no-leido':'')+(c.id===this.convActual?' sel':'');
+      el.innerHTML=`<div class="ci-titulo">${escHtml(c.titulo||'(sin nombre)')}</div>
+        <div class="ci-ultimo">${escHtml(c.ultimo?c.ultimo.texto||'':'Sin mensajes todavía')}</div>
+        ${c.no_leidos?`<span class="badge">${c.no_leidos}</span>`:''}`;
+      el.onclick=()=>this.abrirConversacion(c.id, c.titulo);
+      cont.appendChild(el);
+    }
+    this.actualizarBadgeNav(totalNoLeidos);
+    $('btnNuevoChat').onclick=()=>this.toggleNuevoChat();
+  },
+  async toggleNuevoChat(){
+    const z=$('nuevoChatForm'); if(!z) return;
+    if(z.innerHTML){ z.innerHTML=''; return; }
+    let contactos=[];
+    try{ contactos=await api('/mensajes/contactos'); }catch(e){ return toast(e.message); }
+    if(!contactos.length){ z.innerHTML='<p class="muted small">No hay contactos disponibles.</p>'; return; }
+    z.innerHTML=`<div style="background:var(--bg);padding:10px;border-radius:10px;margin-bottom:10px">
+      <select id="nc-persona">${contactos.map(c=>`<option value="${c.id}">${escHtml(c.nombre)}</option>`).join('')}</select>
+      <button type="button" class="btn small-btn" style="margin-top:8px;width:100%" onclick="Chat.iniciarChat()">Iniciar chat</button>
+    </div>`;
+  },
+  async iniciarChat(){
+    const sel=$('nc-persona'); if(!sel) return;
+    const personaId=Number(sel.value); if(!personaId) return;
+    const nombre=sel.options[sel.selectedIndex].textContent;
+    try{
+      const conv=await api('/mensajes/directo',{method:'POST',body:JSON.stringify({persona_id:personaId})});
+      $('nuevoChatForm').innerHTML='';
+      await this.abrirConversacion(conv.id, nombre);
+    }catch(e){ toast(e.message); }
+  },
+  async abrirConversacion(id, titulo){
+    this.convActual=id;
+    let data;
+    try{ data=await api('/mensajes/conversacion/'+id); }catch(e){ return toast(e.message); }
+    const mensajes=data.mensajes||[];
+    const conv=data.conversacion||{};
+    const hilo=$('chatHilo'); if(!hilo) return;
+    hilo.innerHTML='';
+    const head=document.createElement('header'); head.className='chat-head';
+    head.textContent=titulo||conv.titulo||'(sin nombre)';
+    const msgs=document.createElement('div'); msgs.id='chatMsgs'; msgs.className='chat-msgs';
+    const escrib=document.createElement('div'); escrib.id='chatEscribiendo'; escrib.className='chat-escribiendo';
+    const form=document.createElement('form'); form.id='chatForm'; form.className='chat-form';
+    form.innerHTML=`<button type="button" id="chatAdjuntar" class="btn-ico" title="Adjuntar">📎</button>
+      <input id="chatInput" autocomplete="off" placeholder="Escribe un mensaje…" maxlength="4000"/>
+      <button class="btn">Enviar</button>`;
+    hilo.appendChild(head); hilo.appendChild(msgs); hilo.appendChild(escrib); hilo.appendChild(form);
+    for(const m of mensajes.slice().reverse()) msgs.appendChild(this.burbuja(m));
+    msgs.scrollTop=msgs.scrollHeight;
+    if(mensajes.length) this.marcarLeido(id, mensajes[0].id);
+    form.onsubmit=(e)=>{ e.preventDefault(); this.enviar(id); };
+    $('chatInput').oninput=()=>this.pingEscribiendo(id);
+    $('chatAdjuntar').onclick=()=>this.adjuntar(id);
+    await this.cargarLista();
+  },
+  // Construye la burbuja con DOM (nunca innerHTML con texto de usuario) → a salvo de XSS.
+  burbuja(m){
+    const el=document.createElement('div');
+    const esMia=m.persona_id===ME.persona.id;
+    el.className='burbuja'+(esMia?' mia':'');
+    el.dataset.id=m.id;
+    if(m.borrado){ el.classList.add('borrado'); el.textContent='mensaje eliminado'; return el; }
+    const autor=document.createElement('span'); autor.className='autor'; autor.textContent=m.nombre||'';
+    el.appendChild(autor);
+    const cuerpo=document.createElement('div');
+    if(m.texto) cuerpo.appendChild(document.createTextNode(m.texto));
+    if(m.adjunto_url){
+      const a=document.createElement('a'); a.className='adj'; a.href=m.adjunto_url; a.target='_blank'; a.rel='noopener';
+      a.textContent='📎 archivo';
+      cuerpo.appendChild(a);
+    }
+    el.appendChild(cuerpo);
+    if(esMia){ const chk=document.createElement('span'); chk.className='check'; chk.textContent='✓✓'; el.appendChild(chk); }
+    return el;
+  },
+  async enviar(id){
+    const input=$('chatInput'); if(!input) return;
+    const texto=input.value.trim(); if(!texto) return;
+    input.value='';
+    try{
+      const {mensaje}=await api('/mensajes/conversacion/'+id,{method:'POST',body:JSON.stringify({texto})});
+      const cont=$('chatMsgs');
+      if(cont && this.convActual===id){ cont.appendChild(this.burbuja(mensaje)); cont.scrollTop=cont.scrollHeight; }
+      this.cargarLista();
+    }catch(e){ toast(e.message); input.value=texto; }
+  },
+  async adjuntar(id){
+    const inp=document.createElement('input'); inp.type='file';
+    inp.onchange=async()=>{
+      const f=inp.files[0]; if(!f) return;
+      try{
+        toast('Subiendo…');
+        const url=await uploadArchivo(f);
+        const {mensaje}=await api('/mensajes/conversacion/'+id,{method:'POST',body:JSON.stringify({texto:'',adjunto_url:url,adjunto_tipo:'archivo'})});
+        const cont=$('chatMsgs');
+        if(cont && this.convActual===id){ cont.appendChild(this.burbuja(mensaje)); cont.scrollTop=cont.scrollHeight; }
+        this.cargarLista();
+      }catch(e){ toast(e.message); }
+    };
+    inp.click();
+  },
+  pingEscribiendo(id){
+    if(this.escribiendoTimer) return;
+    api('/mensajes/conversacion/'+id+'/escribiendo',{method:'POST',body:JSON.stringify({})}).catch(()=>{});
+    this.escribiendoTimer=setTimeout(()=>{ this.escribiendoTimer=null; },3000);
+  },
+  marcarLeido(id, mensajeId){
+    api('/mensajes/conversacion/'+id+'/leido',{method:'POST',body:JSON.stringify({mensaje_id:mensajeId})}).catch(()=>{});
+  },
+  conectarSSE(){
+    if(this.es) return;
+    this.es=new EventSource('/api/mensajes/stream?token='+encodeURIComponent(token()));
+    this.es.addEventListener('mensaje',(ev)=>{
+      let data; try{ data=JSON.parse(ev.data); }catch{ return; }
+      const {conversacion_id, mensaje}=data;
+      if(conversacion_id===this.convActual){
+        const cont=$('chatMsgs');
+        if(cont){
+          if(mensaje.borrado){
+            const b=cont.querySelector('[data-id="'+mensaje.id+'"]');
+            if(b){ b.className='burbuja borrado'; b.textContent='mensaje eliminado'; }
+          }else if(mensaje.persona_id!==ME.persona.id){
+            cont.appendChild(this.burbuja(mensaje)); cont.scrollTop=cont.scrollHeight;
+            this.marcarLeido(conversacion_id, mensaje.id);
+          }
+        }
+      }
+      this.cargarLista();
+    });
+    this.es.addEventListener('escribiendo',(ev)=>{
+      let data; try{ data=JSON.parse(ev.data); }catch{ return; }
+      const {conversacion_id, nombre}=data;
+      if(conversacion_id!==this.convActual) return;
+      const e=$('chatEscribiendo'); if(!e) return;
+      e.textContent=(nombre||'Alguien')+' está escribiendo…';
+      clearTimeout(this._escTimer);
+      this._escTimer=setTimeout(()=>{ e.textContent=''; },3000);
+    });
+    this.es.addEventListener('leido',(ev)=>{
+      let data; try{ data=JSON.parse(ev.data); }catch{ return; }
+      const {conversacion_id, ultimo_leido_mensaje_id}=data;
+      if(conversacion_id!==this.convActual) return;
+      const cont=$('chatMsgs'); if(!cont) return;
+      cont.querySelectorAll('.burbuja.mia').forEach(b=>{
+        const id=Number(b.dataset.id);
+        if(id && id<=ultimo_leido_mensaje_id) b.classList.add('leido');
+      });
+    });
+    this.es.onerror=()=>{ /* EventSource reconecta solo */ };
+  }
+};
 
 // Al abrir
 aplicarAjustes();

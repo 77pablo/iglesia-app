@@ -97,6 +97,7 @@ excepto que `GET /stream` valida el JWT por query param (ver §5).
   como el resto de helpers de `auth.js`):
   - actor es **pastor** o **líder** (`esPastor` o `esLiderOAdmin`, que cubre `admin`/`lider_musica`/`lider_ed`), **o**
   - destino es **líder/pastor de un grupo del actor** (el actor le puede escribir a su liderazgo), **o**
+  - destino es **el pastor de la iglesia del actor** (`esPastor(destino)`) — un feligrés siempre puede escribir a su pastor, **o**
   - actor y destino **comparten al menos un grupo** (vía tabla `pertenencia`).
   - Siempre dentro de la **misma iglesia**.
   - Reutiliza los helpers existentes `esPastor`, `esLiderOAdmin` y consultas a `pertenencia`.

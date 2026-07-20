@@ -231,3 +231,34 @@ export function esLiderOAdmin(personaId) {
   ).get(personaId);
   return !!row;
 }
+
+// --- Verifica un JWT crudo (para el stream SSE, que no puede mandar headers) ---
+export function verificarToken(token) {
+  try { return jwt.verify(token, SECRET); }   // { persona_id, iglesia_id }
+  catch { return null; }
+}
+
+// --- Puede ACTOR iniciar un chat 1:1 con DESTINO? (misma iglesia) ---
+//  lider/pastor -> con cualquiera; feligres -> a su liderazgo o a quien comparte grupo.
+export function puedeIniciarChatCon(actorId, destinoId) {
+  if (Number(actorId) === Number(destinoId)) return false;
+  const actor = db.prepare('SELECT iglesia_id FROM persona WHERE id = ?').get(actorId);
+  const destino = db.prepare('SELECT iglesia_id FROM persona WHERE id = ? AND activo = 1').get(destinoId);
+  if (!actor || !destino) return false;
+  if (actor.iglesia_id !== destino.iglesia_id) return false;
+  if (esLiderOAdmin(actorId)) return true;
+  // destino es lider/pastor de algun grupo del actor?
+  const destinoEsMiLider = db.prepare(
+    `SELECT 1 FROM pertenencia pd
+       JOIN pertenencia pa ON pa.grupo_id = pd.grupo_id AND pa.persona_id = ?
+      WHERE pd.persona_id = ? AND pd.rol IN ('admin','lider_musica','lider_ed') LIMIT 1`
+  ).get(actorId, destinoId);
+  if (destinoEsMiLider) return true;
+  if (esPastor(destinoId)) return true;
+  // comparten algun grupo?
+  const compartenGrupo = db.prepare(
+    `SELECT 1 FROM pertenencia a JOIN pertenencia b ON a.grupo_id = b.grupo_id
+      WHERE a.persona_id = ? AND b.persona_id = ? LIMIT 1`
+  ).get(actorId, destinoId);
+  return !!compartenGrupo;
+}
