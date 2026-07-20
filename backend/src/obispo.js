@@ -29,14 +29,23 @@ r.get('/resumen', (req, res) => {
         ${saldoSQL} AS saldo
        FROM iglesia i ORDER BY i.nombre`
   ).all();
-  // Asistencia promedio por iglesia (reuniones con asistencia)
-  for (const ig of iglesias) {
-    const rows = db.prepare(
-      `SELECT (SELECT COUNT(*) FROM asistencia a WHERE a.evento_id = e.id) AS n
-         FROM evento e WHERE e.iglesia_id = ?`
-    ).all(ig.id).map(x => x.n).filter(n => n > 0);
-    ig.asistenciaPromedio = rows.length ? Math.round(rows.reduce((a, b) => a + b, 0) / rows.length) : 0;
-  }
+  // Asistencia promedio por iglesia (reuniones con asistencia), calculada en
+  // UNA sola consulta para todas las iglesias en vez de una consulta por
+  // iglesia (antes: N consultas, cada una con una subconsulta correlacionada
+  // por evento). Misma definicion que antes: promedio de asistentes sobre
+  // las reuniones que SI tuvieron asistencia (HAVING > 0 equivale al
+  // ".filter(n => n > 0)" de antes); el redondeo se hace en JS con
+  // Math.round(suma/cuenta), identico a Math.round(promedio) de antes.
+  const promedios = db.prepare(
+    `SELECT iglesia_id, SUM(n) AS suma, COUNT(*) AS cuenta FROM (
+       SELECT e.iglesia_id AS iglesia_id, COUNT(a.id) AS n
+         FROM evento e LEFT JOIN asistencia a ON a.evento_id = e.id
+        GROUP BY e.id
+       HAVING COUNT(a.id) > 0
+     ) GROUP BY iglesia_id`
+  ).all();
+  const mapaPromedios = new Map(promedios.map(x => [x.iglesia_id, Math.round(x.suma / x.cuenta)]));
+  for (const ig of iglesias) ig.asistenciaPromedio = mapaPromedios.get(ig.id) || 0;
   auditar(req.user.iglesia_id, req.user.persona_id, 'obispo_resumen', 'panel_obispo', String(iglesias.length));
   res.json(iglesias);
 });
@@ -110,8 +119,23 @@ r.get('/iglesia/:id/asistencia', (req, res) => {
   if (!ig) return res.status(404).json({ error: 'Iglesia no encontrada' });
   const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : db.prepare("SELECT strftime('%Y-%m','now') AS m").get().m;
   const eventos = db.prepare("SELECT id, titulo, fecha FROM evento WHERE iglesia_id=? AND strftime('%Y-%m',fecha)=? ORDER BY fecha").all(ig.id, mes);
-  for (const ev of eventos)
-    ev.presentes = db.prepare("SELECT p.nombre FROM asistencia a JOIN persona p ON p.id=a.persona_id WHERE a.evento_id=? ORDER BY p.nombre").all(ev.id).map(x => x.nombre);
+  // Presentes de TODOS los eventos del mes en una sola consulta (antes: una
+  // consulta de presentes POR evento). Se agrupan en JS por evento_id;
+  // el ORDER BY (evento_id, nombre) deja cada grupo ya alfabetico, igual
+  // que el "ORDER BY p.nombre" de la consulta por-evento de antes.
+  const presentesPorEvento = db.prepare(
+    `SELECT a.evento_id, p.nombre
+       FROM asistencia a JOIN persona p ON p.id = a.persona_id
+       JOIN evento e ON e.id = a.evento_id
+      WHERE e.iglesia_id = ? AND strftime('%Y-%m', e.fecha) = ?
+      ORDER BY a.evento_id, p.nombre`
+  ).all(ig.id, mes);
+  const mapaPresentes = new Map();
+  for (const row of presentesPorEvento) {
+    if (!mapaPresentes.has(row.evento_id)) mapaPresentes.set(row.evento_id, []);
+    mapaPresentes.get(row.evento_id).push(row.nombre);
+  }
+  for (const ev of eventos) ev.presentes = mapaPresentes.get(ev.id) || [];
   res.json(eventos);
 });
 

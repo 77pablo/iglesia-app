@@ -6,6 +6,7 @@ import './env.js';   // carga backend/.env antes que nada (db, push leen process
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import { z } from 'zod';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -72,6 +73,18 @@ app.use(helmet({
   },
   // HSTS solo tiene efecto sobre HTTPS (el navegador lo ignora sobre HTTP en dev).
   strictTransportSecurity: { maxAge: 15552000, includeSubDomains: true }
+}));
+
+// --- Compresion gzip de las respuestas (JSON de la API + estaticos del SPA) ---
+// Reduce el tamano transferido en conexiones moviles/lentas, sin cambiar el
+// contenido devuelto (transparente para el cliente: fetch/XHR descomprimen
+// solos). EXCEPCION: /api/mensajes queda fuera porque ahi se sirve el chat
+// en tiempo real por SSE (text/event-stream, ver sse.js y mensajes.js); si
+// se comprime, la respuesta se bufferea para armar el gzip y los eventos
+// dejan de llegar al instante, rompiendo el tiempo real del chat.
+app.use(compression({
+  filter: (req, res) =>
+    req.originalUrl.startsWith('/api/mensajes') ? false : compression.filter(req, res)
 }));
 
 app.use(express.json({ limit: '12mb' }));   // imagenes faciales en base64 pueden ser grandes

@@ -536,6 +536,23 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_conv_iglesia       ON conversacion(iglesia_id);
   CREATE INDEX IF NOT EXISTS idx_convmiembro_persona ON conversacion_miembro(persona_id);
   CREATE INDEX IF NOT EXISTS idx_mensaje_conv        ON mensaje(conversacion_id, id);
+  -- persona(iglesia_id): la tabla mas consultada por iglesia sin filtro por id
+  -- (login, listas de miembros en admin/obispo/panel/mensajes/notificaciones,
+  -- /api/personas). Antes escaneaba TODA la tabla persona en cada llamada.
+  CREATE INDEX IF NOT EXISTS idx_persona_iglesia     ON persona(iglesia_id);
+  -- grupo(iglesia_id): se filtra por iglesia en casi cada pantalla que arma
+  -- un selector de grupos (panel, admin, eventos, notificaciones, obispo).
+  CREATE INDEX IF NOT EXISTS idx_grupo_iglesia       ON grupo(iglesia_id);
+  -- anuncio(iglesia_id): listado principal de anuncios, ordenado y filtrado
+  -- por iglesia en cada carga de la pantalla de Anuncios.
+  CREATE INDEX IF NOT EXISTS idx_anuncio_iglesia     ON anuncio(iglesia_id);
+  -- devocional(iglesia_id): listado de devocionales por iglesia (pantalla
+  -- de lectura/descarga offline).
+  CREATE INDEX IF NOT EXISTS idx_devocional_iglesia  ON devocional(iglesia_id);
+  -- recordatorio_enviado: NO necesita indice nuevo -- su UNIQUE(clave,
+  -- persona_id) ya crea un indice implicito que cubre el unico acceso
+  -- (INSERT OR IGNORE de dedupe en recordatorios.js); no se hacen SELECT
+  -- adicionales por iglesia_id o persona_id solos.
 `);
 
 // --- Auto-reparación: el himnario (material permanente) SIEMPRE disponible ---

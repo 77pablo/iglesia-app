@@ -77,24 +77,27 @@ r.get('/export.csv', (req, res) => {
   const grupos = db.prepare('SELECT id FROM grupo WHERE iglesia_id = ?').all(iglesia_id);
   const grupoId = grupos.some(g => g.id === Number(req.query.grupo_id)) ? Number(req.query.grupo_id) : null;
 
-  // Eventos (con grupo) de la iglesia, filtrados por grupo si aplica
-  const eventos = db.prepare(
-    `SELECT e.id, e.titulo, e.fecha, e.grupo_id, g.nombre AS grupo
-       FROM evento e JOIN grupo g ON g.id = e.grupo_id
-      WHERE e.iglesia_id = ? ${grupoId ? 'AND e.grupo_id = ?' : ''}
-      ORDER BY e.fecha, e.id`
-  ).all(...(grupoId ? [iglesia_id, grupoId] : [iglesia_id]));
-
+  // Filas Evento x Miembro-del-grupo-del-evento, con su asistencia (Si/No),
+  // en UNA sola consulta (antes: 1 query de miembros + 1 de presentes POR
+  // evento, es decir 2N consultas para N eventos). DISTINCT en la subconsulta
+  // de pertenencia evita filas dobles cuando una persona tiene mas de un rol
+  // en el mismo grupo (admin+miembro), igual que hacia miembrosDeGrupo().
+  // Eventos sin ningun miembro activo en su grupo quedan fuera (mismo
+  // resultado que el "if (!miembros.length) continue" de antes).
   const filas = [['Fecha', 'Evento', 'Grupo', 'Persona', 'Asistio']];
-  for (const ev of eventos) {
-    const miembros = miembrosDeGrupo(ev.grupo_id);
-    if (!miembros.length) continue;
-    const presentes = new Set(
-      db.prepare('SELECT persona_id FROM asistencia WHERE evento_id = ?').all(ev.id).map(x => x.persona_id)
-    );
-    for (const m of miembros)
-      filas.push([ev.fecha, ev.titulo, ev.grupo || '', m.nombre, presentes.has(m.id) ? 'Si' : 'No']);
-  }
+  const rows = db.prepare(
+    `SELECT e.fecha, e.titulo, g.nombre AS grupo, p.nombre AS persona,
+            CASE WHEN a.persona_id IS NOT NULL THEN 1 ELSE 0 END AS asistio
+       FROM evento e
+       JOIN grupo g ON g.id = e.grupo_id
+       JOIN (SELECT DISTINCT persona_id, grupo_id FROM pertenencia) pe ON pe.grupo_id = g.id
+       JOIN persona p ON p.id = pe.persona_id AND p.activo = 1
+       LEFT JOIN asistencia a ON a.evento_id = e.id AND a.persona_id = p.id
+      WHERE e.iglesia_id = ? ${grupoId ? 'AND e.grupo_id = ?' : ''}
+      ORDER BY e.fecha, e.id, p.nombre`
+  ).all(...(grupoId ? [iglesia_id, grupoId] : [iglesia_id]));
+  for (const row of rows)
+    filas.push([row.fecha, row.titulo, row.grupo || '', row.persona, row.asistio ? 'Si' : 'No']);
 
   const csv = filas.map(f => f.map(csvCell).join(',')).join('\r\n');
   auditar(iglesia_id, persona_id, 'exportar_asistencia', 'panel', grupoId ? 'grupo ' + grupoId : 'todos');
