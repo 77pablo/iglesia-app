@@ -79,11 +79,12 @@ export function modulosVisibles(personaId) {
   const r = getRoles(personaId);
   const mods = new Set(['inicio', 'mi_servicio', 'anuncios', 'calendario']);
 
-  // Super-admin: acceso técnico total
+  // Super-admin: rol TÉCNICO/administrativo (crear/editar/borrar iglesias y
+  // pastores, mantener el control). NO es un miembro de iglesia ni el obispo:
+  // por eso NO ve el Panel del Obispo ni los módulos de una congregación.
+  // Su panel ("superadmin") lo muestra el frontend según rol_global.
   if (r.rol_global === 'super_admin') {
-    return ['inicio','mi_servicio','anuncios','calendario','calendario_completo',
-            'asistencia','panel_pastor','musicos','servicio_gestion',
-            'cuidado_pastoral','ninos','tesoreria','admin','panel_obispo','reportes'];
+    return ['inicio'];
   }
   // Obispo: SOLO observa. Su centro es el Panel del Obispo (informe por iglesia).
   if (r.rol_global === 'obispo') {

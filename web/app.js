@@ -211,6 +211,9 @@ function esEncargadoDe(grupoId){
 }
 function tieneModulo(k){
   if(k==='superadmin') return !!(ME.persona && ME.persona.rol_global==='super_admin');
+  // Super-admin = rol administrativo (crear/editar/borrar iglesias). No ve el
+  // Panel del Obispo ni los módulos de miembro; solo su panel + inicio + ajustes.
+  if(ME.persona && ME.persona.rol_global==='super_admin') return k==='inicio'||k==='ajustes';
   if(k==='inicio') return true;
   // Biblia/Devocional y Notas del sermón: disponibles para toda la iglesia (Fase 4)
   if(k==='predica'||k==='ajustes'||k==='mensajes'||k==='directorio') return true;
