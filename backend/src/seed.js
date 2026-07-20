@@ -188,12 +188,20 @@ db.prepare('INSERT INTO conversacion_miembro (conversacion_id, persona_id, rol) 
 db.prepare("INSERT INTO mensaje (conversacion_id, persona_id, texto) VALUES (?,?, 'Hola Maria, ¿vienes el sabado?')").run(cvDemo, abel);
 db.prepare("INSERT INTO mensaje (conversacion_id, persona_id, texto) VALUES (?,?, '¡Si! Ahi estare 🙌')").run(cvDemo, maria);
 
+// 18) Onboarding: Super-admin (rol_global='super_admin') — entra a /api/superadmin
+//     para crear nuevas iglesias + su pastor (con contrasena temporal).
+//     NO es el obispo: el obispo es solo-lectura sobre iglesias existentes.
+db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global) VALUES (?,?,?,?, 'super_admin')")
+  .run(iglesiaId, 'superadmin', 'Super Administrador', hashPassword('1234'));
+
 console.log('\n[seed] Datos de prueba creados:');
 console.log('  Iglesia: Monte Sion  (codigo: MONTESION)');
 console.log('  Usuarios (contrasena = 1234):');
-console.log('    - pastor   (Pastor, ve todo)');
-console.log('    - abel     (Lider de Jovenes)');
-console.log('    - joaquin  (Lider de Musica + miembro de Jovenes)');
-console.log('    - maria    (Feligresa, solo miembro de Jovenes)');
-console.log('    - raquel   (Tesorera)');
-console.log('    - marta    (Maestra de Escuela Dominical)\n');
+console.log('    - pastor      (Pastor, ve todo)');
+console.log('    - abel        (Lider de Jovenes)');
+console.log('    - joaquin     (Lider de Musica + miembro de Jovenes)');
+console.log('    - maria       (Feligresa, solo miembro de Jovenes)');
+console.log('    - raquel      (Tesorera)');
+console.log('    - marta       (Maestra de Escuela Dominical)');
+console.log('    - obispo      (Obispo Regional, ve TODAS las iglesias, solo lectura)');
+console.log('    - superadmin  (Super-admin: crea iglesias + pastores en /api/superadmin)\n');
