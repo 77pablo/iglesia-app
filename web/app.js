@@ -2434,6 +2434,19 @@ async function guardarEmailCuenta(){
     ME.persona.email=r.email; toast('✅ Correo guardado'); }
   catch(e){ toast(e.message); }
 }
+async function cargarTelefonoCuenta(){
+  try{ const p=await api('/directorio/perfil');
+    const t=$('cta-tel'); if(t) t.value=p.telefono||'';
+    const m=$('cta-tel-mostrar'); if(m) m.checked=!!p.mostrar_telefono;
+  }catch{ /* si falla, el campo queda vacio */ }
+}
+async function guardarTelefonoCuenta(){
+  const telefono=$('cta-tel').value.trim();
+  const mostrar_telefono=$('cta-tel-mostrar').checked?1:0;
+  try{ await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify({telefono,mostrar_telefono})});
+    if(ME.persona) ME.persona.telefono=telefono; toast('✅ Teléfono guardado'); }
+  catch(e){ toast(e.message); }
+}
 async function cambiarPassCuenta(){
   const actual=$('cta-actual').value, nueva=$('cta-nueva').value;
   if(nueva.length<4){ toast('La nueva contraseña debe tener al menos 4 caracteres'); return; }
@@ -2520,6 +2533,14 @@ function vistaAjustes(){
       </div>
       <p class="muted small" style="margin:6px 0 0">Sirve para recuperar tu contraseña si la olvidas.</p>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>
+      <label>Teléfono</label>
+      <div class="row" style="gap:8px">
+        <input id="cta-tel" type="tel" placeholder="Tu teléfono"/>
+        <button class="btn small-btn" onclick="guardarTelefonoCuenta()">Guardar</button>
+      </div>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="cta-tel-mostrar"/> Mostrar mi teléfono en el directorio</label>
+      <p class="muted small" style="margin:4px 0 0">Por defecto tu teléfono está <b>oculto</b>; actívalo si quieres que aparezca en tu tarjeta del directorio.</p>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>
       <label>Cambiar contraseña</label>
       <input id="cta-actual" type="password" placeholder="Contraseña actual" style="margin-bottom:8px"/>
       <div class="row" style="gap:8px">
@@ -2536,6 +2557,7 @@ function vistaAjustes(){
       <a href="/legal/consentimientos.html" target="_blank" rel="noopener">Consentimientos</a>
     </p>`;
   renderPushAjuste();
+  cargarTelefonoCuenta();
 }
 
 // ============================================================
