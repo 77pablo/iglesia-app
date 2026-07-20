@@ -44,6 +44,11 @@ import superadminRouter from './superadmin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// Render (y la mayoría de PaaS) sirve la app detrás de un proxy inverso. Sin
+// esto, req.ip sería la IP del proxy para TODOS los usuarios y el rate-limit se
+// aplicaría de forma colectiva. Confiamos en 1 salto de proxy para leer la IP
+// real del cliente desde X-Forwarded-For.
+app.set('trust proxy', 1);
 // CORS: en produccion limitar a los origenes permitidos via CORS_ORIGIN
 // (lista separada por comas). Si no se define, se permite cualquier origen (dev).
 const corsOrigin = process.env.CORS_ORIGIN
@@ -296,22 +301,41 @@ if (process.env.SEED_ON_EMPTY === '1') {
   } catch (e) { console.error('[seed] no se pudo auto-sembrar:', e.message); }
 }
 
-// Asegurar que exista un super-admin en CADA arranque (idempotente). Necesario
-// porque la BD persistente (Litestream/R2) fue sembrada antes de que existiera
-// el super_admin en el seed, y SEED_ON_EMPTY no re-siembra una BD no vacía.
+// Asegurar el super-admin en CADA arranque (idempotente), SIN credenciales fijas.
+// La contraseña se toma SIEMPRE de SUPERADMIN_PASSWORD (secreta, definida por el
+// dueño en Render). Nunca se usa un valor hardcodeado como "1234".
+//  - Si ya existe un super_admin y hay SUPERADMIN_PASSWORD: se ROTA su clave
+//    (rota la antigua "1234" a la fuerte del dueño; idempotente).
+//  - Si ya existe pero NO hay SUPERADMIN_PASSWORD: se deja como está (advierte).
+//  - Si NO existe y hay SUPERADMIN_PASSWORD: se crea con esa clave.
+//  - Si NO existe y NO hay SUPERADMIN_PASSWORD: NO se crea ninguna cuenta (advierte).
 try {
-  const hay = db.prepare("SELECT 1 FROM persona WHERE rol_global = 'super_admin' AND activo = 1 LIMIT 1").get();
-  if (!hay) {
-    const ig = db.prepare('SELECT id FROM iglesia ORDER BY id LIMIT 1').get();
-    if (ig) {
-      const yaUsuario = db.prepare("SELECT id FROM persona WHERE iglesia_id = ? AND usuario = 'superadmin'").get(ig.id);
-      if (yaUsuario) {
-        db.prepare("UPDATE persona SET rol_global = 'super_admin', activo = 1 WHERE id = ?").run(yaUsuario.id);
+  const envPass = process.env.SUPERADMIN_PASSWORD;
+  const existente = db.prepare("SELECT id FROM persona WHERE rol_global = 'super_admin' AND activo = 1 ORDER BY id LIMIT 1").get();
+  if (existente) {
+    if (envPass) {
+      db.prepare('UPDATE persona SET password_hash = ? WHERE id = ?').run(hashPassword(envPass), existente.id);
+      console.log('[startup] super_admin: contraseña rotada desde SUPERADMIN_PASSWORD.');
+    } else {
+      console.warn('[startup] super_admin existe pero SUPERADMIN_PASSWORD no está definida: conserva su contraseña anterior. Define SUPERADMIN_PASSWORD para rotarla.');
+    }
+  } else {
+    if (envPass) {
+      const ig = db.prepare('SELECT id FROM iglesia ORDER BY id LIMIT 1').get();
+      if (ig) {
+        const yaUsuario = db.prepare("SELECT id FROM persona WHERE iglesia_id = ? AND usuario = 'superadmin'").get(ig.id);
+        if (yaUsuario) {
+          db.prepare("UPDATE persona SET rol_global = 'super_admin', activo = 1, password_hash = ? WHERE id = ?").run(hashPassword(envPass), yaUsuario.id);
+        } else {
+          db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, es_pastor, activo) VALUES (?, 'superadmin', 'Super Admin', ?, 'super_admin', 0, 1)")
+            .run(ig.id, hashPassword(envPass));
+        }
+        console.log('[startup] super_admin asegurado (usuario: superadmin) con SUPERADMIN_PASSWORD.');
       } else {
-        db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, es_pastor, activo) VALUES (?, 'superadmin', 'Super Admin', ?, 'super_admin', 0, 1)")
-          .run(ig.id, hashPassword('1234'));
+        console.warn('[startup] No hay ninguna iglesia todavía: no se pudo crear el super_admin. Se creará cuando exista al menos una iglesia.');
       }
-      console.log('[startup] super_admin asegurado (usuario: superadmin) — CAMBIA su contraseña 1234');
+    } else {
+      console.warn('[startup] No se creó super_admin: define SUPERADMIN_PASSWORD (contraseña secreta del dueño) para habilitarlo.');
     }
   }
 } catch (e) { console.error('[startup] no se pudo asegurar super_admin:', e.message); }
