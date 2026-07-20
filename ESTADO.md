@@ -1,7 +1,26 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 26 de junio de 2026*
+*Última actualización: 20 de julio de 2026*
 
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
+
+---
+
+## 🆕 FASE 6 (20 jul 2026): Mensajería interna (chat) — PROBADO
+
+- Chat **1:1**, **por grupo** (auto-provisionado) y **a medida**; tiempo real por **SSE**
+  (`sse.js` hub en memoria + `GET /api/mensajes/stream?token=`), adjuntos (reusa `/api/upload`),
+  **leído/no-leídos** (por `ultimo_leido_mensaje_id`), **"escribiendo…"** y **moderación del pastor**
+  (soft-delete en grupo/custom, nunca 1:1).
+- Backend nuevo `mensajes.js` (`/api/mensajes`), tablas `conversacion`, `conversacion_miembro`,
+  `mensaje`. Permisos en `auth.js` (`puedeIniciarChatCon`, `verificarToken`). Los mensajes **no**
+  llenan la campana: push (offline) + badge de no-leídos.
+- Push: `push.js` (`enviarPush`) incluye `url` (`/#mensajes/<id>`) en el payload; `web/sw.js` la
+  guarda en `data.url` al mostrar la notificación y al tocarla navega (`client.navigate`) una
+  pestaña abierta a esa conversación (o abre una nueva si no hay ninguna).
+- Frontend: vista **💬 Mensajes** con `EventSource`.
+- Seed: conversación demo 1:1 `abel` ↔ `maria` con 2 mensajes (`backend/src/seed.js`).
+- **Pruebas automatizadas** (nuevas): `npm test` en `backend/` — hub SSE, permisos y API
+  (1:1, canal de grupo, no-leídos, leído, contactos, grupo a medida, moderación, entrega SSE en vivo).
 
 ---
 
