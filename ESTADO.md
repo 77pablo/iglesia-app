@@ -39,6 +39,20 @@ Sidebar verde azulado oscuro (`#113438`), fondo crema (`#f4f3f0`), hero degradad
 
 ---
 
+## 🆕 FASE 7 (20 jul 2026): Directorio de miembros + cumpleaños — EN CONSTRUCCIÓN
+
+Nuevo módulo **Directorio** para que la congregación se conozca y se contacte entre sí, cuidando la privacidad de cada persona.
+
+- **Perfiles del directorio:** cada miembro tiene una ficha con **foto**, nombre, grupo(s) a los que pertenece y datos de contacto (teléfono, correo). La foto reutiliza el mecanismo de subida existente (`/api/upload`).
+- **Contacto oculto por defecto, sin excepciones:** el teléfono y el correo de cada persona aparecen **ocultos** en el directorio hasta que **la propia persona** decide mostrarlos. No hay atajo para pastor ni líderes: **cada quien activa su propia visibilidad**, igual que cualquier feligrés — coherente con el principio ya aplicado en otros módulos ("el pastor ve, pero no administra lo ajeno").
+- **Cumpleaños del mes:** el directorio muestra quiénes cumplen años en el mes actual (ordenados por día), tomando el campo `persona.cumple` que ya existe en la base de datos.
+- **Aviso automático de cumpleaños:** el día del cumpleaños de alguien, se notifica a **toda la iglesia** (reutiliza el mecanismo de segmentación `{tipo:'todos'}` de `notificaciones.js`, Fase 4), para que la congregación lo salude.
+- **Columnas nuevas en `persona`** (pensadas como `ALTER TABLE` idempotente en `db.js`, igual que en fases anteriores): `foto_url` (ruta de la foto de perfil), `mostrar_telefono` y `mostrar_email` (booleanos, `0` por defecto = ocultos).
+- **Endpoints previstos:** `GET /api/directorio` (listado con los campos de contacto según la visibilidad que cada persona haya activado, más el bloque de cumpleaños del mes), y una vía para que cada persona actualice su propia foto y sus preferencias `mostrar_telefono`/`mostrar_email` (en `cuenta.js`, junto a "cambiar contraseña").
+- **Nota de diseño:** por tratarse de datos de contacto personal, conviene revisar este módulo junto con la Política de Privacidad y los Consentimientos (ver `docs/LEGAL.md`) — en particular, si la foto de perfil y la fecha de cumpleaños requieren su propio consentimiento específico o quedan cubiertas por el consentimiento general de tratamiento de datos.
+
+---
+
 ## 🆕 FASE 4 (26 jun 2026): 4 funcionalidades nuevas — IMPLEMENTADAS Y PROBADAS
 
 Todo respeta el aislamiento multi-iglesia (`iglesia_id`) y los permisos por grupo.
