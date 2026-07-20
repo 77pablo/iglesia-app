@@ -321,19 +321,20 @@ try {
     }
   } else {
     if (envPass) {
-      const ig = db.prepare('SELECT id FROM iglesia ORDER BY id LIMIT 1').get();
-      if (ig) {
-        const yaUsuario = db.prepare("SELECT id FROM persona WHERE iglesia_id = ? AND usuario = 'superadmin'").get(ig.id);
-        if (yaUsuario) {
-          db.prepare("UPDATE persona SET rol_global = 'super_admin', activo = 1, password_hash = ? WHERE id = ?").run(hashPassword(envPass), yaUsuario.id);
-        } else {
-          db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, es_pastor, activo) VALUES (?, 'superadmin', 'Super Admin', ?, 'super_admin', 0, 1)")
-            .run(ig.id, hashPassword(envPass));
-        }
-        console.log('[startup] super_admin asegurado (usuario: superadmin) con SUPERADMIN_PASSWORD.');
+      // El super-admin es una cuenta de SISTEMA: no pertenece a ninguna iglesia
+      // (iglesia_id = NULL). Por eso se puede crear aunque no exista todavía
+      // ninguna iglesia — justo el escenario del lanzamiento real, donde el
+      // super-admin entra (sin iglesia) para crear la primera. persona.iglesia_id
+      // es nullable en el esquema (db.js) y el login por usuario no filtra por
+      // iglesia, así que esto es seguro.
+      const yaUsuario = db.prepare("SELECT id FROM persona WHERE iglesia_id IS NULL AND usuario = 'superadmin'").get();
+      if (yaUsuario) {
+        db.prepare("UPDATE persona SET rol_global = 'super_admin', activo = 1, password_hash = ? WHERE id = ?").run(hashPassword(envPass), yaUsuario.id);
       } else {
-        console.warn('[startup] No hay ninguna iglesia todavía: no se pudo crear el super_admin. Se creará cuando exista al menos una iglesia.');
+        db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, es_pastor, activo) VALUES (NULL, 'superadmin', 'Super Admin', ?, 'super_admin', 0, 1)")
+          .run(hashPassword(envPass));
       }
+      console.log('[startup] super_admin de sistema asegurado (usuario: superadmin) con SUPERADMIN_PASSWORD.');
     } else {
       console.warn('[startup] No se creó super_admin: define SUPERADMIN_PASSWORD (contraseña secreta del dueño) para habilitarlo.');
     }
