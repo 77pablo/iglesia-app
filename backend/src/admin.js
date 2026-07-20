@@ -7,15 +7,26 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware, esPastor, esObispo, hashPassword, auditar } from './auth.js';
+import { authMiddleware, esPastor, hashPassword, auditar } from './auth.js';
 import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
 
-// Solo el pastor (o super-admin) entra a Administracion.
+// ¿Es super-admin? (NO el obispo: el obispo es SOLO LECTURA en todo el sistema,
+// ver auth.js modulosVisibles(), que excluye 'admin' del rol obispo. Se comprueba
+// aqui en vez de usar esObispo() de auth.js porque esa funcion agrupa obispo +
+// super_admin, y eso es justo lo que este gate NO debe hacer.)
+function esSuperAdmin(personaId) {
+  const p = db.prepare('SELECT rol_global FROM persona WHERE id = ?').get(personaId);
+  return !!(p && p.rol_global === 'super_admin');
+}
+
+// Solo el pastor o el super-admin entran a Administracion. El obispo NUNCA
+// (aunque comparta jerarquia de "solo lectura total" con el super-admin en
+// otros modulos, en Administracion no debe poder crear usuarios ni roles).
 r.use((req, res, next) => {
-  if (esPastor(req.user.persona_id) || esObispo(req.user.persona_id)) return next();
+  if (esPastor(req.user.persona_id) || esSuperAdmin(req.user.persona_id)) return next();
   return res.status(403).json({ error: 'Solo el pastor puede administrar usuarios y roles.' });
 });
 

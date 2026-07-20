@@ -69,7 +69,19 @@ r.post('/evento/:id', validar(guardarAsistenciaSchema), (req, res) => {
     : (esPastor(persona_id) || ev.creado_por === persona_id);
   if (!puede) return res.status(403).json({ error: 'Solo el encargado del grupo puede registrar la asistencia (el pastor solo puede verla).' });
 
-  const ids = Array.isArray(req.body.presentes) ? req.body.presentes : [];
+  const idsRecibidos = Array.isArray(req.body.presentes) ? req.body.presentes : [];
+  // No confiar en los ids tal cual: deben pertenecer al grupo del evento
+  // (o, si el evento no tiene grupo, al menos a la misma iglesia). Sin este
+  // filtro se puede marcar como "presente" a una persona ajena al grupo o
+  // incluso de otra iglesia (ver auditoria backend.md #7).
+  const validos = new Set(
+    (ev.grupo_id
+      ? db.prepare('SELECT persona_id AS id FROM pertenencia WHERE grupo_id = ?').all(ev.grupo_id)
+      : db.prepare('SELECT id FROM persona WHERE iglesia_id = ?').all(iglesia_id)
+    ).map(x => x.id)
+  );
+  const ids = idsRecibidos.filter(pid => validos.has(pid));
+
   db.prepare('DELETE FROM asistencia WHERE evento_id = ?').run(ev.id);
   const stmt = db.prepare("INSERT INTO asistencia (evento_id, persona_id, metodo) VALUES (?,?, 'lista')");
   for (const pid of ids) stmt.run(ev.id, pid);
