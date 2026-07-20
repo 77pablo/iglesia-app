@@ -2618,20 +2618,99 @@ async function vistaSuperadmin(){
     </div>`;
   saCargarLista();
 }
+let SA_IGLESIAS=[]; // cache de la última lista cargada (para abrir el modal de editar sin otro fetch)
 async function saCargarLista(){
   const z=$('sa-lista'); if(!z) return;
   try{
     const lista=await api('/superadmin/iglesias');
+    SA_IGLESIAS=lista||[];
     z.className='';
     z.innerHTML = (lista&&lista.length) ? lista.map(ig=>{
       const codigo = ig.codigo_unico||ig.codigo||'';
-      return `<div class="item-card flex" style="margin-top:8px">
-        <div style="flex:1"><b>${escHtml(ig.nombre)}</b>
-          <div class="muted small">Código: <code>${escHtml(codigo)}</code></div></div>
-        <button class="btn ghost small-btn" onclick="saCopiar('${escHtml(codigo)}')">📋 Copiar</button>
+      const activa = ig.activa!==0 && ig.activa!==false;
+      return `<div class="item-card" style="margin-top:8px">
+        <div class="flex">
+          <div style="flex:1">
+            <b>${escHtml(ig.nombre)}</b>
+            <span class="estado-chip ${activa?'estado-aceptado':'estado-rechazado'}" style="margin-top:0;margin-left:6px;vertical-align:middle">${activa?'Activa':'Desactivada'}</span>
+            <div class="muted small">Código: <code>${escHtml(codigo)}</code> · Pastor: ${escHtml(ig.pastor||'—')} · ${ig.miembros||0} miembro(s)</div>
+          </div>
+          <button class="btn ghost small-btn" onclick="saCopiar('${escHtml(codigo)}')">📋 Copiar</button>
+        </div>
+        <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn ghost small-btn" onclick="saEditarIglesia(${ig.id})">✏️ Editar</button>
+          <button class="btn ghost small-btn" onclick="saToggleActiva(${ig.id})">${activa?'⛔ Desactivar':'✅ Reactivar'}</button>
+          <button class="btn ghost small-btn" onclick="saResetPastor(${ig.id})">🔑 Resetear contraseña del pastor</button>
+        </div>
       </div>`;
     }).join('') : '<p class="muted small">Aún no hay iglesias creadas.</p>';
   }catch(e){ z.className='error'; z.textContent='No se pudo cargar la lista: '+((e&&e.message)||'error'); }
+}
+// ---------- Editar iglesia (nombre / código) ----------
+function saEditarIglesia(id){
+  const ig=SA_IGLESIAS.find(i=>i.id===id); if(!ig) return;
+  const root=$('modal-root');
+  root.innerHTML=`<div class="modal-bg"><div class="modal">
+    <h3>✏️ Editar iglesia</h3>
+    <label>Nombre</label>
+    <input id="sa-ed-nombre" value="${escHtml(ig.nombre)}"/>
+    <label style="margin-top:8px">Código</label>
+    <input id="sa-ed-codigo" value="${escHtml(ig.codigo_unico||'')}"/>
+    <p id="sa-ed-error" class="error"></p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" id="sa-ed-ok">Guardar</button>
+    </div></div></div>`;
+  root.classList.add('show');
+  $('sa-ed-ok').onclick=async()=>{
+    const err=$('sa-ed-error'); err.textContent='';
+    const nombre=$('sa-ed-nombre').value.trim();
+    const codigo=$('sa-ed-codigo').value.trim();
+    if(!nombre){ err.textContent='El nombre no puede quedar vacío'; return; }
+    if(!codigo){ err.textContent='El código no puede quedar vacío'; return; }
+    try{
+      await api('/superadmin/iglesias/'+id,{method:'PATCH',body:JSON.stringify({nombre,codigo})});
+      cerrarModal(); toast('✅ Iglesia actualizada'); saCargarLista();
+    }catch(e){ err.textContent=(e&&e.message)||'No se pudo guardar'; }
+  };
+}
+// ---------- Desactivar / Reactivar ----------
+async function saToggleActiva(id){
+  const ig=SA_IGLESIAS.find(i=>i.id===id); if(!ig) return;
+  const activa = ig.activa!==0 && ig.activa!==false;
+  const hacer=async()=>{
+    try{
+      await api('/superadmin/iglesias/'+id,{method:'PATCH',body:JSON.stringify({activa:!activa})});
+      toast(activa?'⛔ Iglesia desactivada':'✅ Iglesia reactivada'); saCargarLista();
+    }catch(e){ toast((e&&e.message)||'No se pudo actualizar'); }
+  };
+  if(activa){
+    modalConfirm('Nadie de <b>'+escHtml(ig.nombre)+'</b> podrá entrar mientras esté desactivada. ¿Desactivar esta iglesia?', hacer);
+  } else {
+    hacer();
+  }
+}
+// ---------- Resetear contraseña del pastor ----------
+async function saResetPastor(id){
+  const ig=SA_IGLESIAS.find(i=>i.id===id); if(!ig) return;
+  modalConfirm('Se generará una nueva contraseña temporal para el pastor de <b>'+escHtml(ig.nombre)+'</b>. La contraseña anterior dejará de funcionar. ¿Continuar?', async()=>{
+    try{
+      const r=await api('/superadmin/iglesias/'+id+'/reset-pastor',{method:'POST'});
+      const pass=(r&&r.password_temporal)||'';
+      const root=$('modal-root');
+      root.innerHTML=`<div class="modal-bg"><div class="modal">
+        <h3>🔑 Contraseña temporal generada</h3>
+        <p class="muted small" style="margin:8px 0 12px">Pastor: <b>${escHtml((r.pastor&&r.pastor.nombre)||'')}</b> (usuario: ${escHtml((r.pastor&&r.pastor.usuario)||'')})</p>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
+          <p class="muted small" style="margin-bottom:6px">Entrégasela al pastor — deberá cambiarla al ingresar:</p>
+          <div id="sa-pass-temporal" style="font-size:1.6rem;font-weight:800;letter-spacing:.08em;color:var(--primary)">${escHtml(pass)}</div>
+          <button class="btn small-btn" style="margin-top:10px" onclick="saCopiar('${escHtml(pass)}')">📋 Copiar contraseña</button>
+        </div>
+        <div class="row" style="margin-top:14px"><button class="btn ghost" style="width:100%" onclick="cerrarModal()">Cerrar</button></div>
+      </div></div>`;
+      root.classList.add('show');
+    }catch(e){ toast((e&&e.message)||'No se pudo resetear la contraseña'); }
+  });
 }
 async function saCrearIglesia(){
   const err=$('sa-error'); err.textContent='';
@@ -2666,7 +2745,7 @@ async function saCrearIglesia(){
 function saCopiar(codigo){
   if(!codigo) return;
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(codigo).then(()=>toast('📋 Código copiado')).catch(()=>toast('No se pudo copiar. Cópialo manualmente: '+codigo));
+    navigator.clipboard.writeText(codigo).then(()=>toast('📋 Copiado')).catch(()=>toast('No se pudo copiar. Cópialo manualmente: '+codigo));
   } else { toast('Copia manual: '+codigo); }
 }
 
