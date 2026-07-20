@@ -2645,7 +2645,7 @@ async function saCrearIglesia(){
   if(!body.pastor_nombre||!body.pastor_usuario||!body.pastor_email){ err.textContent='Completa nombre, usuario y correo del pastor'; return; }
   if((body.pastor_password||'').length<4){ err.textContent='La contraseña temporal debe tener al menos 4 caracteres'; return; }
   try{
-    const r=await api('/superadmin/iglesia',{method:'POST',body:JSON.stringify(body)});
+    const r=await api('/superadmin/iglesias',{method:'POST',body:JSON.stringify(body)});
     toast('✅ Iglesia creada');
     const igCodigo=(r.iglesia&&(r.iglesia.codigo_unico||r.iglesia.codigo))||codigo||'';
     const pastorUsuario=(r.pastor&&r.pastor.usuario)||body.pastor_usuario;
