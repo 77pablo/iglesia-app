@@ -33,3 +33,17 @@ test('verificarToken devuelve payload valido y null si es basura', () => {
   assert.equal(verificarToken(t).persona_id, sem.lider.id);
   assert.equal(verificarToken('basura'), null);
 });
+
+test('un feligres siempre puede escribir al pastor de su iglesia', () => {
+  assert.equal(puedeIniciarChatCon(sem.ajeno.id, sem.pastor.id), true);
+});
+
+test('no se puede iniciar chat con alguien de OTRA iglesia (aislamiento)', () => {
+  const ig2 = db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRA')").run();
+  const p2 = db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, es_pastor, activo) VALUES (?,?,?,?,0,1)"
+  ).run(Number(ig2.lastInsertRowid), 'externo', 'Externo', 'x');
+  const externoId = Number(p2.lastInsertRowid);
+  assert.equal(puedeIniciarChatCon(sem.lider.id, externoId), false);
+  assert.equal(puedeIniciarChatCon(externoId, sem.pastor.id), false);
+});
