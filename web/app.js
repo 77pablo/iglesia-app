@@ -967,8 +967,48 @@ async function vistaPanel(){
           <div style="flex:1"><b>${escHtml(a.nombre)}</b><div class="muted small">No asistió a la última reunión</div></div>
           <span class="estado-chip estado-rechazado">Ausente</span></div>`).join('')+'</div>'
           : '<p class="muted small" style="margin-top:6px">Nadie ausente en la última reunión 🎉</p>'}
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="head-row"><h3 style="font-size:16px">🌐 Portal público</h3>
+          <button class="btn ghost small-btn" onclick="togglePortalInfo()">Editar información pública</button></div>
+        <p class="muted small" style="margin:-2px 0 12px">Página sin login con tus próximos eventos aprobados, tu última prédica y estos datos de contacto.</p>
+        <div class="row" style="gap:8px;margin-bottom:6px">
+          <input id="portal-link" readonly value="${location.origin}/publico.html?ig=${encodeURIComponent(ME.iglesia?ME.iglesia.codigo_unico:'')}" />
+          <button class="btn ghost small-btn" type="button" onclick="copiarLinkPortal()">Copiar</button>
+        </div>
+        <div id="portal-info-form" class="hidden" style="margin-top:12px"></div>
       </div>`;
   }catch(e){ $('pn').innerHTML='<p class="error">'+e.message+'</p>'; }
+}
+function copiarLinkPortal(){
+  const inp=$('portal-link'); inp.select();
+  navigator.clipboard?.writeText(inp.value).then(()=>toast('🔗 Enlace copiado')).catch(()=>{});
+}
+let _portalInfoAbierto=false;
+async function togglePortalInfo(){
+  const zona=$('portal-info-form');
+  _portalInfoAbierto=!_portalInfoAbierto;
+  if(!_portalInfoAbierto){ zona.classList.add('hidden'); zona.innerHTML=''; return; }
+  zona.classList.remove('hidden');
+  zona.innerHTML='<p class="muted small">Cargando…</p>';
+  try{
+    const info=await api('/publico/info');
+    zona.innerHTML=`
+      <label>Horarios de culto</label><textarea id="pi-horarios" placeholder="Ej: Domingos 10:00 y 18:00">${escHtml(info.horarios||'')}</textarea>
+      <label>Dirección</label><input id="pi-direccion" value="${escHtml(info.direccion||'')}" placeholder="Calle, número, ciudad" />
+      <label>Teléfono de contacto</label><input id="pi-telefono" value="${escHtml(info.telefono||'')}" placeholder="+56 9 ..." />
+      <label>Sobre nosotros</label><textarea id="pi-descripcion" placeholder="Una breve bienvenida para tus visitantes">${escHtml(info.descripcion||'')}</textarea>
+      <button class="btn" style="margin-top:12px" onclick="guardarPortalInfo()">Guardar</button>`;
+  }catch(e){ zona.innerHTML='<p class="error">'+e.message+'</p>'; }
+}
+async function guardarPortalInfo(){
+  try{
+    await api('/publico/info',{method:'PATCH',body:JSON.stringify({
+      horarios:$('pi-horarios').value, direccion:$('pi-direccion').value,
+      telefono:$('pi-telefono').value, descripcion:$('pi-descripcion').value
+    })});
+    toast('✅ Información pública guardada');
+  }catch(e){ toast(e.message); }
 }
 function filtrarPanel(grupoId){ _panelGrupo=grupoId||''; vistaPanel(); }
 async function exportarAsistencia(){
