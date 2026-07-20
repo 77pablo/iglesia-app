@@ -42,7 +42,8 @@ before(async () => {
       DB_PATH,
       SEED_ON_EMPTY: '1',
       NODE_ENV: '',   // desarrollo: permite el fallback de JWT_SECRET si hiciera falta
-      CORS_ORIGIN: ''
+      CORS_ORIGIN: '',
+      DISABLE_RATE_LIMIT: ''   // este test SI verifica el rate-limit real (429)
     },
     stdio: 'pipe'
   });

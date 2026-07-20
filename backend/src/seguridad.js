@@ -10,10 +10,17 @@ import rateLimit from 'express-rate-limit';
 
 const QUINCE_MIN = 15 * 60 * 1000;
 
+// Los limitadores se SALTAN solo cuando el arnes de pruebas lo pide
+// (DISABLE_RATE_LIMIT=1). En produccion NUNCA se define esa variable, asi que
+// siguen activos; y `seguridad.test.js` arranca su server SIN esa variable para
+// poder verificar el 429. Esto evita el flaky de tests que hacen >100 requests.
+const saltarEnTest = () => process.env.DISABLE_RATE_LIMIT === '1';
+
 // --- Limitador general: aplica a todo /api ---
 export const limiterGeneral = rateLimit({
   windowMs: QUINCE_MIN,
   limit: 100,
+  skip: saltarEnTest,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones desde esta IP. Intenta de nuevo en unos minutos.' },
@@ -27,6 +34,7 @@ export const limiterGeneral = rateLimit({
 export const limiterLogin = rateLimit({
   windowMs: QUINCE_MIN,
   limit: 5,
+  skip: saltarEnTest,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos de acceso. Espera unos minutos e intentalo de nuevo.' },
@@ -40,6 +48,7 @@ export const limiterLogin = rateLimit({
 export const limiterSensible = rateLimit({
   windowMs: QUINCE_MIN,
   limit: 10,
+  skip: saltarEnTest,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones a un recurso sensible. Intenta de nuevo en unos minutos.' },
@@ -64,7 +73,7 @@ export const limiterChat = rateLimit({
     console.warn(`[seguridad] rate-limit chat excedido: ip=${req.ip} ruta=${req.method} ${req.originalUrl}`);
     res.status(options.statusCode).json(options.message);
   },
-  skip: (req) => req.path === '/stream'
+  skip: (req) => saltarEnTest() || req.path === '/stream'
 });
 
 // --- Validacion de entrada con zod ---

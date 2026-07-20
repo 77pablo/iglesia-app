@@ -8,6 +8,10 @@ import fs from 'node:fs';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iglesia-test-'));
 process.env.DB_PATH = path.join(dir, 'test.db');
 process.env.JWT_SECRET = 'test-secret';
+// Saltar los limitadores de rate en los tests que hacen muchas peticiones
+// (evita 429 al azar). El test dedicado (seguridad.test.js) NO usa este arnes,
+// asi que sigue verificando el 429 real.
+process.env.DISABLE_RATE_LIMIT = '1';
 
 // Carga db.js (cacheado tras la 1a vez): devuelve el singleton apuntando a la BD temporal.
 export async function cargarDb() {
