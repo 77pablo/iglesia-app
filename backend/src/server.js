@@ -39,6 +39,8 @@ import adminRouter from './admin.js';
 import mensajesRouter from './mensajes.js';
 import directorioRouter, { generarCumpleanosHoy } from './directorio.js';
 import publicoRouter from './publico.js';
+import registroRouter from './registro.js';
+import superadminRouter from './superadmin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -180,6 +182,10 @@ app.post('/api/login', limiterLogin, validar(loginSchema), (req, res) => {
   }
 });
 
+// --- REGISTRO PUBLICO DE FELIGRES (Onboarding) --- SIN authMiddleware: el
+// codigo de la iglesia es el candado (ver registro.js para el detalle).
+app.use('/api/registro', registroRouter);
+
 // --- PERFIL + ROLES + MODULOS VISIBLES (1A.4) ---
 app.get('/api/me', authMiddleware, (req, res) => {
   const persona = db.prepare('SELECT * FROM persona WHERE id = ?').get(req.user.persona_id);
@@ -249,6 +255,9 @@ app.use('/api/grupo', grupoRouter);
 app.use('/api/directorio', directorioRouter);
 app.use('/api/predica', predicaRouter);
 app.use('/api/obispo', obispoRouter);
+// Onboarding (Fase de acceso): el super-admin crea iglesias + pastores.
+// Endpoint sensible: 10 req/IP cada 15 min (gate estricto rol_global='super_admin' dentro del router).
+app.use('/api/superadmin', limiterSensible, superadminRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/cuenta', cuentaRouter);
 // Endpoint sensible: 10 req/IP cada 15 min (crear/editar usuarios y roles).
