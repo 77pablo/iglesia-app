@@ -11,7 +11,7 @@ import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, hashPassword, verifyPassword, auditar } from './auth.js';
 import { enviarCorreo, mailActivo } from './mailer.js';
-import { validar } from './seguridad.js';
+import { validar, limiterLogin } from './seguridad.js';
 
 const r = Router();
 
@@ -40,7 +40,12 @@ const passwordSchema = z.object({
 
 // Paso 1: el usuario pide recuperar -> generamos codigo y lo enviamos al correo.
 // Responde SIEMPRE ok (no revela si el correo existe o no).
-r.post('/recuperar', validar(recuperarSchema), async (req, res) => {
+// Rate limit: son rutas PUBLICAS (sin auth) -> superficie clasica de abuso
+// (enumerar correos registrados, fuerza bruta del codigo de 6 digitos).
+// Se reusa limiterLogin (5 req/IP/15min): es el mismo perfil de riesgo que el
+// login (credenciales), y 5 intentos/15min es razonable para pedir un codigo
+// o para probarlo, sin estorbar a un usuario real que se equivoca una vez.
+r.post('/recuperar', limiterLogin, validar(recuperarSchema), async (req, res) => {
   const email = req.body.email.toLowerCase();
   if (!mailActivo) return res.status(503).json({ error: 'El servidor aún no tiene configurado el envío de correo.' });
 
@@ -70,7 +75,7 @@ r.post('/recuperar', validar(recuperarSchema), async (req, res) => {
 });
 
 // Paso 2: confirma el codigo + nueva contrasena.
-r.post('/recuperar/confirmar', validar(confirmarSchema), (req, res) => {
+r.post('/recuperar/confirmar', limiterLogin, validar(confirmarSchema), (req, res) => {
   const { codigo: code, nueva } = req.body;
   const mail = req.body.email.toLowerCase();
 
