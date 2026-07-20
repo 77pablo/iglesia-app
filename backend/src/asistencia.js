@@ -3,8 +3,10 @@
 //  El facial es el metodo final (Fase 3); esto es el puente.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin, esEncargadoGrupo, esPastor, auditar } from './auth.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -55,7 +57,10 @@ r.get('/evento/:id', (req, res) => {
 });
 
 // --- Guardar asistencia (lista de presentes) ---
-r.post('/evento/:id', (req, res) => {
+const guardarAsistenciaSchema = z.object({
+  presentes: z.array(z.coerce.number().int().positive()).optional()
+});
+r.post('/evento/:id', validar(guardarAsistenciaSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
@@ -64,7 +69,7 @@ r.post('/evento/:id', (req, res) => {
     : (esPastor(persona_id) || ev.creado_por === persona_id);
   if (!puede) return res.status(403).json({ error: 'Solo el encargado del grupo puede registrar la asistencia (el pastor solo puede verla).' });
 
-  const ids = Array.isArray(req.body?.presentes) ? req.body.presentes : [];
+  const ids = Array.isArray(req.body.presentes) ? req.body.presentes : [];
   db.prepare('DELETE FROM asistencia WHERE evento_id = ?').run(ev.id);
   const stmt = db.prepare("INSERT INTO asistencia (evento_id, persona_id, metodo) VALUES (?,?, 'lista')");
   for (const pid of ids) stmt.run(ev.id, pid);
