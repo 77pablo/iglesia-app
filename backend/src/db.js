@@ -486,6 +486,26 @@ CREATE TABLE IF NOT EXISTS mensaje (
   borrado         INTEGER NOT NULL DEFAULT 0,
   creado_en       TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- PORTAL PUBLICO (sin login): info editable por el pastor (horarios, direccion,
+--  telefono, descripcion) mostrada en /publico.html?ig=CODIGO. Una fila por iglesia.
+CREATE TABLE IF NOT EXISTS iglesia_info (
+  iglesia_id  INTEGER NOT NULL UNIQUE REFERENCES iglesia(id),
+  horarios    TEXT,
+  direccion   TEXT,
+  telefono    TEXT,
+  descripcion TEXT
+);
+
+-- CONTACTO PUBLICO (Portal): mensajes de visitantes desde el formulario
+--  "planifica tu visita", sin necesidad de cuenta. Genera notificacion al pastor.
+CREATE TABLE IF NOT EXISTS contacto_publico (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  iglesia_id  INTEGER NOT NULL REFERENCES iglesia(id),
+  nombre      TEXT NOT NULL,
+  mensaje     TEXT,
+  creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `);
 
 // --- Migracion aditiva: columnas nuevas en tablas existentes ---
@@ -558,6 +578,8 @@ db.exec(`
   -- persona_id) ya crea un indice implicito que cubre el unico acceso
   -- (INSERT OR IGNORE de dedupe en recordatorios.js); no se hacen SELECT
   -- adicionales por iglesia_id o persona_id solos.
+  -- contacto_publico(iglesia_id): el pastor revisa los mensajes de su iglesia.
+  CREATE INDEX IF NOT EXISTS idx_contactopublico_iglesia ON contacto_publico(iglesia_id);
 `);
 
 // --- Auto-reparación: el himnario (material permanente) SIEMPRE disponible ---

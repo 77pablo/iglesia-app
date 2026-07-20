@@ -37,6 +37,7 @@ import cuentaRouter from './cuenta.js';
 import adminRouter from './admin.js';
 import mensajesRouter from './mensajes.js';
 import directorioRouter, { generarCumpleanosHoy } from './directorio.js';
+import publicoRouter from './publico.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -251,6 +252,10 @@ app.use('/api/cuenta', cuentaRouter);
 app.use('/api/admin', limiterSensible, adminRouter);
 // Chat: limitador propio holgado (limiterChat), fuera del limite general.
 app.use('/api/mensajes', limiterChat, mensajesRouter);
+// --- Portal publico (Fase 7): pagina SIN login por iglesia (/publico.html?ig=CODIGO).
+// El router mezcla rutas publicas (sin authMiddleware) con /info (autenticado,
+// solo pastor); ver backend/src/publico.js para el detalle de aislamiento.
+app.use('/api/publico', publicoRouter);
 
 // Lista de personas de la iglesia (para asignar servicios)
 app.get('/api/personas', authMiddleware, (req, res) => {
