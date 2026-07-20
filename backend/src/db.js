@@ -452,6 +452,35 @@ CREATE TABLE IF NOT EXISTS material_musica (
   creado_por  INTEGER REFERENCES persona(id),
   creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- MENSAJERIA (Fase 6): chat 1:1 / por grupo / a medida
+CREATE TABLE IF NOT EXISTS conversacion (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  iglesia_id  INTEGER NOT NULL REFERENCES iglesia(id),
+  tipo        TEXT NOT NULL,                 -- 'directo' | 'grupo' | 'custom'
+  grupo_id    INTEGER REFERENCES grupo(id),  -- solo tipo 'grupo'
+  titulo      TEXT,                          -- solo tipo 'custom'
+  creado_por  INTEGER REFERENCES persona(id),
+  creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS conversacion_miembro (
+  conversacion_id         INTEGER NOT NULL REFERENCES conversacion(id) ON DELETE CASCADE,
+  persona_id              INTEGER NOT NULL REFERENCES persona(id),
+  rol                     TEXT NOT NULL DEFAULT 'miembro',  -- 'admin' | 'miembro'
+  ultimo_leido_mensaje_id INTEGER,
+  silenciado              INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(conversacion_id, persona_id)
+);
+CREATE TABLE IF NOT EXISTS mensaje (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversacion_id INTEGER NOT NULL REFERENCES conversacion(id) ON DELETE CASCADE,
+  persona_id      INTEGER NOT NULL REFERENCES persona(id),
+  texto           TEXT NOT NULL DEFAULT '',
+  adjunto_url     TEXT,
+  adjunto_tipo    TEXT,
+  borrado         INTEGER NOT NULL DEFAULT 0,
+  creado_en       TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `);
 
 // --- Migracion aditiva: columnas nuevas en tablas existentes ---
@@ -499,6 +528,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_recursogrupo_grupo   ON recurso_grupo(grupo_id);
   CREATE INDEX IF NOT EXISTS idx_tareagrupo_persona   ON tarea_grupo(persona_id);
   CREATE INDEX IF NOT EXISTS idx_pushsub_persona      ON push_sub(persona_id);
+  CREATE INDEX IF NOT EXISTS idx_conv_iglesia       ON conversacion(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_convmiembro_persona ON conversacion_miembro(persona_id);
+  CREATE INDEX IF NOT EXISTS idx_mensaje_conv        ON mensaje(conversacion_id, id);
 `);
 
 // --- Auto-reparación: el himnario (material permanente) SIEMPRE disponible ---
