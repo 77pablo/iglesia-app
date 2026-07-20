@@ -7,14 +7,32 @@
 // ============================================================
 import { Router } from 'express';
 import crypto from 'node:crypto';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, hashPassword, verifyPassword, auditar } from './auth.js';
 import { enviarCorreo, mailActivo } from './mailer.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 
 const emailValido = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim());
 const CODIGO_MIN_PASS = 4;   // largo minimo de contrasena (seed usa "1234")
+
+const recuperarSchema = z.object({
+  email: z.string().trim().min(1).refine(emailValido, 'correo invalido')
+});
+const confirmarSchema = z.object({
+  email: z.string().trim().min(1).refine(emailValido, 'correo invalido'),
+  codigo: z.string().trim().regex(/^\d{6}$/, 'codigo invalido'),
+  nueva: z.string().min(CODIGO_MIN_PASS, `la nueva contraseña debe tener al menos ${CODIGO_MIN_PASS} caracteres`)
+});
+const emailSchema = z.object({
+  email: z.string().trim().refine(e => e === '' || emailValido(e), 'correo invalido').optional()
+});
+const passwordSchema = z.object({
+  actual: z.string().optional(),
+  nueva: z.string().min(CODIGO_MIN_PASS, `la nueva contraseña debe tener al menos ${CODIGO_MIN_PASS} caracteres`)
+});
 
 // ============================================================
 //  RUTAS PUBLICAS — recuperacion de contrasena
@@ -22,9 +40,8 @@ const CODIGO_MIN_PASS = 4;   // largo minimo de contrasena (seed usa "1234")
 
 // Paso 1: el usuario pide recuperar -> generamos codigo y lo enviamos al correo.
 // Responde SIEMPRE ok (no revela si el correo existe o no).
-r.post('/recuperar', async (req, res) => {
-  const email = String((req.body || {}).email || '').trim().toLowerCase();
-  if (!emailValido(email)) return res.status(400).json({ error: 'Correo inválido' });
+r.post('/recuperar', validar(recuperarSchema), async (req, res) => {
+  const email = req.body.email.toLowerCase();
   if (!mailActivo) return res.status(503).json({ error: 'El servidor aún no tiene configurado el envío de correo.' });
 
   const persona = db.prepare('SELECT id, nombre FROM persona WHERE lower(email) = ? AND activo = 1 ORDER BY id LIMIT 1').get(email);
@@ -53,13 +70,9 @@ r.post('/recuperar', async (req, res) => {
 });
 
 // Paso 2: confirma el codigo + nueva contrasena.
-r.post('/recuperar/confirmar', (req, res) => {
-  const { email, codigo, nueva } = req.body || {};
-  const mail = String(email || '').trim().toLowerCase();
-  const code = String(codigo || '').trim();
-  if (!emailValido(mail) || !/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Datos inválidos' });
-  if (!nueva || String(nueva).length < CODIGO_MIN_PASS)
-    return res.status(400).json({ error: `La nueva contraseña debe tener al menos ${CODIGO_MIN_PASS} caracteres` });
+r.post('/recuperar/confirmar', validar(confirmarSchema), (req, res) => {
+  const { codigo: code, nueva } = req.body;
+  const mail = req.body.email.toLowerCase();
 
   // Busca un codigo valido (no usado, no vencido) cuyo dueño tenga ese correo.
   const fila = db.prepare(
@@ -83,19 +96,16 @@ r.post('/recuperar/confirmar', (req, res) => {
 r.use(authMiddleware);
 
 // Cambiar mi correo.
-r.patch('/email', (req, res) => {
-  const email = String((req.body || {}).email || '').trim();
-  if (email && !emailValido(email)) return res.status(400).json({ error: 'Correo inválido' });
+r.patch('/email', validar(emailSchema), (req, res) => {
+  const email = (req.body.email || '').trim();
   db.prepare('UPDATE persona SET email = ? WHERE id = ?').run(email || null, req.user.persona_id);
   auditar(req.user.iglesia_id, req.user.persona_id, 'cambiar_email', 'cuenta');
   res.json({ ok: true, email: email || null });
 });
 
 // Cambiar mi contrasena (verificando la actual).
-r.patch('/password', (req, res) => {
-  const { actual, nueva } = req.body || {};
-  if (!nueva || String(nueva).length < CODIGO_MIN_PASS)
-    return res.status(400).json({ error: `La nueva contraseña debe tener al menos ${CODIGO_MIN_PASS} caracteres` });
+r.patch('/password', validar(passwordSchema), (req, res) => {
+  const { actual, nueva } = req.body;
   const p = db.prepare('SELECT password_hash FROM persona WHERE id = ?').get(req.user.persona_id);
   if (!p || !verifyPassword(String(actual || ''), p.password_hash))
     return res.status(403).json({ error: 'La contraseña actual no es correcta' });

@@ -7,11 +7,18 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import db from './db.js';
 
-// El secreto del JWT DEBE venir de una variable de entorno.
-// En produccion el arranque falla si no esta definido (no usar un secreto conocido).
+// Variables de entorno REQUERIDAS en produccion. Si falta alguna, la app
+// NO debe iniciar (evita secretos por defecto conocidos en produccion).
 // En desarrollo se permite un fallback solo para facilitar las pruebas locales.
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  throw new Error('Falta JWT_SECRET: define la variable de entorno antes de arrancar en producción.');
+const REQUERIDAS_PRODUCCION = ['JWT_SECRET'];
+if (process.env.NODE_ENV === 'production') {
+  const faltan = REQUERIDAS_PRODUCCION.filter(v => !process.env[v]);
+  if (faltan.length) {
+    throw new Error(
+      `[seguridad] Faltan variables de entorno requeridas en produccion: ${faltan.join(', ')}. ` +
+      'Definelas antes de arrancar (no se usan valores por defecto en produccion).'
+    );
+  }
 }
 const SECRET = process.env.JWT_SECRET || 'dev-solo-local-cambia-esto';
 

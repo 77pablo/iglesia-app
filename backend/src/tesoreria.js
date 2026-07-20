@@ -4,8 +4,10 @@
 //  registra lo recaudado de forma presencial.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esTesoreroOPastor, esTesoreroEstricto, esObispo, auditar } from './auth.js';
+import { validar, limiterSensible } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -43,12 +45,20 @@ r.get('/movimientos', (req, res) => {
   const hayMas = rows.length > LIMIT;
   res.json({ items: hayMas ? rows.slice(0, LIMIT) : rows, hayMas, offset });
 });
-r.post('/movimientos', soloTesorero, (req, res) => {
-  const { tipo, categoria, monto, descripcion, fecha, comprobante_url } = req.body || {};
-  if (!['ingreso', 'gasto'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido (debe ser ingreso o gasto)' });
-  const montoNum = Number(monto);
-  if (!Number.isFinite(montoNum) || montoNum <= 0)
-    return res.status(400).json({ error: 'El monto debe ser un número mayor que cero' });
+// Rutas que escriben dinero: ademas de zod, llevan el limitador sensible
+// (10 req/IP/15min) — ver nota de trade-off en server.js sobre por que
+// las lecturas de tesoreria NO llevan este limite.
+const movimientoSchema = z.object({
+  tipo: z.enum(['ingreso', 'gasto']),
+  categoria: z.string().trim().max(100).optional(),
+  monto: z.coerce.number().positive('el monto debe ser un numero mayor que cero'),
+  descripcion: z.string().trim().max(500).optional(),
+  fecha: z.string().trim().optional(),
+  comprobante_url: z.string().trim().max(500).optional()
+});
+r.post('/movimientos', soloTesorero, limiterSensible, validar(movimientoSchema), (req, res) => {
+  const { tipo, categoria, monto, descripcion, fecha, comprobante_url } = req.body;
+  const montoNum = monto;
   if (fecha)
     db.prepare('INSERT INTO movimiento (iglesia_id, tipo, categoria, monto, descripcion, fecha, creado_por, comprobante_url) VALUES (?,?,?,?,?,?,?,?)')
       .run(req.user.iglesia_id, tipo, categoria || null, montoNum, descripcion || null, fecha, req.user.persona_id, comprobante_url || null);
@@ -63,17 +73,22 @@ r.post('/movimientos', soloTesorero, (req, res) => {
 r.get('/campanias', (req, res) => {
   res.json(db.prepare('SELECT * FROM campania WHERE iglesia_id = ?').all(req.user.iglesia_id));
 });
-r.post('/campanias', soloTesorero, (req, res) => {
-  const { nombre, meta } = req.body || {};
-  if (!nombre) return res.status(400).json({ error: 'Falta el nombre' });
-  const metaNum = Number(meta);
+const campaniaSchema = z.object({
+  nombre: z.string().trim().min(1, 'falta el nombre'),
+  meta: z.coerce.number().optional()
+});
+r.post('/campanias', soloTesorero, limiterSensible, validar(campaniaSchema), (req, res) => {
+  const { nombre, meta } = req.body;
+  const metaNum = meta;
   db.prepare('INSERT INTO campania (iglesia_id, nombre, meta, recaudado) VALUES (?,?,?,0)')
     .run(req.user.iglesia_id, nombre, (Number.isFinite(metaNum) && metaNum > 0) ? metaNum : 0);
   res.json({ ok: true });
 });
-r.patch('/campanias/:id/aportar', soloTesorero, (req, res) => {
-  const monto = Number((req.body || {}).monto);
-  if (!Number.isFinite(monto) || monto <= 0) return res.status(400).json({ error: 'El aporte debe ser un número mayor que cero' });
+const aportarSchema = z.object({
+  monto: z.coerce.number().positive('el aporte debe ser un numero mayor que cero')
+});
+r.patch('/campanias/:id/aportar', soloTesorero, limiterSensible, validar(aportarSchema), (req, res) => {
+  const { monto } = req.body;
   const info = db.prepare('UPDATE campania SET recaudado = recaudado + ? WHERE id = ? AND iglesia_id = ?')
     .run(monto, req.params.id, req.user.iglesia_id);
   if (info.changes === 0) return res.status(404).json({ error: 'Campaña no encontrada' });
