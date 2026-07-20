@@ -4,11 +4,15 @@
 //  adjuntos, leido/no-leidos, "escribiendo...", moderacion del pastor.
 // ============================================================
 import { Router } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import db from './db.js';
 import { authMiddleware, esPastor, auditar, puedeIniciarChatCon, verificarToken } from './auth.js';
 import { enviarPush } from './push.js';
 import { emitir, estaConectada, registrar } from './sse.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const r = Router();
 
 // --- STREAM SSE (sin authMiddleware: valida el token por query param) ---
@@ -145,6 +149,12 @@ function provisionarCanalesDeGrupo(personaId, iglesiaId) {
       `INSERT OR IGNORE INTO conversacion_miembro (conversacion_id, persona_id, rol)
        SELECT ?, persona_id, 'miembro' FROM pertenencia WHERE grupo_id = ?`
     ).run(conv.id, g.id);
+    // podar miembros del canal que ya no pertenecen al grupo
+    db.prepare(
+      `DELETE FROM conversacion_miembro
+        WHERE conversacion_id = ?
+          AND persona_id NOT IN (SELECT persona_id FROM pertenencia WHERE grupo_id = ?)`
+    ).run(conv.id, g.id);
   }
 }
 
@@ -248,7 +258,7 @@ r.post('/custom', (req, res) => {
 // --- Moderacion: el pastor borra (soft) mensajes de grupo/custom (no 1:1) ---
 r.delete('/:mensajeId', (req, res) => {
   const msg = db.prepare(
-    `SELECT m.id, m.conversacion_id, c.tipo, c.iglesia_id
+    `SELECT m.id, m.conversacion_id, c.tipo, c.iglesia_id, m.adjunto_url
        FROM mensaje m JOIN conversacion c ON c.id = m.conversacion_id
       WHERE m.id = ?`
   ).get(req.params.mensajeId);
@@ -258,7 +268,14 @@ r.delete('/:mensajeId', (req, res) => {
     return res.status(403).json({ error: 'No se pueden moderar mensajes privados' });
   if (!esPastor(req.user.persona_id))
     return res.status(403).json({ error: 'Solo el pastor puede moderar' });
-  db.prepare('UPDATE mensaje SET borrado = 1, texto = ? WHERE id = ?').run('', msg.id);
+  db.prepare('UPDATE mensaje SET borrado = 1, texto = ?, adjunto_url = NULL, adjunto_tipo = NULL WHERE id = ?')
+    .run('', msg.id);
+  if (msg.adjunto_url && msg.adjunto_url.startsWith('/uploads/')) {
+    try {
+      const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
+      fs.unlinkSync(path.join(uploadsDir, path.basename(msg.adjunto_url)));
+    } catch { /* archivo ya no existe: se ignora */ }
+  }
   emitir(miembrosConv(msg.conversacion_id), 'mensaje', {
     conversacion_id: msg.conversacion_id, mensaje: { id: msg.id, borrado: 1 }
   });

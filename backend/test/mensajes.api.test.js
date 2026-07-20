@@ -191,3 +191,33 @@ test('SSE entrega en vivo un mensaje nuevo', async () => {
   ac.abort();
   assert.ok(encontrado, 'llego el evento SSE con el mensaje');
 });
+
+test('moderacion: la respuesta de la API no expone el adjunto de un mensaje borrado', async () => {
+  const canal = (await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json())
+    .find(c => c.tipo === 'grupo');
+  const gm = await (await fetch(base + `/api/mensajes/conversacion/${canal.id}`, {
+    method: 'POST', headers: H(SEM.miembro1),
+    body: JSON.stringify({ texto: 'mira esto', adjunto_url: '/uploads/secreto.pdf', adjunto_tipo: 'archivo' }) })).json();
+  let res = await fetch(base + `/api/mensajes/${gm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.pastor) });
+  assert.equal(res.status, 200);
+  const data = await (await fetch(base + `/api/mensajes/conversacion/${canal.id}`, { headers: H(SEM.miembro1) })).json();
+  const m = data.mensajes.find(x => x.id === gm.mensaje.id);
+  assert.equal(m.borrado, 1);
+  assert.ok(!m.adjunto_url, 'el adjunto no debe exponerse en un mensaje borrado');
+});
+
+test('canal de grupo: al salir del grupo se pierde el acceso al canal', async () => {
+  await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json();
+  const canal = (await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json())
+    .find(c => c.tipo === 'grupo');
+  let enCanal = db.prepare('SELECT 1 FROM conversacion_miembro WHERE conversacion_id = ? AND persona_id = ?')
+    .get(canal.id, SEM.miembro2.id);
+  assert.ok(enCanal, 'miembro2 empieza en el canal');
+  db.prepare('DELETE FROM pertenencia WHERE persona_id = ? AND grupo_id = ?').run(SEM.miembro2.id, SEM.grupoId);
+  await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json();
+  enCanal = db.prepare('SELECT 1 FROM conversacion_miembro WHERE conversacion_id = ? AND persona_id = ?')
+    .get(canal.id, SEM.miembro2.id);
+  assert.ok(!enCanal, 'miembro2 ya no es miembro del canal');
+  const lista2 = await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro2) })).json();
+  assert.equal(lista2.find(c => c.id === canal.id), undefined, 'miembro2 ya no ve el canal');
+});
