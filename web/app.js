@@ -170,7 +170,7 @@ async function confirmarRegistro(){
   if(!codigo){ m.textContent='Escribe el código de tu iglesia (te lo entrega tu iglesia)'; return; }
   if(!nombre){ m.textContent='Escribe tu nombre'; return; }
   if(!usuario){ m.textContent='Elige un usuario'; return; }
-  if(password.length<4){ m.textContent='La contraseña debe tener al menos 4 caracteres'; return; }
+  if(password.length<8){ m.textContent='La contraseña debe tener al menos 8 caracteres'; return; }
   const body={codigo,nombre,usuario,password};
   if(email) body.email=email;
   if(telefono) body.telefono=telefono;
@@ -199,7 +199,7 @@ async function confirmarCambioObligatorio(){
   const err=$('fp-error'); err.textContent='';
   const actual=$('fp-actual').value, nueva=$('fp-nueva').value, confirmar=$('fp-confirmar').value;
   if(!actual){ err.textContent='Escribe tu contraseña actual (la temporal)'; return; }
-  if(nueva.length<4){ err.textContent='La nueva contraseña debe tener al menos 4 caracteres'; return; }
+  if(nueva.length<8){ err.textContent='La nueva contraseña debe tener al menos 8 caracteres'; return; }
   if(nueva!==confirmar){ err.textContent='Las contraseñas no coinciden'; return; }
   try{
     await api('/cuenta/password',{method:'PATCH',body:JSON.stringify({actual,nueva})});
@@ -2535,7 +2535,7 @@ function adminFormUsuario(){
 async function adminCrearUsuario(){
   const body={nombre:$('au-nombre').value.trim(),usuario:$('au-usuario').value.trim(),password:$('au-pass').value,email:$('au-email').value.trim()};
   if(!body.nombre||!body.usuario){ $('au-err').textContent='Pon nombre y usuario'; return; }
-  if((body.password||'').length<4){ $('au-err').textContent='La contraseña debe tener al menos 4 caracteres'; return; }
+  if((body.password||'').length<8){ $('au-err').textContent='La contraseña debe tener al menos 8 caracteres'; return; }
   try{ await api('/admin/usuarios',{method:'POST',body:JSON.stringify(body)}); toast('✅ Usuario creado'); vistaAdmin(); }
   catch(e){ $('au-err').textContent=e.message; }
 }
@@ -2736,7 +2736,7 @@ async function saCrearIglesia(){
   if(codigo) body.codigo=codigo;
   if(!body.nombre_iglesia){ err.textContent='Escribe el nombre de la iglesia'; return; }
   if(!body.pastor_nombre||!body.pastor_usuario||!body.pastor_email){ err.textContent='Completa nombre, usuario y correo del pastor'; return; }
-  if((body.pastor_password||'').length<4){ err.textContent='La contraseña temporal debe tener al menos 4 caracteres'; return; }
+  if((body.pastor_password||'').length<8){ err.textContent='La contraseña temporal debe tener al menos 8 caracteres'; return; }
   try{
     const r=await api('/superadmin/iglesias',{method:'POST',body:JSON.stringify(body)});
     toast('✅ Iglesia creada');
@@ -2891,7 +2891,7 @@ async function guardarTelefonoCuenta(){
 }
 async function cambiarPassCuenta(){
   const actual=$('cta-actual').value, nueva=$('cta-nueva').value;
-  if(nueva.length<4){ toast('La nueva contraseña debe tener al menos 4 caracteres'); return; }
+  if(nueva.length<8){ toast('La nueva contraseña debe tener al menos 8 caracteres'); return; }
   try{ await api('/cuenta/password',{method:'PATCH',body:JSON.stringify({actual,nueva})});
     toast('🔒 Contraseña cambiada'); $('cta-actual').value=''; $('cta-nueva').value=''; }
   catch(e){ toast(e.message); }
@@ -2938,7 +2938,7 @@ async function recConfirmar(){
   const m=$('rec-msg'); m.className='error'; m.textContent='';
   const codigo=$('rec-codigo').value.trim(), nueva=$('rec-nueva').value;
   if(!/^\d{6}$/.test(codigo)){ m.textContent='El código son 6 dígitos'; return; }
-  if(nueva.length<4){ m.textContent='La nueva contraseña debe tener al menos 4 caracteres'; return; }
+  if(nueva.length<8){ m.textContent='La nueva contraseña debe tener al menos 8 caracteres'; return; }
   try{ await api('/cuenta/recuperar/confirmar',{method:'POST',body:JSON.stringify({email:window._recEmail,codigo,nueva})});
     cerrarRecuperar(); toast('🔒 Contraseña cambiada. Ya puedes iniciar sesión.');
   }catch(e){ m.textContent=e.message; }
