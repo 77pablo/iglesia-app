@@ -132,7 +132,10 @@ export function perfilPublico(persona) {
     nombre: persona.nombre,
     email: persona.email || null,
     es_pastor: !!persona.es_pastor,
-    rol_global: persona.rol_global
+    rol_global: persona.rol_global,
+    // Contrasena temporal (super-admin creo el pastor, o el pastor creo el
+    // usuario): el frontend debe forzar el cambio antes de dejar usar la app.
+    debe_cambiar_pass: !!persona.debe_cambiar_pass
   };
 }
 

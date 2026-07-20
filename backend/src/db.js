@@ -530,6 +530,10 @@ agregarColumna('grupo', 'drive_url', 'TEXT');
 agregarColumna('persona', 'foto_url', 'TEXT');
 agregarColumna('persona', 'mostrar_telefono', 'INTEGER NOT NULL DEFAULT 0');
 agregarColumna('persona', 'mostrar_email', 'INTEGER NOT NULL DEFAULT 0');
+// PERSONA: obliga a cambiar la contrasena en el primer ingreso (cuentas creadas
+// con contrasena temporal: por el super-admin al crear el pastor, o por el
+// pastor al crear un usuario). Se limpia al cambiar la contrasena con exito.
+agregarColumna('persona', 'debe_cambiar_pass', 'INTEGER NOT NULL DEFAULT 0');
 
 // --- Índices: aceleran los filtros más usados (por iglesia, persona, evento, grupo) ---
 // Sin esto, cada consulta hace un escaneo completo; se nota al crecer los datos.
