@@ -101,3 +101,35 @@ test('conversaciones: auto-provisiona canal de grupo y cuenta no-leidos', async 
   lista = await res.json();
   assert.equal(lista.find(c => c.id === canal.id), undefined);
 });
+
+test('leido, contactos y grupo a medida', async () => {
+  // 1:1 lider<->miembro1 con un mensaje del lider
+  let conv = await (await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
+  const m = await (await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'hey' }) })).json();
+
+  // miembro1 marca leido
+  let res = await fetch(base + `/api/mensajes/conversacion/${conv.id}/leido`, {
+    method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ mensaje_id: m.mensaje.id }) });
+  assert.equal(res.status, 200);
+  // ahora miembro1 no tiene no-leidos en esa conv
+  const lista = await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json();
+  assert.equal(lista.find(c => c.id === conv.id).no_leidos, 0);
+
+  // contactos del ajeno: no incluye a miembro1
+  const contactos = await (await fetch(base + '/api/mensajes/contactos', { headers: H(SEM.ajeno) })).json();
+  assert.equal(contactos.find(c => c.id === SEM.miembro1.id), undefined);
+
+  // grupo a medida creado por el lider con 2 participantes
+  res = await fetch(base + '/api/mensajes/custom', {
+    method: 'POST', headers: H(SEM.lider),
+    body: JSON.stringify({ titulo: 'Comision', participantes: [SEM.miembro1.id, SEM.miembro2.id] }) });
+  assert.equal(res.status, 200);
+  const custom = await res.json();
+  // los 3 lo ven en su lista
+  for (const p of [SEM.lider, SEM.miembro1, SEM.miembro2]) {
+    const l = await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(p) })).json();
+    assert.ok(l.find(c => c.id === custom.id), `${p.usuario} ve el grupo a medida`);
+  }
+});

@@ -168,4 +168,64 @@ r.get('/conversaciones', (req, res) => {
   res.json(salida);
 });
 
+// --- Marcar leido (solo avanza) ---
+r.post('/conversacion/:id/leido', (req, res) => {
+  const conv = convDeIglesia(req.params.id, req.user.iglesia_id);
+  if (!conv || !esMiembroConv(conv.id, req.user.persona_id))
+    return res.status(403).json({ error: 'No perteneces a esta conversacion' });
+  const mid = Number((req.body || {}).mensaje_id) || 0;
+  db.prepare(
+    `UPDATE conversacion_miembro SET ultimo_leido_mensaje_id = MAX(COALESCE(ultimo_leido_mensaje_id,0), ?)
+      WHERE conversacion_id = ? AND persona_id = ?`
+  ).run(mid, conv.id, req.user.persona_id);
+  const nuevo = db.prepare('SELECT ultimo_leido_mensaje_id FROM conversacion_miembro WHERE conversacion_id = ? AND persona_id = ?')
+    .get(conv.id, req.user.persona_id).ultimo_leido_mensaje_id;
+  const otros = miembrosConv(conv.id).filter(pid => pid !== req.user.persona_id);
+  emitir(otros, 'leido', { conversacion_id: conv.id, persona_id: req.user.persona_id, ultimo_leido_mensaje_id: nuevo });
+  res.json({ ok: true });
+});
+
+// --- "escribiendo..." (solo reemite, sin BD) ---
+r.post('/conversacion/:id/escribiendo', (req, res) => {
+  const conv = convDeIglesia(req.params.id, req.user.iglesia_id);
+  if (!conv || !esMiembroConv(conv.id, req.user.persona_id))
+    return res.status(403).json({ error: 'No perteneces a esta conversacion' });
+  const nombre = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(req.user.persona_id).nombre;
+  const otros = miembrosConv(conv.id).filter(pid => pid !== req.user.persona_id);
+  emitir(otros, 'escribiendo', { conversacion_id: conv.id, persona_id: req.user.persona_id, nombre });
+  res.json({ ok: true });
+});
+
+// --- Con quien puedo iniciar chat (para el selector) ---
+r.get('/contactos', (req, res) => {
+  const personas = db.prepare(
+    'SELECT id, nombre FROM persona WHERE iglesia_id = ? AND activo = 1 AND id != ? ORDER BY nombre'
+  ).all(req.user.iglesia_id, req.user.persona_id);
+  res.json(personas.filter(p => puedeIniciarChatCon(req.user.persona_id, p.id)));
+});
+
+// --- Crear grupo a medida ---
+r.post('/custom', (req, res) => {
+  const { titulo, participantes } = req.body || {};
+  const t = String(titulo || '').trim();
+  if (!t) return res.status(400).json({ error: 'Falta el titulo' });
+  const ids = [...new Set((Array.isArray(participantes) ? participantes : []).map(Number).filter(Boolean))]
+    .filter(id => id !== req.user.persona_id);
+  if (!ids.length) return res.status(400).json({ error: 'Elige al menos un participante' });
+  // todos deben ser de la misma iglesia
+  const validos = db.prepare(
+    `SELECT id FROM persona WHERE iglesia_id = ? AND activo = 1 AND id IN (${ids.map(() => '?').join(',')})`
+  ).all(req.user.iglesia_id, ...ids).map(x => x.id);
+  if (!validos.length) return res.status(400).json({ error: 'Participantes invalidos' });
+
+  const info = db.prepare("INSERT INTO conversacion (iglesia_id, tipo, titulo, creado_por) VALUES (?, 'custom', ?, ?)")
+    .run(req.user.iglesia_id, t, req.user.persona_id);
+  const convId = Number(info.lastInsertRowid);
+  const insM = db.prepare('INSERT OR IGNORE INTO conversacion_miembro (conversacion_id, persona_id, rol) VALUES (?,?,?)');
+  insM.run(convId, req.user.persona_id, 'admin');
+  for (const id of validos) insM.run(convId, id, 'miembro');
+  auditar(req.user.iglesia_id, req.user.persona_id, 'chat_custom', 'conversacion', t);
+  res.json({ id: convId });
+});
+
 export default r;
