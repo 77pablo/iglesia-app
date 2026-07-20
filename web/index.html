@@ -51,6 +51,9 @@
           <input id="iglesia" placeholder="Nombre o código (ej. MONTESION)" autofocus
                  onkeydown="if(event.key==='Enter')next(2)" />
           <button class="btn" onclick="next(2)">Siguiente</button>
+          <p class="login-hint" style="margin-top:14px;text-align:center">
+            <a href="javascript:abrirRegistro()" style="color:var(--primary);font-weight:600">¿Primera vez? Únete con el código de tu iglesia</a>
+          </p>
         </div>
 
         <div class="step hidden" data-step="2">
@@ -119,6 +122,31 @@
         </div>
       </header>
       <main id="content"></main>
+    </div>
+  </div>
+
+  <!-- ============ CAMBIO DE CONTRASEÑA OBLIGATORIO (bloqueante) ============ -->
+  <div id="forzar-pass" class="hidden" style="min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px">
+    <div class="login-card" style="max-width:400px;width:100%">
+      <div class="login-head">
+        <div class="brand-mini"><img src="/assets/logo.png" alt="" /> Iglesia App</div>
+        <h2>Actualiza tu contraseña</h2>
+        <p class="login-sub muted small">Por seguridad, debes cambiar tu contraseña temporal antes de continuar. No podrás usar la app hasta hacerlo.</p>
+      </div>
+      <label>Contraseña actual (la temporal)</label>
+      <div class="row" style="gap:8px">
+        <input id="fp-actual" type="password" placeholder="Contraseña actual" onkeydown="if(event.key==='Enter')confirmarCambioObligatorio()" />
+        <button class="btn ghost small-btn" type="button" style="max-width:52px" onclick="toggleVerPass('fp-actual',this)" title="Ver/ocultar">👁️</button>
+      </div>
+      <label style="margin-top:8px">Nueva contraseña</label>
+      <div class="row" style="gap:8px">
+        <input id="fp-nueva" type="password" placeholder="Nueva contraseña" onkeydown="if(event.key==='Enter')confirmarCambioObligatorio()" />
+        <button class="btn ghost small-btn" type="button" style="max-width:52px" onclick="toggleVerPass('fp-nueva',this)" title="Ver/ocultar">👁️</button>
+      </div>
+      <label style="margin-top:8px">Confirma la nueva contraseña</label>
+      <input id="fp-confirmar" type="password" placeholder="Repite la nueva contraseña" onkeydown="if(event.key==='Enter')confirmarCambioObligatorio()" />
+      <button class="btn" style="width:100%;margin-top:16px" onclick="confirmarCambioObligatorio()">Cambiar contraseña y continuar</button>
+      <p id="fp-error" class="error"></p>
     </div>
   </div>
 

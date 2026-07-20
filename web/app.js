@@ -23,6 +23,7 @@ const NAV = [
   ['tesoreria','💰','Tesorería'],
   ['predica','📖','Predica'],
   ['panel_obispo','👑','Panel del Obispo'],
+  ['superadmin','🛡️','Super-admin'],
   ['ajustes','🎨','Ajustes'],
   ['admin','⚙️','Administración'],
 ];
@@ -104,11 +105,102 @@ async function entrar(){
 }
 async function cargarApp(){
   if(!token()) return mostrarLogin();
-  try{ ME=await api('/me'); abrirApp(); }
+  try{
+    ME=await api('/me');
+    if(ME && ME.persona && ME.persona.debe_cambiar_pass) return mostrarCambioObligatorio();
+    abrirApp();
+  }
   catch{ localStorage.removeItem('token'); mostrarLogin(); }
 }
-function mostrarLogin(){ $('app').classList.add('hidden'); $('login').classList.remove('hidden'); showStep(1); }
+function mostrarLogin(){
+  const fp=$('forzar-pass'); if(fp) fp.classList.add('hidden');
+  $('app').classList.add('hidden'); $('login').classList.remove('hidden'); showStep(1);
+}
 function salir(){ localStorage.removeItem('token'); location.reload(); }
+
+// ============================================================
+//  REGISTRO ("Primera vez") — un feligrés se une con el código de su iglesia
+// ============================================================
+function abrirRegistro(){
+  let ov=$('reg-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='reg-ov'; ov.className='hmodal-ov'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div class="hmodal" style="max-width:420px" onclick="event.stopPropagation()">
+    <div class="hmodal-head"><b style="flex:1;font-size:16px">🙌 Únete a tu iglesia</b>
+      <button class="cal-navbtn" onclick="cerrarRegistro()" aria-label="Cerrar">✕</button></div>
+    <div style="padding:16px">
+      <p class="muted small" style="margin:0 0 12px">Pide el <b>código de tu iglesia</b> a tu pastor o líder, y crea tu cuenta.</p>
+      <label>Código de tu iglesia</label>
+      <input id="reg-codigo" placeholder="Ej. MONTESION" autocapitalize="characters" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
+      <label style="margin-top:8px">Tu nombre completo</label>
+      <input id="reg-nombre" placeholder="Nombre y apellido" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
+      <label style="margin-top:8px">Elige un usuario</label>
+      <input id="reg-usuario" placeholder="Usuario (para entrar)" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
+      <label style="margin-top:8px">Elige una contraseña</label>
+      <div class="row" style="gap:8px">
+        <input id="reg-pass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
+        <button class="btn ghost small-btn" type="button" style="max-width:52px" onclick="toggleVerPass('reg-pass',this)" title="Ver/ocultar">👁️</button>
+      </div>
+      <label style="margin-top:8px">Correo <span class="muted">(opcional)</span></label>
+      <input id="reg-email" type="email" placeholder="tucorreo@ejemplo.com" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
+      <label style="margin-top:8px">Teléfono <span class="muted">(opcional)</span></label>
+      <input id="reg-telefono" placeholder="+56 9 ..." onkeydown="if(event.key==='Enter')confirmarRegistro()" />
+      <button class="btn" style="width:100%;margin-top:14px" onclick="confirmarRegistro()">Crear mi cuenta</button>
+      <p id="reg-msg" class="error" style="margin-top:10px"></p>
+    </div></div>`;
+  ov.onclick=cerrarRegistro;
+  setTimeout(()=>{ const i=$('reg-codigo'); if(i) i.focus(); },50);
+}
+function cerrarRegistro(){ const ov=$('reg-ov'); if(ov) ov.remove(); }
+async function confirmarRegistro(){
+  const m=$('reg-msg'); m.className='error'; m.textContent='';
+  const codigo=$('reg-codigo').value.trim();
+  const nombre=$('reg-nombre').value.trim();
+  const usuario=$('reg-usuario').value.trim();
+  const password=$('reg-pass').value;
+  const email=$('reg-email').value.trim();
+  const telefono=$('reg-telefono').value.trim();
+  if(!codigo){ m.textContent='Escribe el código de tu iglesia (te lo entrega tu iglesia)'; return; }
+  if(!nombre){ m.textContent='Escribe tu nombre'; return; }
+  if(!usuario){ m.textContent='Elige un usuario'; return; }
+  if(password.length<4){ m.textContent='La contraseña debe tener al menos 4 caracteres'; return; }
+  const body={codigo,nombre,usuario,password};
+  if(email) body.email=email;
+  if(telefono) body.telefono=telefono;
+  try{
+    const r=await fetch(API+'/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.error||'No se pudo crear la cuenta. Revisa el código de tu iglesia.');
+    localStorage.setItem('token',data.token);
+    cerrarRegistro();
+    cargarApp();
+  }catch(e){ m.textContent=(e&&e.message)||'No se pudo conectar con el servidor'; }
+}
+
+// ============================================================
+//  CAMBIO DE CONTRASEÑA OBLIGATORIO (pantalla bloqueante)
+// ============================================================
+function mostrarCambioObligatorio(){
+  $('login').classList.add('hidden'); $('app').classList.add('hidden');
+  const fp=$('forzar-pass'); if(!fp) return abrirApp();
+  fp.classList.remove('hidden');
+  const err=$('fp-error'); if(err) err.textContent='';
+  ['fp-actual','fp-nueva','fp-confirmar'].forEach(id=>{ const i=$(id); if(i) i.value=''; });
+  setTimeout(()=>{ const i=$('fp-actual'); if(i) i.focus(); },60);
+}
+async function confirmarCambioObligatorio(){
+  const err=$('fp-error'); err.textContent='';
+  const actual=$('fp-actual').value, nueva=$('fp-nueva').value, confirmar=$('fp-confirmar').value;
+  if(!actual){ err.textContent='Escribe tu contraseña actual (la temporal)'; return; }
+  if(nueva.length<4){ err.textContent='La nueva contraseña debe tener al menos 4 caracteres'; return; }
+  if(nueva!==confirmar){ err.textContent='Las contraseñas no coinciden'; return; }
+  try{
+    await api('/cuenta/password',{method:'PATCH',body:JSON.stringify({actual,nueva})});
+    if(ME && ME.persona) ME.persona.debe_cambiar_pass=0;
+    $('forzar-pass').classList.add('hidden');
+    toast('🔒 Contraseña actualizada');
+    abrirApp();
+  }catch(e){ err.textContent=(e&&e.message)||'No se pudo cambiar la contraseña'; }
+}
 
 function puedePublicar(){
   return ME.persona.es_pastor || ME.roles.pertenencias.some(p=>['admin','lider_musica','lider_ed'].includes(p.rol));
@@ -118,11 +210,13 @@ function esEncargadoDe(grupoId){
   return ME.roles.pertenencias.some(p=>p.grupo_id===grupoId && ['admin','lider_musica','lider_ed'].includes(p.rol));
 }
 function tieneModulo(k){
+  if(k==='superadmin') return !!(ME.persona && ME.persona.rol_global==='super_admin');
   if(k==='inicio') return true;
   // Biblia/Devocional y Notas del sermón: disponibles para toda la iglesia (Fase 4)
   if(k==='predica'||k==='ajustes'||k==='mensajes'||k==='directorio') return true;
-  if(k==='calendario') return ME.modulos.includes('calendario')||ME.modulos.includes('calendario_completo');
-  return ME.modulos.includes(k);
+  const mods = ME.modulos||[];
+  if(k==='calendario') return mods.includes('calendario')||mods.includes('calendario_completo');
+  return mods.includes(k);
 }
 
 // ============================================================
@@ -130,6 +224,7 @@ function tieneModulo(k){
 // ============================================================
 function abrirApp(){
   $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+  const fp=$('forzar-pass'); if(fp) fp.classList.add('hidden');
   // usuario en el sidebar
   const ini = ME.persona.nombre.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   $('avatar').textContent = ini;
@@ -142,7 +237,7 @@ function abrirApp(){
   // (La campana la actualiza el dashboard con su propia carga; evitamos pedir /notificaciones dos veces.)
   pushAutoResuscribir();   // mantiene el push activo entre sesiones (si ya dio permiso)
   Chat.refrescarBadge();  // badge de mensajes sin leer, visible aunque no se abra la vista
-  navTo('inicio');
+  navTo(ME.persona.rol_global==='super_admin' ? 'superadmin' : 'inicio');
 }
 function setCampana(n){
   const b=$('bell-count'); if(!b) return;
@@ -165,6 +260,7 @@ const NAV_ICON={
   tesoreria:_ic('<line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
   predica:_ic('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>'),
   panel_obispo:_ic('<path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z"/><path d="M2 20h20"/>'),
+  superadmin:_ic('<path d="M12 2 3 6v6c0 5 3.8 8.4 9 10 5.2-1.6 9-5 9-10V6z"/><path d="M9.5 12l2 2 3.5-3.5"/>'),
   ajustes:_ic('<line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/>'),
   admin:_ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>'),
   mensajes:_ic('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
@@ -323,6 +419,7 @@ function navTo(key){
   if(key==='predica') return vistaPredica();
   if(key==='panel_obispo') return vistaPanelObispo();
   if(key==='admin') return vistaAdmin();
+  if(key==='superadmin') return vistaSuperadmin();
   if(key==='ajustes') return vistaAjustes();
   $('content').innerHTML=`<div class="placeholder"><div class="big">${iconDe(key)}</div>
     <h2>${labelDe(key)}</h2><p>Este módulo se construye en una próxima fase.</p></div>`;
@@ -2483,6 +2580,91 @@ async function adminGuardarGrupo(id){
     else await api('/admin/grupos',{method:'POST',body:JSON.stringify(body)});
     toast('Listo'); vistaAdmin();
   }catch(e){ $('ag-err').textContent=e.message; }
+}
+
+// ============================================================
+//  SUPER-ADMIN: crear iglesias (visible solo si rol_global==='super_admin')
+// ============================================================
+async function vistaSuperadmin(){
+  $('content').innerHTML=`
+    <div class="card" style="max-width:640px;margin-bottom:20px">
+      <h2 style="font-size:1.3rem;margin-bottom:4px">🛡️ Crear iglesia</h2>
+      <p class="muted small" style="margin-bottom:14px">Crea una nueva iglesia junto a la cuenta de su pastor. El código que se genera se lo entregas a la iglesia para que sus feligreses puedan unirse.</p>
+      <label>Nombre de la iglesia</label>
+      <input id="sa-nombre-ig" placeholder="Ej. Iglesia Monte Sion"/>
+      <label style="margin-top:8px">Código <span class="muted">(opcional — se genera solo si lo dejas vacío)</span></label>
+      <input id="sa-codigo" placeholder="Ej. MONTESION"/>
+      <label style="margin-top:8px">Nombre del pastor</label>
+      <input id="sa-pastor-nombre" placeholder="Nombre y apellido"/>
+      <label style="margin-top:8px">Usuario del pastor</label>
+      <input id="sa-pastor-usuario" placeholder="Usuario para entrar"/>
+      <label style="margin-top:8px">Correo del pastor</label>
+      <input id="sa-pastor-email" type="email" placeholder="correo@ejemplo.com"/>
+      <label style="margin-top:8px">Contraseña temporal del pastor</label>
+      <div class="row" style="gap:8px">
+        <input id="sa-pastor-pass" type="password" placeholder="Contraseña temporal"/>
+        <button class="btn ghost small-btn" type="button" style="max-width:52px" onclick="toggleVerPass('sa-pastor-pass',this)" title="Ver/ocultar">👁️</button>
+      </div>
+      <p id="sa-error" class="error"></p>
+      <button class="btn" style="width:100%;margin-top:12px" onclick="saCrearIglesia()">Crear iglesia</button>
+      <div id="sa-resultado"></div>
+    </div>
+    <div class="card" style="max-width:640px">
+      <h3 style="font-size:16px;margin-bottom:10px">⛪ Iglesias creadas</h3>
+      <div id="sa-lista" class="muted small">Cargando…</div>
+    </div>`;
+  saCargarLista();
+}
+async function saCargarLista(){
+  const z=$('sa-lista'); if(!z) return;
+  try{
+    const lista=await api('/superadmin/iglesias');
+    z.className='';
+    z.innerHTML = (lista&&lista.length) ? lista.map(ig=>{
+      const codigo = ig.codigo_unico||ig.codigo||'';
+      return `<div class="item-card flex" style="margin-top:8px">
+        <div style="flex:1"><b>${escHtml(ig.nombre)}</b>
+          <div class="muted small">Código: <code>${escHtml(codigo)}</code></div></div>
+        <button class="btn ghost small-btn" onclick="saCopiar('${escHtml(codigo)}')">📋 Copiar</button>
+      </div>`;
+    }).join('') : '<p class="muted small">Aún no hay iglesias creadas.</p>';
+  }catch(e){ z.className='error'; z.textContent='No se pudo cargar la lista: '+((e&&e.message)||'error'); }
+}
+async function saCrearIglesia(){
+  const err=$('sa-error'); err.textContent='';
+  const body={
+    nombre_iglesia: $('sa-nombre-ig').value.trim(),
+    pastor_nombre: $('sa-pastor-nombre').value.trim(),
+    pastor_usuario: $('sa-pastor-usuario').value.trim(),
+    pastor_email: $('sa-pastor-email').value.trim(),
+    pastor_password: $('sa-pastor-pass').value,
+  };
+  const codigo=$('sa-codigo').value.trim();
+  if(codigo) body.codigo=codigo;
+  if(!body.nombre_iglesia){ err.textContent='Escribe el nombre de la iglesia'; return; }
+  if(!body.pastor_nombre||!body.pastor_usuario||!body.pastor_email){ err.textContent='Completa nombre, usuario y correo del pastor'; return; }
+  if((body.pastor_password||'').length<4){ err.textContent='La contraseña temporal debe tener al menos 4 caracteres'; return; }
+  try{
+    const r=await api('/superadmin/iglesia',{method:'POST',body:JSON.stringify(body)});
+    toast('✅ Iglesia creada');
+    const igCodigo=(r.iglesia&&(r.iglesia.codigo_unico||r.iglesia.codigo))||codigo||'';
+    const pastorUsuario=(r.pastor&&r.pastor.usuario)||body.pastor_usuario;
+    $('sa-resultado').innerHTML=`
+      <div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
+        <p class="muted small" style="margin-bottom:6px">Código de la iglesia — compártelo con tu comunidad:</p>
+        <div style="font-size:1.8rem;font-weight:800;letter-spacing:.08em;color:var(--primary)">${escHtml(igCodigo)}</div>
+        <button class="btn small-btn" style="margin-top:10px" onclick="saCopiar('${escHtml(igCodigo)}')">📋 Copiar código</button>
+        <p class="muted small" style="margin-top:10px">Pastor creado: <b>${escHtml(pastorUsuario)}</b></p>
+      </div>`;
+    ['sa-nombre-ig','sa-codigo','sa-pastor-nombre','sa-pastor-usuario','sa-pastor-email','sa-pastor-pass'].forEach(id=>{ const i=$(id); if(i) i.value=''; });
+    saCargarLista();
+  }catch(e){ err.textContent=(e&&e.message)||'No se pudo crear la iglesia'; }
+}
+function saCopiar(codigo){
+  if(!codigo) return;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(codigo).then(()=>toast('📋 Código copiado')).catch(()=>toast('No se pudo copiar. Cópialo manualmente: '+codigo));
+  } else { toast('Copia manual: '+codigo); }
 }
 
 // ============================================================
