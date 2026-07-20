@@ -75,3 +75,29 @@ test('1:1 + envio + listado', async () => {
   assert.equal(data.mensajes.length, 1);
   assert.equal(data.mensajes[0].texto, 'Hola!');
 });
+
+test('conversaciones: auto-provisiona canal de grupo y cuenta no-leidos', async () => {
+  // miembro1 entra a Mensajes -> debe aparecer el canal de Jovenes
+  let res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) });
+  let lista = await res.json();
+  const canal = lista.find(c => c.tipo === 'grupo' && c.grupo_id === SEM.grupoId);
+  assert.ok(canal, 'existe el canal del grupo');
+
+  // lider (tambien miembro del grupo) manda un mensaje al canal
+  res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.lider) }); // provisiona para lider
+  await res.json();
+  await fetch(base + `/api/mensajes/conversacion/${canal.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'Reunion el sabado' }) });
+
+  // miembro2 ve 1 no-leido en el canal
+  res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro2) });
+  lista = await res.json();
+  const c2 = lista.find(c => c.id === canal.id);
+  assert.equal(c2.no_leidos, 1);
+  assert.equal(c2.ultimo.texto, 'Reunion el sabado');
+
+  // ajeno (no es del grupo) NO ve el canal
+  res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.ajeno) });
+  lista = await res.json();
+  assert.equal(lista.find(c => c.id === canal.id), undefined);
+});

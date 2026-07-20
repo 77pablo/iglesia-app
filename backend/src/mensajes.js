@@ -107,4 +107,65 @@ r.get('/conversacion/:id', (req, res) => {
   res.json({ conversacion: { id: conv.id, tipo: conv.tipo, titulo: conv.titulo, grupo_id: conv.grupo_id }, mensajes });
 });
 
+// Crea (si falta) el canal 'grupo' de cada grupo del actor y sincroniza sus miembros.
+function provisionarCanalesDeGrupo(personaId, iglesiaId) {
+  const grupos = db.prepare(
+    `SELECT DISTINCT g.id, g.nombre FROM grupo g
+       JOIN pertenencia pe ON pe.grupo_id = g.id
+      WHERE pe.persona_id = ? AND g.iglesia_id = ?`
+  ).all(personaId, iglesiaId);
+  for (const g of grupos) {
+    let conv = db.prepare("SELECT id FROM conversacion WHERE tipo = 'grupo' AND grupo_id = ? AND iglesia_id = ?")
+      .get(g.id, iglesiaId);
+    if (!conv) {
+      const info = db.prepare(
+        "INSERT INTO conversacion (iglesia_id, tipo, grupo_id, titulo, creado_por) VALUES (?, 'grupo', ?, ?, ?)"
+      ).run(iglesiaId, g.id, g.nombre, personaId);
+      conv = { id: Number(info.lastInsertRowid) };
+    }
+    // sincronizar miembros del grupo como miembros de la conversacion (idempotente)
+    db.prepare(
+      `INSERT OR IGNORE INTO conversacion_miembro (conversacion_id, persona_id, rol)
+       SELECT ?, persona_id, 'miembro' FROM pertenencia WHERE grupo_id = ?`
+    ).run(conv.id, g.id);
+  }
+}
+
+// --- Mis conversaciones (con ultimo mensaje + no leidos) ---
+r.get('/conversaciones', (req, res) => {
+  provisionarCanalesDeGrupo(req.user.persona_id, req.user.iglesia_id);
+  const filas = db.prepare(
+    `SELECT c.id, c.tipo, c.titulo, c.grupo_id, cm.ultimo_leido_mensaje_id
+       FROM conversacion c
+       JOIN conversacion_miembro cm ON cm.conversacion_id = c.id AND cm.persona_id = ?
+      WHERE c.iglesia_id = ?`
+  ).all(req.user.persona_id, req.user.iglesia_id);
+
+  const ultimoMsg = db.prepare(
+    `SELECT id, texto, adjunto_url, creado_en FROM mensaje
+      WHERE conversacion_id = ? AND borrado = 0 ORDER BY id DESC LIMIT 1`);
+  const cuentaNoLeidos = db.prepare(
+    `SELECT COUNT(*) AS n FROM mensaje
+      WHERE conversacion_id = ? AND borrado = 0 AND persona_id != ? AND id > ?`);
+  const otroDe = db.prepare(
+    `SELECT p.id, p.nombre FROM conversacion_miembro cm JOIN persona p ON p.id = cm.persona_id
+      WHERE cm.conversacion_id = ? AND cm.persona_id != ? LIMIT 1`);
+
+  const salida = filas.map(c => {
+    const um = ultimoMsg.get(c.id);
+    const no = cuentaNoLeidos.get(c.id, req.user.persona_id, c.ultimo_leido_mensaje_id || 0).n;
+    const otro = c.tipo === 'directo' ? otroDe.get(c.id, req.user.persona_id) : null;
+    return {
+      id: c.id, tipo: c.tipo, grupo_id: c.grupo_id,
+      titulo: c.tipo === 'directo' ? (otro ? otro.nombre : '') : c.titulo,
+      otro: otro || null,
+      ultimo: um ? { texto: um.texto || (um.adjunto_url ? '📎 archivo' : ''), creado_en: um.creado_en } : null,
+      no_leidos: no
+    };
+  });
+  // mas recientes primero (por ultimo mensaje; sin actividad al final)
+  salida.sort((a, b) => (b.ultimo?.creado_en || '').localeCompare(a.ultimo?.creado_en || ''));
+  res.json(salida);
+});
+
 export default r;
