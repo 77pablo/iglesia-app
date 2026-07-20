@@ -21,10 +21,12 @@ services:
         value: /data/iglesia.db       # en free /data es EFÍMERO (se re-siembra al reiniciar)
       - key: UPLOADS_DIR
         value: /data/uploads
-      # --- Persistencia gratis con Litestream → Cloudflare R2 ---
+      # --- Persistencia gratis con Litestream/rclone → Cloudflare R2 ---
       # Rellena estas 4 en Render → Environment (secretas; NO van en el repo).
-      # Con ellas, el iglesia.db se respalda en tiempo real a R2 y se restaura
-      # al arrancar, así los datos SOBREVIVEN a los redeploys en plan free.
+      # Con ellas: el iglesia.db se respalda en tiempo real a R2 (Litestream) y
+      # la carpeta UPLOADS_DIR se sincroniza cada ~30s al mismo bucket (rclone,
+      # subcarpeta "uploads/"). Ambos se restauran al arrancar, así BD y
+      # archivos subidos SOBREVIVEN a los redeploys en plan free.
       - key: R2_ENDPOINT                 # https://<ACCOUNT_ID>.r2.cloudflarestorage.com
         sync: false
       - key: R2_BUCKET                   # nombre del bucket en R2
@@ -34,7 +36,8 @@ services:
       - key: LITESTREAM_SECRET_ACCESS_KEY
         sync: false
       # Push real (opcional): añade en Render VAPID_PUBLIC/PRIVATE/SUBJECT.
-    # NOTA: la persistencia real la da Litestream + R2 (ver arriba), NO un disco de
-    # Render. Mientras esas 4 variables no estén, el arranque degrada con elegancia
-    # (app normal, BD efímera). Cuando ya haya datos reales respaldados en R2,
-    # pon SEED_ON_EMPTY=0 para no re-sembrar demo.
+    # NOTA: la persistencia real la da Litestream + rclone hacia R2 (ver arriba),
+    # NO un disco de Render. Mientras esas 4 variables no estén, el arranque
+    # degrada con elegancia (app normal, BD y uploads efímeros, sin instalar/usar
+    # rclone). Cuando ya haya datos reales respaldados en R2, pon SEED_ON_EMPTY=0
+    # para no re-sembrar demo.
