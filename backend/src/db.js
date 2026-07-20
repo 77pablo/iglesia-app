@@ -14,6 +14,11 @@ fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 const db = new DatabaseSync(DB_FILE);
 
 db.exec('PRAGMA foreign_keys = ON;');
+// WAL: REQUERIDO para que Litestream pueda replicar la BD a R2 (Litestream
+// monitorea el -wal). Ademas mejora la concurrencia lectura/escritura.
+// busy_timeout evita "database is locked" bajo carga concurrente.
+db.exec('PRAGMA journal_mode = WAL;');
+db.exec('PRAGMA busy_timeout = 5000;');
 
 db.exec(`
 -- IGLESIA: cada congregacion es un espacio aislado (multi-iglesia)
