@@ -2,8 +2,10 @@
 //  Fase 2.5: Cuidado Pastoral  -  SOLO el pastor
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, esObispo, auditar } from './auth.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -21,9 +23,12 @@ r.get('/', (req, res) => {
 });
 
 // Crear caso
-r.post('/', (req, res) => {
-  const { persona_id: aPersona, motivo } = req.body || {};
-  if (!aPersona) return res.status(400).json({ error: 'Falta la persona' });
+const crearCasoSchema = z.object({
+  persona_id: z.coerce.number().int().positive('falta la persona'),
+  motivo: z.string().trim().optional()
+});
+r.post('/', validar(crearCasoSchema), (req, res) => {
+  const { persona_id: aPersona, motivo } = req.body;
   const destino = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?').get(aPersona, req.user.iglesia_id);
   if (!destino) return res.status(404).json({ error: 'Persona no encontrada en tu iglesia' });
   const info = db.prepare("INSERT INTO caso_cuidado (iglesia_id, persona_id, motivo, estado) VALUES (?,?,?, 'abierto')")
@@ -44,10 +49,14 @@ r.get('/:id', (req, res) => {
 });
 
 // Registrar un contacto (visita, llamada, oración...)
-r.post('/:id/contacto', (req, res) => {
+const contactoSchema = z.object({
+  tipo: z.string().trim().optional(),
+  nota: z.string().trim().optional()
+});
+r.post('/:id/contacto', validar(contactoSchema), (req, res) => {
   const caso = db.prepare('SELECT id FROM caso_cuidado WHERE id = ? AND iglesia_id = ?').get(req.params.id, req.user.iglesia_id);
   if (!caso) return res.status(404).json({ error: 'Caso no encontrado' });
-  const { tipo, nota } = req.body || {};
+  const { tipo, nota } = req.body;
   db.prepare('INSERT INTO contacto_cuidado (caso_id, tipo, nota) VALUES (?,?,?)').run(caso.id, tipo || 'nota', nota || '');
   db.prepare("UPDATE caso_cuidado SET estado = 'seguimiento' WHERE id = ? AND estado = 'abierto'").run(caso.id);
   auditar(req.user.iglesia_id, req.user.persona_id, 'contacto_cuidado', 'cuidado', 'caso ' + caso.id);

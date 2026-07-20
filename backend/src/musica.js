@@ -2,9 +2,11 @@
 //  Fase 2.3: Modulo de Musicos — cancionero + orden del servicio
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderMusicaEstricto, esDelMinisterioMusica, auditar } from './auth.js';
 import { enviarPush } from './push.js';
+import { validar } from './seguridad.js';
 
 const SOLO_LIDER = 'Solo el líder de música puede editar (el pastor solo observa).';
 
@@ -16,11 +18,17 @@ r.get('/canciones', (req, res) => {
   res.json(db.prepare('SELECT * FROM cancion WHERE iglesia_id = ? ORDER BY titulo').all(req.user.iglesia_id));
 });
 
-r.post('/canciones', (req, res) => {
+const cancionSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  autor: z.string().trim().optional(),
+  tono: z.string().trim().optional(),
+  enlace: z.string().trim().optional(),
+  letra: z.string().trim().optional()
+});
+r.post('/canciones', validar(cancionSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   if (!esLiderMusicaEstricto(persona_id)) return res.status(403).json({ error: SOLO_LIDER });
-  const { titulo, autor, tono, enlace, letra } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el título' });
+  const { titulo, autor, tono, enlace, letra } = req.body;
   const info = db.prepare('INSERT INTO cancion (iglesia_id, titulo, autor, tono, enlace, letra) VALUES (?,?,?,?,?,?)')
     .run(iglesia_id, titulo, autor || null, tono || null, enlace || null, letra || null);
   auditar(iglesia_id, persona_id, 'agregar_cancion', 'musica', titulo);
@@ -28,12 +36,19 @@ r.post('/canciones', (req, res) => {
 });
 
 // Editar una canción (título, tono, acordes/letra...) — solo el líder de música.
-r.patch('/canciones/:id', (req, res) => {
+const editarCancionSchema = z.object({
+  titulo: z.string().trim().optional(),
+  autor: z.string().trim().optional(),
+  tono: z.string().trim().optional(),
+  enlace: z.string().trim().optional(),
+  letra: z.string().trim().optional()
+});
+r.patch('/canciones/:id', validar(editarCancionSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   if (!esLiderMusicaEstricto(persona_id)) return res.status(403).json({ error: SOLO_LIDER });
   const c = db.prepare('SELECT * FROM cancion WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!c) return res.status(404).json({ error: 'Canción no encontrada' });
-  const { titulo, autor, tono, enlace, letra } = req.body || {};
+  const { titulo, autor, tono, enlace, letra } = req.body;
   db.prepare('UPDATE cancion SET titulo=?, autor=?, tono=?, enlace=?, letra=? WHERE id=?')
     .run(titulo ?? c.titulo, autor ?? c.autor, tono ?? c.tono, enlace ?? c.enlace, letra ?? c.letra, c.id);
   auditar(iglesia_id, persona_id, 'editar_cancion', 'musica', c.titulo);
@@ -52,11 +67,14 @@ r.get('/setlist/:eventoId', (req, res) => {
   res.json(items);
 });
 
-r.post('/setlist/:eventoId', (req, res) => {
+const setlistSchema = z.object({
+  cancion_id: z.coerce.number().int().positive('falta la cancion'),
+  tono_dia: z.string().trim().optional()
+});
+r.post('/setlist/:eventoId', validar(setlistSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   if (!esLiderMusicaEstricto(persona_id)) return res.status(403).json({ error: SOLO_LIDER });
-  const { cancion_id, tono_dia } = req.body || {};
-  if (!cancion_id) return res.status(400).json({ error: 'Falta la canción' });
+  const { cancion_id, tono_dia } = req.body;
   const ev = db.prepare('SELECT id FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.eventoId, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
   const cancion = db.prepare('SELECT tono FROM cancion WHERE id = ? AND iglesia_id = ?').get(cancion_id, iglesia_id);
@@ -125,12 +143,16 @@ r.get('/plan/:eventoId', (req, res) => {
 });
 
 // --- Agregar un integrante al equipo (+ aviso a la persona) ---
-r.post('/plan/:eventoId/equipo', (req, res) => {
+const equipoSchema = z.object({
+  persona_id: z.coerce.number().int().positive('falta la persona'),
+  instrumento: z.string().trim().optional()
+});
+r.post('/plan/:eventoId/equipo', validar(equipoSchema), (req, res) => {
   const { persona_id: actor, iglesia_id } = req.user;
   if (!esLiderMusicaEstricto(actor)) return res.status(403).json({ error: SOLO_LIDER });
   const ev = eventoDeIglesia(req.params.eventoId, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
-  const { persona_id, instrumento } = req.body || {};
+  const { persona_id, instrumento } = req.body;
   const persona = db.prepare('SELECT id, nombre FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1').get(persona_id, iglesia_id);
   if (!persona) return res.status(404).json({ error: 'Persona no encontrada en tu iglesia' });
   const inst = String(instrumento || '').trim() || 'Voz';
@@ -159,12 +181,18 @@ r.delete('/plan/equipo/:id', (req, res) => {
 });
 
 // --- Agendar / actualizar el ensayo ---
-r.post('/plan/:eventoId/ensayo', (req, res) => {
+const ensayoSchema = z.object({
+  fecha: z.string().trim().optional(),
+  hora: z.string().trim().optional(),
+  lugar: z.string().trim().optional(),
+  nota: z.string().trim().optional()
+});
+r.post('/plan/:eventoId/ensayo', validar(ensayoSchema), (req, res) => {
   const { persona_id: actor, iglesia_id } = req.user;
   if (!esLiderMusicaEstricto(actor)) return res.status(403).json({ error: SOLO_LIDER });
   const ev = eventoDeIglesia(req.params.eventoId, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
-  const { fecha, hora, lugar, nota } = req.body || {};
+  const { fecha, hora, lugar, nota } = req.body;
   const existe = db.prepare('SELECT evento_id FROM ensayo WHERE evento_id = ?').get(ev.id);
   if (existe) {
     db.prepare('UPDATE ensayo SET fecha=?, hora=?, lugar=?, nota=? WHERE evento_id=?')
@@ -206,11 +234,14 @@ r.get('/material', (req, res) => {
 });
 
 // Subir/compartir material: cualquier integrante del ministerio de música.
-r.post('/material', (req, res) => {
+const materialSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  archivo_url: z.string().trim().min(1, 'falta el archivo')
+});
+r.post('/material', validar(materialSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   if (!esDelMinisterioMusica(persona_id)) return res.status(403).json({ error: 'Solo el ministerio de música puede compartir material.' });
-  const { titulo, archivo_url } = req.body || {};
-  if (!titulo || !archivo_url) return res.status(400).json({ error: 'Falta el título o el archivo' });
+  const { titulo, archivo_url } = req.body;
   const info = db.prepare('INSERT INTO material_musica (iglesia_id, titulo, archivo_url, creado_por) VALUES (?,?,?,?)')
     .run(iglesia_id, String(titulo).trim(), archivo_url, persona_id);
   auditar(iglesia_id, persona_id, 'material_musica_add', 'musica', String(titulo).trim());

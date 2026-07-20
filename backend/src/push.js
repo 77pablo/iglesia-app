@@ -12,8 +12,10 @@
 // ============================================================
 import { Router } from 'express';
 import webpush from 'web-push';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware } from './auth.js';
+import { validar } from './seguridad.js';
 
 const PUBLIC = process.env.VAPID_PUBLIC || '';
 const PRIVATE = process.env.VAPID_PRIVATE || '';
@@ -55,10 +57,15 @@ r.use(authMiddleware);
 r.get('/clave-publica', (req, res) => res.json({ clave: PUBLIC, activo: pushActivo }));
 
 // Guarda (o refresca) la suscripcion push del navegador del usuario.
-r.post('/suscribir', (req, res) => {
-  const sub = req.body || {};
-  if (!sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth)
-    return res.status(400).json({ error: 'Suscripcion invalida' });
+const suscribirSchema = z.object({
+  endpoint: z.string().trim().min(1, 'falta el endpoint'),
+  keys: z.object({
+    p256dh: z.string().trim().min(1, 'falta la clave p256dh'),
+    auth: z.string().trim().min(1, 'falta la clave auth')
+  })
+});
+r.post('/suscribir', validar(suscribirSchema), (req, res) => {
+  const sub = req.body;
   // endpoint es unico: si ya existe, lo reasigna a esta persona y refresca llaves.
   db.prepare(`INSERT INTO push_sub (persona_id, endpoint, p256dh, auth) VALUES (?,?,?,?)
               ON CONFLICT(endpoint) DO UPDATE SET persona_id=excluded.persona_id, p256dh=excluded.p256dh, auth=excluded.auth`)
@@ -67,8 +74,11 @@ r.post('/suscribir', (req, res) => {
 });
 
 // Da de baja la suscripcion (al desactivar o cerrar sesion).
-r.post('/baja', (req, res) => {
-  const { endpoint } = req.body || {};
+const bajaSchema = z.object({
+  endpoint: z.string().trim().optional()
+});
+r.post('/baja', validar(bajaSchema), (req, res) => {
+  const { endpoint } = req.body;
   if (endpoint) db.prepare('DELETE FROM push_sub WHERE endpoint = ? AND persona_id = ?').run(endpoint, req.user.persona_id);
   res.json({ ok: true });
 });

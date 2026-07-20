@@ -3,9 +3,11 @@
 //  Fase 4.1: segmentacion por canal/grupo/rol.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin } from './auth.js';
 import { enviarPush } from './push.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 
@@ -91,12 +93,21 @@ r.get('/', (req, res) => {
 
 // --- Enviar una notificacion segmentada (solo lider/pastor) ---
 // body: { titulo, texto, segmento:{tipo,grupo_id?,rol?} }
-r.post('/segmentada', (req, res) => {
+const segmentoSchema = z.object({
+  tipo: z.enum(['todos', 'grupo', 'rol']).optional(),
+  grupo_id: z.coerce.number().int().positive().optional(),
+  rol: z.string().trim().optional()
+}).optional();
+const segmentadaSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  texto: z.string().trim().optional(),
+  segmento: segmentoSchema
+});
+r.post('/segmentada', validar(segmentadaSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   if (!esLiderOAdmin(persona_id))
     return res.status(403).json({ error: 'No tienes permiso para enviar avisos' });
-  const { titulo, texto, segmento } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el título' });
+  const { titulo, texto, segmento } = req.body;
   const n = notificarSegmento(iglesia_id, segmento, 'aviso', '🔔 ' + titulo, texto || '');
   res.json({ ok: true, enviadas: n, destino: etiquetaSegmento(iglesia_id, segmento) });
 });

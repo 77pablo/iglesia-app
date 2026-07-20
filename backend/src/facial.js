@@ -4,8 +4,10 @@
 //  guarda/compara embeddings (coseno) por iglesia.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin, auditar } from './auth.js';
+import { validar } from './seguridad.js';
 
 const PY_URL = process.env.FACIAL_PY_URL || 'http://localhost:5001';
 const MODELO = 'buffalo_l';
@@ -50,11 +52,15 @@ function coseno(a, b) {
 
 // --- INSCRIBIR un rostro (solo lider/pastor) ---
 // body: { persona_id, image }
-r.post('/inscribir', async (req, res) => {
+// image: base64 de una foto, puede ser un string largo -> min(1) nada mas,
+// sin limite de largo (el limite real lo pone express.json({limit:'12mb'}) en server.js).
+const inscribirSchema = z.object({
+  persona_id: z.coerce.number().int().positive('falta la persona'),
+  image: z.string().min(1, 'falta la imagen')
+});
+r.post('/inscribir', validar(inscribirSchema), async (req, res) => {
   const { persona_id, iglesia_id } = req.user;
-  const { persona_id: target, image } = req.body || {};
-  if (!target || !image)
-    return res.status(400).json({ error: 'Faltan datos: persona_id e image' });
+  const { persona_id: target, image } = req.body;
   if (!esLiderOAdmin(persona_id))
     return res.status(403).json({ error: 'No tienes permiso para inscribir rostros' });
 
@@ -82,10 +88,12 @@ r.post('/inscribir', async (req, res) => {
 
 // --- RECONOCER un rostro ---
 // body: { image }  -> compara contra la biometria de la MISMA iglesia.
-r.post('/reconocer', async (req, res) => {
+const reconocerSchema = z.object({
+  image: z.string().min(1, 'falta la imagen')
+});
+r.post('/reconocer', validar(reconocerSchema), async (req, res) => {
   const { iglesia_id } = req.user;
-  const { image } = req.body || {};
-  if (!image) return res.status(400).json({ error: 'Falta la imagen' });
+  const { image } = req.body;
 
   try {
     const data = await pedirEmbedding(image);

@@ -2,12 +2,14 @@
 //  Modulo A: Calendario + Eventos  -  Fase 1B
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import {
   authMiddleware, esPastor, esAdminDeGrupo, esEncargadoGrupo, veCalendarioCompleto,
   gruposDeUsuario, auditar
 } from './auth.js';
 import { enviarPush } from './push.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -48,12 +50,19 @@ r.get('/grupos-gestionables', (req, res) => {
 });
 
 // --- Crear evento ---
-r.post('/', (req, res) => {
+const crearEventoSchema = z.object({
+  grupo_id: z.coerce.number().int().positive('falta el grupo'),
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  fecha: z.string().trim().min(1, 'falta la fecha'),
+  hora_inicio: z.string().trim().optional(),
+  hora_fin: z.string().trim().optional(),
+  lugar: z.string().trim().optional(),
+  descripcion: z.string().trim().optional()
+});
+r.post('/', validar(crearEventoSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
-  const { grupo_id, titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body || {};
+  const { grupo_id, titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body;
 
-  if (!titulo || !fecha || !grupo_id)
-    return res.status(400).json({ error: 'Faltan datos: titulo, fecha y grupo' });
   if (!esAdminDeGrupo(persona_id, Number(grupo_id)))
     return res.status(403).json({ error: 'No tienes permiso para crear eventos en ese grupo' });
 
@@ -115,11 +124,14 @@ r.patch('/:id/aprobar', (req, res) => {
   res.json({ ok: true });
 });
 
-r.patch('/:id/rechazar', (req, res) => {
+const rechazarEventoSchema = z.object({
+  motivo: z.string().trim().optional()
+});
+r.patch('/:id/rechazar', validar(rechazarEventoSchema), (req, res) => {
   if (!esPastor(req.user.persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, req.user.iglesia_id);
   if (!ev) return res.status(404).json({ error: 'No encontrado' });
-  const motivo = (req.body || {}).motivo;
+  const motivo = req.body.motivo;
   db.prepare("UPDATE evento SET estado = 'rechazado' WHERE id = ?").run(ev.id);
   if (ev.creado_por) {
     db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
@@ -180,12 +192,20 @@ r.get('/historial/aprobaciones', (req, res) => {
 });
 
 // --- Editar evento ---
-r.patch('/:id', (req, res) => {
+const editarEventoSchema = z.object({
+  titulo: z.string().trim().optional(),
+  fecha: z.string().trim().optional(),
+  hora_inicio: z.string().trim().optional(),
+  hora_fin: z.string().trim().optional(),
+  lugar: z.string().trim().optional(),
+  descripcion: z.string().trim().optional()
+});
+r.patch('/:id', validar(editarEventoSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'No encontrado' });
   if (!puedeGestionar(persona_id, ev)) return res.status(403).json({ error: 'No tienes permiso' });
-  const { titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body || {};
+  const { titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body;
   db.prepare('UPDATE evento SET titulo=?, fecha=?, hora_inicio=?, hora_fin=?, lugar=?, descripcion=? WHERE id=?')
     .run(titulo || ev.titulo, fecha || ev.fecha, hora_inicio || null, hora_fin || null, lugar || null, descripcion || null, ev.id);
   auditar(iglesia_id, persona_id, 'editar_evento', 'calendario', ev.titulo);

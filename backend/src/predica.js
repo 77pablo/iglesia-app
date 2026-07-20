@@ -4,9 +4,11 @@
 //  El pastor asigna el rol 'predicador' a un feligrés entre dos fechas.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, esPredicador, auditar } from './auth.js';
 import { enviarPush } from './push.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -43,19 +45,30 @@ function soloPredicador(req, res, next) {
   next();
 }
 
-r.post('/', soloPredicador, (req, res) => {
-  const { titulo, fecha, predicador, notas } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el nombre de la prédica' });
+const crearPredicaSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el nombre de la predica'),
+  fecha: z.string().trim().optional(),
+  predicador: z.string().trim().optional(),
+  notas: z.string().trim().optional()
+});
+r.post('/', soloPredicador, validar(crearPredicaSchema), (req, res) => {
+  const { titulo, fecha, predicador, notas } = req.body;
   const info = db.prepare('INSERT INTO predica (iglesia_id, titulo, fecha, predicador, notas, creado_por) VALUES (?,?,?,?,?,?)')
     .run(req.user.iglesia_id, String(titulo).trim(), fecha || null, predicador || null, notas || null, req.user.persona_id);
   auditar(req.user.iglesia_id, req.user.persona_id, 'crear_predica', 'predica', String(titulo).trim());
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
-r.patch('/:id', soloPredicador, (req, res) => {
+const editarPredicaSchema = z.object({
+  titulo: z.string().trim().optional(),
+  fecha: z.string().trim().optional(),
+  predicador: z.string().trim().optional(),
+  notas: z.string().trim().optional()
+});
+r.patch('/:id', soloPredicador, validar(editarPredicaSchema), (req, res) => {
   const p = db.prepare('SELECT * FROM predica WHERE id = ? AND iglesia_id = ?').get(req.params.id, req.user.iglesia_id);
   if (!p) return res.status(404).json({ error: 'No encontrada' });
-  const { titulo, fecha, predicador, notas } = req.body || {};
+  const { titulo, fecha, predicador, notas } = req.body;
   db.prepare('UPDATE predica SET titulo=?, fecha=?, predicador=?, notas=? WHERE id=?')
     .run(titulo ?? p.titulo, fecha ?? p.fecha, predicador ?? p.predicador, notas ?? p.notas, p.id);
   res.json({ ok: true });
@@ -70,11 +83,15 @@ r.delete('/:id', soloPredicador, (req, res) => {
 });
 
 // ---------- RECURSOS DE UNA PRÉDICA (links / archivos / libros) ----------
-r.post('/:id/recurso', soloPredicador, (req, res) => {
+const recursoPredicaSchema = z.object({
+  tipo: z.string().trim().optional(),
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  url: z.string().trim().optional()
+});
+r.post('/:id/recurso', soloPredicador, validar(recursoPredicaSchema), (req, res) => {
   const p = db.prepare('SELECT id FROM predica WHERE id = ? AND iglesia_id = ?').get(req.params.id, req.user.iglesia_id);
   if (!p) return res.status(404).json({ error: 'No encontrada' });
-  const { tipo, titulo, url } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el título' });
+  const { tipo, titulo, url } = req.body;
   const t = ['link', 'archivo', 'libro'].includes(tipo) ? tipo : 'link';
   db.prepare('INSERT INTO predica_recurso (predica_id, tipo, titulo, url) VALUES (?,?,?,?)')
     .run(p.id, t, String(titulo).trim(), url || null);
@@ -89,12 +106,16 @@ r.delete('/recurso/:rid', soloPredicador, (req, res) => {
 });
 
 // ---------- GESTIÓN DEL ROL PREDICADOR (solo el pastor) ----------
-r.post('/predicadores', (req, res) => {
+const predicadorSchema = z.object({
+  persona_id: z.coerce.number().int().positive('falta la persona'),
+  desde: z.string().trim().min(1, 'indica desde que fecha'),
+  hasta: z.string().trim().min(1, 'indica hasta que fecha')
+});
+r.post('/predicadores', validar(predicadorSchema), (req, res) => {
   if (!esPastor(req.user.persona_id)) return res.status(403).json({ error: 'Solo el pastor asigna predicadores' });
-  const { persona_id, desde, hasta } = req.body || {};
+  const { persona_id, desde, hasta } = req.body;
   const persona = db.prepare('SELECT id, nombre FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1').get(persona_id, req.user.iglesia_id);
   if (!persona) return res.status(404).json({ error: 'Persona no encontrada' });
-  if (!desde || !hasta) return res.status(400).json({ error: 'Indica desde y hasta qué fecha' });
   db.prepare('INSERT INTO rol_temporal (iglesia_id, persona_id, rol, desde, hasta, creado_por) VALUES (?,?,?,?,?,?)')
     .run(req.user.iglesia_id, persona.id, 'predicador', desde, hasta, req.user.persona_id);
   const txtPred = `Del ${desde} al ${hasta} puedes gestionar el módulo Predica.`;

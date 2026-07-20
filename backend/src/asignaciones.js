@@ -3,9 +3,11 @@
 //  El pastor/lider asigna servicios; la persona acepta o no.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin, auditar } from './auth.js';
 import { enviarPush } from './push.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -23,11 +25,14 @@ r.get('/mio', (req, res) => {
 });
 
 // --- ASIGNAR un servicio (lider/pastor) ---
-r.post('/', (req, res) => {
+const asignarSchema = z.object({
+  evento_id: z.coerce.number().int().positive('falta el evento'),
+  persona_id: z.coerce.number().int().positive('falta la persona'),
+  tipo: z.enum(TIPOS)
+});
+r.post('/', validar(asignarSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
-  const { evento_id, persona_id: aPersona, tipo } = req.body || {};
-  if (!evento_id || !aPersona || !tipo) return res.status(400).json({ error: 'Faltan datos' });
-  if (!TIPOS.includes(tipo)) return res.status(400).json({ error: 'Tipo de servicio inválido' });
+  const { evento_id, persona_id: aPersona, tipo } = req.body;
   if (!esLiderOAdmin(persona_id)) return res.status(403).json({ error: 'No tienes permiso para asignar' });
 
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(evento_id, iglesia_id);
@@ -59,9 +64,13 @@ r.post('/', (req, res) => {
 });
 
 // --- ACEPTAR / NO PUEDO (solo el asignado) ---
-r.patch('/:id', (req, res) => {
+const responderAsignacionSchema = z.object({
+  accion: z.string().trim().optional(),
+  motivo: z.string().trim().optional()
+});
+r.patch('/:id', validar(responderAsignacionSchema), (req, res) => {
   const { persona_id } = req.user;
-  const { accion, motivo } = req.body || {};
+  const { accion, motivo } = req.body;
   const a = db.prepare('SELECT * FROM asignacion WHERE id = ?').get(req.params.id);
   if (!a) return res.status(404).json({ error: 'Asignación no encontrada' });
   if (a.persona_id !== persona_id) return res.status(403).json({ error: 'No es tu asignación' });

@@ -2,9 +2,11 @@
 //  Modulo B: Anuncios + Notificaciones  -  Fase 1B
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin, esPastor, auditar } from './auth.js';
 import { notificarSegmento, etiquetaSegmento } from './notificaciones.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -28,10 +30,20 @@ r.get('/', (req, res) => {
 
 // --- Publicar anuncio (solo lider/pastor) ---
 // body: { titulo, texto, urgente, segmento:{tipo:'todos'|'grupo'|'rol', grupo_id?, rol?} }
-r.post('/', (req, res) => {
+const segmentoSchema = z.object({
+  tipo: z.enum(['todos', 'grupo', 'rol']).optional(),
+  grupo_id: z.coerce.number().int().positive().optional(),
+  rol: z.string().trim().optional()
+}).optional();
+const publicarAnuncioSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  texto: z.string().trim().optional(),
+  urgente: z.boolean().optional(),
+  segmento: segmentoSchema
+});
+r.post('/', validar(publicarAnuncioSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
-  const { titulo, texto, urgente, segmento } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el título' });
+  const { titulo, texto, urgente, segmento } = req.body;
   if (!esLiderOAdmin(persona_id))
     return res.status(403).json({ error: 'No tienes permiso para publicar anuncios' });
 
@@ -57,12 +69,17 @@ r.post('/', (req, res) => {
 });
 
 // --- Editar anuncio (pastor o autor) ---
-r.patch('/:id', (req, res) => {
+const editarAnuncioSchema = z.object({
+  titulo: z.string().trim().optional(),
+  texto: z.string().trim().optional(),
+  urgente: z.boolean().optional()
+});
+r.patch('/:id', validar(editarAnuncioSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const a = db.prepare('SELECT * FROM anuncio WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!a) return res.status(404).json({ error: 'No encontrado' });
   if (!(esPastor(persona_id) || a.creado_por === persona_id)) return res.status(403).json({ error: 'No tienes permiso' });
-  const { titulo, texto, urgente } = req.body || {};
+  const { titulo, texto, urgente } = req.body;
   db.prepare('UPDATE anuncio SET titulo=?, texto=?, urgente=? WHERE id=?')
     .run(titulo || a.titulo, texto || null, urgente ? 1 : 0, a.id);
   res.json({ ok: true });

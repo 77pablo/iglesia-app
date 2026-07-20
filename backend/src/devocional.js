@@ -6,8 +6,10 @@
 //  Aislamiento por iglesia_id.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin, esPastor } from './auth.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -35,12 +37,17 @@ r.get('/:id', (req, res) => {
 });
 
 // --- Crear devocional (solo lider/pastor) ---
-r.post('/', (req, res) => {
+const crearDevocionalSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  fecha: z.string().trim().optional(),
+  texto_base: z.string().trim().optional(),
+  contenido: z.string().trim().optional()
+});
+r.post('/', validar(crearDevocionalSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   if (!esLiderOAdmin(persona_id))
     return res.status(403).json({ error: 'No tienes permiso para publicar devocionales' });
-  const { titulo, fecha, texto_base, contenido } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el título' });
+  const { titulo, fecha, texto_base, contenido } = req.body;
   const info = db.prepare(
     'INSERT INTO devocional (iglesia_id, titulo, fecha, texto_base, contenido, creado_por) VALUES (?,?,?,?,?,?)'
   ).run(iglesia_id, titulo, fecha || null, texto_base || null, contenido || null, persona_id);
@@ -48,13 +55,19 @@ r.post('/', (req, res) => {
 });
 
 // --- Editar devocional (pastor o autor) ---
-r.patch('/:id', (req, res) => {
+const editarDevocionalSchema = z.object({
+  titulo: z.string().trim().optional(),
+  fecha: z.string().trim().optional(),
+  texto_base: z.string().trim().optional(),
+  contenido: z.string().trim().optional()
+});
+r.patch('/:id', validar(editarDevocionalSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const d = db.prepare('SELECT * FROM devocional WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!d) return res.status(404).json({ error: 'No encontrado' });
   if (!(esPastor(persona_id) || d.creado_por === persona_id))
     return res.status(403).json({ error: 'No tienes permiso' });
-  const { titulo, fecha, texto_base, contenido } = req.body || {};
+  const { titulo, fecha, texto_base, contenido } = req.body;
   db.prepare('UPDATE devocional SET titulo=?, fecha=?, texto_base=?, contenido=? WHERE id=?')
     .run(titulo || d.titulo, fecha ?? d.fecha, texto_base ?? d.texto_base, contenido ?? d.contenido, d.id);
   res.json({ ok: true });

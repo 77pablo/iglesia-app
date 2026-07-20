@@ -135,3 +135,21 @@ test('POST /api/login: al superar 5 peticiones/IP en la ventana, responde 429', 
   const body = await r.json();
   assert.ok(body.error);
 });
+
+test('POST /api/cuenta/recuperar comparte el limitador de login (5/IP/15min) y ya esta agotado', async () => {
+  // cuenta.js monta limiterLogin (el mismo limitador de /api/login, no una
+  // copia) en /recuperar y /recuperar/confirmar: son rutas PUBLICAS y con el
+  // mismo perfil de riesgo (fuerza bruta / enumeracion) que el login. Como
+  // express-rate-limit cuenta por IP (no por ruta), y el test anterior ya
+  // agoto la ventana de esta IP contra /api/login, esta peticion a
+  // /recuperar debe llegar YA bloqueada con 429 -- lo que demuestra que el
+  // limitador esta realmente activo en esta ruta (y no solo en login).
+  const r = await fetch(`${BASE}/api/cuenta/recuperar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'no-es-un-correo' })
+  });
+  assert.equal(r.status, 429);
+  const body = await r.json();
+  assert.ok(body.error);
+});
