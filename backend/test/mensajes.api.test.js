@@ -34,3 +34,44 @@ test('el app responde /api/health', async () => {
   assert.equal(r.status, 200);
   assert.equal((await r.json()).ok, true);
 });
+
+test('1:1 + envio + listado', async () => {
+  // lider abre 1:1 con miembro1
+  let res = await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) });
+  assert.equal(res.status, 200);
+  const conv = await res.json();
+  assert.ok(conv.id);
+
+  // llamar de nuevo devuelve la MISMA conversacion (no duplica)
+  res = await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ persona_id: SEM.lider.id }) });
+  assert.equal((await res.json()).id, conv.id);
+
+  // ajeno NO puede abrir 1:1 con miembro1
+  res = await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.ajeno), body: JSON.stringify({ persona_id: SEM.miembro1.id }) });
+  assert.equal(res.status, 403);
+
+  // enviar mensaje
+  res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'Hola!' }) });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).mensaje.texto, 'Hola!');
+
+  // mensaje vacio sin adjunto -> 400
+  res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: '   ' }) });
+  assert.equal(res.status, 400);
+
+  // no-miembro no puede leer la conversacion
+  res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, { headers: H(SEM.ajeno) });
+  assert.equal(res.status, 403);
+
+  // listar: el miembro ve el mensaje
+  res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, { headers: H(SEM.miembro1) });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.mensajes.length, 1);
+  assert.equal(data.mensajes[0].texto, 'Hola!');
+});
