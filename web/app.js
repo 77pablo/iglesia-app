@@ -443,7 +443,7 @@ function closeSidebar(){ $('sidebar').classList.remove('open'); $('overlay').cla
 // ============================================================
 async function renderDashboard(){
   const c=$('content');
-  c.innerHTML=`<div class="hero"><h2>Hola, ${ME.persona.nombre.split(' ')[0]} 👋</h2>
+  c.innerHTML=`<div class="hero"><h2>Hola, ${escHtml(ME.persona.nombre.split(' ')[0])} 👋</h2>
     <p>${ME.iglesia?ME.iglesia.nombre:''} · ${$('u-rol').textContent}</p></div>
     <div id="dash" class="muted small" style="margin-top:18px">Cargando…</div>`;
 
@@ -464,7 +464,7 @@ async function renderDashboard(){
     <div class="widget" style="cursor:pointer" onclick="navTo('calendario')">
       <div class="widget-head">📅 Próximo evento</div>
       ${proximo
-        ? `<div class="stat-num" style="font-size:22px">${fechaTxt(proximo.fecha)}</div><div class="muted small">${proximo.titulo}${proximo.hora_inicio?' · '+proximo.hora_inicio:''}</div>`
+        ? `<div class="stat-num" style="font-size:22px">${fechaTxt(proximo.fecha)}</div><div class="muted small">${escHtml(proximo.titulo)}${proximo.hora_inicio?' · '+escHtml(proximo.hora_inicio):''}</div>`
         : '<div class="empty">Sin eventos próximos</div>'}
     </div>
     <div class="widget" style="cursor:pointer" onclick="navTo('mi_servicio')">
@@ -619,7 +619,7 @@ function renderCalendario(){
       const col=e.grupo_color||'var(--primary)';
       const pend=e.estado && e.estado!=='aprobado';
       return `<div class="cal-ev${pend?' pend':''}" style="border-left-color:${col}"
-        title="${(e.titulo||'').replace(/"/g,'&quot;')}${e.grupo?' · '+e.grupo:''}${e.hora_inicio?' · '+e.hora_inicio:''}"
+        title="${escHtml(e.titulo)}${e.grupo?' · '+escHtml(e.grupo):''}${e.hora_inicio?' · '+escHtml(e.hora_inicio):''}"
         onclick="event.stopPropagation();abrirEvento(${e.id})">${e.hora_inicio?'<b>'+e.hora_inicio+'</b> ':''}${escHtml(e.titulo)}</div>`;
     }).join('');
     const mas=delDia.length>3?`<div class="cal-mas">+${delDia.length-3} más</div>`:'';
@@ -775,7 +775,7 @@ async function toggleFormAnuncio(a){
   }
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${a?'Editar anuncio':'Nuevo anuncio'}</h3>
     <label>Título</label><input id="an-titulo" value="${a?v(a.titulo):''}" placeholder="Título" />
-    <label>Mensaje</label><textarea id="an-texto" rows="3" placeholder="Mensaje (opcional)">${a&&a.texto?a.texto:''}</textarea>
+    <label>Mensaje</label><textarea id="an-texto" rows="3" placeholder="Mensaje (opcional)">${escHtml(a&&a.texto?a.texto:'')}</textarea>
     ${segHtml}
     <label class="check"><input type="checkbox" id="an-urgente" ${a&&a.urgente?'checked':''}/> 🔴 Marcar como urgente</label>
     <p id="an-error" class="error"></p>
@@ -830,14 +830,14 @@ async function vistaMiServicio(){
         <button class="btn small-btn" onclick="responder(${a.id},'aceptar')">✅ Acepto</button>
         <button class="btn ghost small-btn" onclick="responder(${a.id},'rechazar')">❌ No puedo</button></div>`:'';
       return `<div class="item-card"><div class="item-titulo">${TIPO_ICON[a.tipo]||'📋'} ${cap(a.tipo)}</div>
-        <div class="muted small">${escHtml(a.evento)} · ${fechaTxt(a.fecha)}${a.lugar?' · 📍 '+a.lugar:''}</div>
-        <span class="estado-chip estado-${a.estado}">${si} ${sl}${a.motivo?' · '+a.motivo:''}</span>${acc}</div>`;
+        <div class="muted small">${escHtml(a.evento)} · ${fechaTxt(a.fecha)}${a.lugar?' · 📍 '+escHtml(a.lugar):''}</div>
+        <span class="estado-chip estado-${a.estado}">${si} ${sl}${a.motivo?' · '+escHtml(a.motivo):''}</span>${acc}</div>`;
     }).join('')+'</div>';
   }
   // 2) Me toca tocar (grupo de alabanza)
   if(musica.length){
     html+='<h3 class="section-title">🎵 Me toca tocar</h3><div class="list" style="margin-bottom:18px">'+musica.map(m=>
-      `<div class="item-card flex"><div style="flex:1"><div class="item-titulo">${m.instrumento||'Música'} · ${escHtml(m.titulo)}</div>
+      `<div class="item-card flex"><div style="flex:1"><div class="item-titulo">${escHtml(m.instrumento||'Música')} · ${escHtml(m.titulo)}</div>
         <div class="muted small">📅 ${fechaTxt(m.fecha)}${m.hora_inicio?' · 🕐 '+m.hora_inicio:''}</div></div>
         <button class="btn ghost small-btn" onclick="navTo('musicos')">Ver detalles ›</button></div>`).join('')+'</div>';
   }
@@ -868,7 +868,7 @@ async function vistaServicio(){
   try{
     const [eventos,personas]=await Promise.all([api('/eventos'),api('/personas')]);
     const ev=eventos.map(e=>`<option value="${e.id}">${escHtml(e.titulo)} (${fechaTxt(e.fecha)})</option>`).join('');
-    const ps=personas.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+    const ps=personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
     $('sv').innerHTML=`<div class="card" style="max-width:480px">
       <h3 style="margin-bottom:4px">Asignar un servicio</h3>
       <label>Evento</label><select id="sv-ev">${ev}</select>
@@ -976,7 +976,7 @@ function renderHoja(d){
 function filaAsist(m, on){
   const editable = window._puedeEditar;
   return `<div class="asist-row ${on?'on':''}" ${editable?`onclick="togglePresente(${m.id})"`:'style="cursor:default"'}>
-    <div><div>${escHtml(m.nombre)}</div>${m.grupos?`<div class="muted small">🏷️ ${m.grupos}</div>`:''}</div>
+    <div><div>${escHtml(m.nombre)}</div>${m.grupos?`<div class="muted small">🏷️ ${escHtml(m.grupos)}</div>`:''}</div>
     <span class="tick">${on?'✅':'○'}</span></div>`;
 }
 function renderListasAsist(){
@@ -1324,7 +1324,7 @@ function renderCanciones(q){
   cont.className='list';
   const puede=esLiderMusicaUI();
   cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1;cursor:pointer" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
-    <span class="estado-chip">${c.tono||'—'}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></div>
+    <span class="estado-chip">${escHtml(c.tono||'—')}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></div>
     ${puede?`<button class="link" style="color:var(--red)" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
 }
 function borrarCancion(id){ modalConfirm('¿Eliminar esta canción del cancionero?', async()=>{
@@ -1353,12 +1353,12 @@ async function cargarSetlist(eventoId){
     let html = items.length
       ? '<div class="list">'+items.map((s,i)=>`<div class="item-card flex">
           <span class="mini-date" style="min-width:34px"><b>${i+1}</b></span>
-          <div style="flex:1;cursor:pointer" onclick="abrirVisorSetlist(${s.cancion_id},'${(s.tono_dia||'').replace(/'/g,'')}')" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${s.tono_dia||s.tono||'—'}</span>${(s.letra||'').trim()?' 🎸':''}
+          <div style="flex:1;cursor:pointer" onclick="abrirVisorSetlist(${s.cancion_id},'${(s.tono_dia||'').replace(/'/g,'')}')" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
           <div class="muted small">${escHtml(s.autor||'')}</div></div>
           ${lider?`<button class="link" onclick="quitarSetlist(${s.id})">Quitar</button>`:''}</div>`).join('')+'</div>'
       : '<p class="muted small">Sin canciones en este servicio.</p>';
     if(lider){
-      const opts=(window._canciones||[]).map(c=>`<option value="${c.id}">${escHtml(c.titulo)} (${c.tono||'—'})</option>`).join('');
+      const opts=(window._canciones||[]).map(c=>`<option value="${c.id}">${escHtml(c.titulo)} (${escHtml(c.tono||'—')})</option>`).join('');
       html+=`<div class="row" style="margin-top:12px"><select id="set-cancion">${opts}</select>
         <button class="btn small-btn" onclick="agregarSetlist()">Agregar</button></div>`;
     }
@@ -1387,7 +1387,7 @@ async function cargarPlan(eventoId){
           <input id="en-hora" type="time" value="${en.hora||''}" style="max-width:120px"/>
           <input id="en-lugar" placeholder="Lugar" value="${(en.lugar||'').replace(/"/g,'&quot;')}" style="max-width:180px"/>
           <button class="btn small-btn" onclick="guardarEnsayo()">Guardar ensayo</button></div>`
-      : (en.fecha? `<div class="muted small">🗓️ ${fechaTxt(en.fecha)}${en.hora?' · '+en.hora:''}${en.lugar?' · 📍 '+en.lugar:''}</div>`
+      : (en.fecha? `<div class="muted small">🗓️ ${fechaTxt(en.fecha)}${en.hora?' · '+escHtml(en.hora):''}${en.lugar?' · 📍 '+escHtml(en.lugar):''}</div>`
                  : '<div class="muted small">Ensayo sin agendar.</div>');
     // Equipo: una tarjeta por PERSONA, con todos sus instrumentos como chips
     const porPersona=new Map();
@@ -1400,15 +1400,15 @@ async function cargarPlan(eventoId){
       ? '<div class="list" style="margin-top:6px">'+[...porPersona.values()].map(p=>`<div class="item-card flex">
           <div style="flex:1"><b>${escHtml(p.nombre)}</b>
             <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;vertical-align:middle">${p.items.map(it=>
-              `<span class="estado-chip">${it.instrumento||'—'}${lider?` <span title="Quitar" style="cursor:pointer;color:var(--red);font-weight:700;margin-left:2px" onclick="quitarIntegrante(${it.id})">×</span>`:''}</span>`).join('')}</span>
+              `<span class="estado-chip">${escHtml(it.instrumento||'—')}${lider?` <span title="Quitar" style="cursor:pointer;color:var(--red);font-weight:700;margin-left:2px" onclick="quitarIntegrante(${it.id})">×</span>`:''}</span>`).join('')}</span>
           </div></div>`).join('')+'</div>'
       : '<p class="muted small" style="margin-top:6px">Aún no hay equipo asignado.</p>';
     // Form para agregar (solo líder)
     let addHtml='';
     if(lider){
       const personas=window._personasCache||(window._personasCache=await api('/personas'));
-      const popts=personas.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
-      const iopts=d.instrumentos.map(i=>`<option value="${i}">${i}</option>`).join('');
+      const popts=personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
+      const iopts=d.instrumentos.map(i=>`<option value="${escHtml(i)}">${escHtml(i)}</option>`).join('');
       addHtml=`<div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px">
         <select id="eq-persona" style="max-width:200px">${popts}</select>
         <select id="eq-inst" style="max-width:150px">${iopts}</select>
@@ -1452,8 +1452,8 @@ async function cargarMaterialMusica(){
         ? `<b style="cursor:pointer;color:var(--primary)" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</b>`
         : `<b>${escHtml(m.titulo)}</b>`;
       const sub = esHimnario
-        ? `<div class="muted small"><a href="javascript:abrirHimnario()">🔎 Abrir cancionero (buscar y transponer)</a> · <a href="${m.archivo_url}" target="_blank">descargar PDF</a></div>`
-        : `<div class="muted small">📎 <a href="${m.archivo_url}" target="_blank">Ver / descargar</a>${m.creado_en?' · '+fechaTxt(m.creado_en.slice(0,10)):''}</div>`;
+        ? `<div class="muted small"><a href="javascript:abrirHimnario()">🔎 Abrir cancionero (buscar y transponer)</a> · <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">descargar PDF</a></div>`
+        : `<div class="muted small">📎 <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">Ver / descargar</a>${m.creado_en?' · '+fechaTxt(m.creado_en.slice(0,10)):''}</div>`;
       return `<div class="item-card flex">
       <div style="flex:1">${titulo}${permanente?' <span class="estado-chip">📌 Fijo</span>':''}${sub}</div>
       ${puedeBorrar?`<button class="link" style="color:var(--red)" onclick="borrarMaterialMus(${m.id})">🗑️</button>`:''}</div>`;
@@ -1678,7 +1678,7 @@ async function toggleFormCaso(){
   const z=$('form-caso'); if(z.innerHTML){ z.innerHTML=''; return; }
   const personas=await api('/personas');
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>Nuevo caso</h3>
-    <label>Persona</label><select id="caso-persona">${personas.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')}</select>
+    <label>Persona</label><select id="caso-persona">${personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select>
     <label>Motivo</label><select id="caso-motivo">
       <option value="enfermo">🤒 Enfermo</option><option value="ausente">📉 Ausente</option>
       <option value="nuevo">🌱 Nuevo</option><option value="crisis">🆘 En crisis</option>
@@ -1754,7 +1754,7 @@ async function vistaTesoreria(){
       <div class="card" style="margin-bottom:18px"><div class="widget-head">🎯 Campañas</div>
         ${camps.length? camps.map(c=>{const pct=c.meta?Math.min(100,Math.round(c.recaudado/c.meta*100)):0;
           return `<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:14px">
-            <b>${c.nombre}</b><span class="muted">${money(c.recaudado)} / ${money(c.meta)}</span></div>
+            <b>${escHtml(c.nombre)}</b><span class="muted">${money(c.recaudado)} / ${money(c.meta)}</span></div>
             <div class="trend-track" style="margin-top:6px"><div class="trend-bar" style="width:${pct}%">${pct}%</div></div></div>`;}).join('')
           : '<p class="muted small">Sin campañas.</p>'}
       </div>
@@ -1772,7 +1772,7 @@ async function vistaTesoreria(){
 function filaMov(m){
   return `<div class="item-card flex">
     <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${cap(m.categoria||m.tipo)}</b>
-    <div class="muted small">${m.descripcion||''} · ${m.fecha}${m.comprobante_url?` · 📎 <a href="${m.comprobante_url}" target="_blank">comprobante</a>`:''}</div></div>
+    <div class="muted small">${escHtml(m.descripcion||'')} · ${escHtml(m.fecha)}${m.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(m.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div>
     <b style="color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
 }
 async function cargarMasMovimientos(){
@@ -1828,7 +1828,7 @@ async function cargarClases(){
     if(!cl.length){ c.className='muted'; c.innerHTML='<div class="placeholder"><div class="big">👶</div><p>No hay clases aún.</p></div>'; return; }
     c.className='grid';
     c.innerHTML=cl.map(x=>`<div class="module-card" onclick="vistaClase(${x.id},'${(x.nombre||'').replace(/['"\\]/g,'')}')">
-      <div class="icon">📚</div><div class="label">${x.nombre}</div>
+      <div class="icon">📚</div><div class="label">${escHtml(x.nombre)}</div>
       <div class="muted small">${x.edad||''} · ${x.ninos} niños</div></div>`).join('');
   }catch(e){ $('clases').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
@@ -1844,7 +1844,7 @@ async function guardarClase(){
 async function vistaClase(id,nombre){
   _claseActual=id;
   const editar=esLiderEdUI();
-  $('content').innerHTML=`<button class="link" onclick="vistaNinos()">‹ Clases</button><h2>📚 ${nombre||'Clase'}</h2>
+  $('content').innerHTML=`<button class="link" onclick="vistaNinos()">‹ Clases</button><h2>📚 ${escHtml(nombre||'Clase')}</h2>
     <div class="card" style="margin:12px 0"><div class="head-row"><h3 style="font-size:16px">📖 Material</h3>
       ${editar?`<button class="btn small-btn" onclick="formMaterial()">+ Lección</button>`:''}</div>
       <div id="form-material"></div><div id="material" class="muted">…</div></div>
@@ -1858,9 +1858,9 @@ async function vistaClase(id,nombre){
 async function cargarMaterial(){
   try{ const m=await api('/ninos/clase/'+_claseActual+'/material'); const c=$('material');
     c.className=m.length?'list':'muted';
-    c.innerHTML=m.length? m.map(x=>`<div class="item-card"><b>${x.titulo}</b>${x.fecha?' <span class="muted small">· '+fechaTxt(x.fecha)+'</span>':''}
-      ${x.versiculo?`<div class="muted small">📖 ${x.versiculo}</div>`:''}
-      ${x.material_url?`<div class="muted small">📎 <a href="${x.material_url}" target="_blank">Ver documento</a></div>`:''}</div>`).join('') : '<p class="small">Sin lecciones.</p>';
+    c.innerHTML=m.length? m.map(x=>`<div class="item-card"><b>${escHtml(x.titulo)}</b>${x.fecha?' <span class="muted small">· '+fechaTxt(x.fecha)+'</span>':''}
+      ${x.versiculo?`<div class="muted small">📖 ${escHtml(x.versiculo)}</div>`:''}
+      ${x.material_url?`<div class="muted small">📎 <a href="${escHtml(safeUrl(x.material_url))}" target="_blank">Ver documento</a></div>`:''}</div>`).join('') : '<p class="small">Sin lecciones.</p>';
   }catch{}
 }
 function formMaterial(){ const z=$('form-material'); if(z.innerHTML){z.innerHTML='';return;}
@@ -1921,6 +1921,9 @@ async function guardarAsistNinos(){
 //  Helper de escape para innerHTML (seguro)
 // ============================================================
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// Neutraliza URLs peligrosas (javascript:, data:, vbscript:) antes de ponerlas en un href.
+// Deja pasar http/https, rutas relativas y enlaces sin esquema (no rompe links legítimos).
+function safeUrl(u){ const s=String(u==null?'':u).trim(); return /^\s*(javascript|data|vbscript):/i.test(s) ? '#' : s; }
 
 // ============================================================
 //  MI GRUPO — centro del líder de cuerpo (ej. Jóvenes)
@@ -1940,7 +1943,7 @@ function renderMiGrupo(){
   const g=grupos.find(x=>x.id===_grupoSel)||grupos[0];
   window._grupoLider=!!g.soyLider;
   const sel = grupos.length>1
-    ? `<select onchange="_grupoSel=Number(this.value);renderMiGrupo()" style="max-width:220px">${grupos.map(x=>`<option value="${x.id}" ${x.id===g.id?'selected':''}>${x.nombre}</option>`).join('')}</select>`
+    ? `<select onchange="_grupoSel=Number(this.value);renderMiGrupo()" style="max-width:220px">${grupos.map(x=>`<option value="${x.id}" ${x.id===g.id?'selected':''}>${escHtml(x.nombre)}</option>`).join('')}</select>`
     : `<h2 style="margin:0">${escHtml(g.nombre)}</h2>`;
   $('mg').className='';
   $('mg').innerHTML=`
@@ -1948,7 +1951,7 @@ function renderMiGrupo(){
       ${g.soyLider?'<span class="estado-chip estado-aceptado">Líder</span>':'<span class="estado-chip">Miembro</span>'}</div>
     <div class="card" style="margin-bottom:16px"><div class="widget-head">📁 Carpeta de Google Drive</div>
       ${g.drive_url
-        ? `<a class="btn small-btn" href="${escHtml(g.drive_url)}" target="_blank" rel="noopener">Abrir carpeta en Drive ↗</a>`
+        ? `<a class="btn small-btn" href="${escHtml(safeUrl(g.drive_url))}" target="_blank" rel="noopener">Abrir carpeta en Drive ↗</a>`
         : `<p class="muted small">${g.soyLider?'Aún no has vinculado una carpeta.':'El líder aún no vinculó una carpeta de Drive.'}</p>`}
       ${g.soyLider?`<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap">
         <input id="mg-drive" placeholder="Pega el enlace de tu carpeta de Drive…" value="${escHtml(g.drive_url||'')}" style="flex:1;min-width:200px"/>
@@ -1981,7 +1984,7 @@ async function cargarAvisosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/avisos'); const c=$('mg-avisos'); const lider=window._grupoLider;
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin avisos todavía.</p>'; return; }
     c.className='list';
-    c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${a.texto||''}</div></div>${lider?`<button class="link" style="color:var(--red)" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${escHtml(a.texto||'')}</div></div>${lider?`<button class="link" style="color:var(--red)" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
   }catch{ $('mg-avisos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formAvisoGrupo(){ const z=$('mg-aviso-form'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2003,7 +2006,7 @@ async function cargarRecursosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/recursos'); const c=$('mg-recursos'); const lider=window._grupoLider;
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin recursos todavía.</p>'; return; }
     c.className='list';
-    c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${rc.url}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link" style="color:var(--red)" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${escHtml(safeUrl(rc.url))}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link" style="color:var(--red)" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
   }catch{ $('mg-recursos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formRecursoGrupo(){ const z=$('mg-rec-form'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2107,7 +2110,7 @@ function renderPredicas(items){
   c.className='list';
   c.innerHTML=items.map(p=>`<div class="item-card flex" style="cursor:pointer" onclick="verPredica(${p.id})">
     ${chipFecha(p.fecha||'')}<div style="flex:1"><div class="item-titulo">${escHtml(p.titulo)}</div>
-    <div class="muted small">${p.predicador?'🎤 '+p.predicador:''}${p.recursos?' · 📎 '+p.recursos+' recurso(s)':''}</div></div>
+    <div class="muted small">${p.predicador?'🎤 '+escHtml(p.predicador):''}${p.recursos?' · 📎 '+p.recursos+' recurso(s)':''}</div></div>
     <span class="muted" style="font-size:20px">›</span></div>`).join('');
 }
 async function verPredica(id){
@@ -2116,13 +2119,13 @@ async function verPredica(id){
   window._predActual=id; const edit=d.puedeEditar;
   const recs=(d.recursos||[]).map(r=>{
     const ic=r.tipo==='archivo'?'📎':r.tipo==='libro'?'📚':'🔗';
-    const link=r.url?`<a href="${escHtml(r.url)}" target="_blank">${r.tipo==='archivo'?'Abrir / descargar':'Abrir'}</a>`:'';
+    const link=r.url?`<a href="${escHtml(safeUrl(r.url))}" target="_blank">${r.tipo==='archivo'?'Abrir / descargar':'Abrir'}</a>`:'';
     return `<div class="item-card flex"><div style="flex:1"><b>${ic} ${escHtml(r.titulo)}</b> <span class="muted small">${link}</span></div>${edit?`<button class="link" style="color:var(--red)" onclick="borrarRecPredica(${r.id})">🗑️</button>`:''}</div>`;
   }).join('');
   $('prd').className='';
   $('prd').innerHTML=`<div class="card">
     <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link" style="color:var(--red)" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
-    <div class="muted small" style="margin-top:4px">${d.fecha?'📅 '+fechaTxt(d.fecha):''}${d.predicador?' · 🎤 '+d.predicador:''}</div>
+    <div class="muted small" style="margin-top:4px">${d.fecha?'📅 '+fechaTxt(d.fecha):''}${d.predicador?' · 🎤 '+escHtml(d.predicador):''}</div>
     ${d.notas?`<div style="margin-top:14px;white-space:pre-wrap;line-height:1.5">${escHtml(d.notas)}</div>`:'<p class="muted small" style="margin-top:10px">Sin notas.</p>'}
   </div>
   <div class="card" style="margin-top:16px"><div class="head-row"><h3 style="font-size:16px">📎 Recursos (links, archivos, libros)</h3>${edit?`<button class="btn small-btn" onclick="formRecPredica()">+ Recurso</button>`:''}</div>
@@ -2207,8 +2210,8 @@ async function vistaPanelObispo(){
     <div class="grid" style="margin-top:18px">${list.map(i=>`
       <div class="module-card" style="text-align:left;align-items:stretch" onclick="verIglesiaObispo(${i.id})">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div class="label" style="font-size:16px">⛪ ${i.nombre}</div><span class="estado-chip">${i.codigo_unico}</span></div>
-        <div class="muted small" style="margin:6px 0 10px">Pastor: ${i.pastor||'—'}</div>
+          <div class="label" style="font-size:16px">⛪ ${escHtml(i.nombre)}</div><span class="estado-chip">${escHtml(i.codigo_unico)}</span></div>
+        <div class="muted small" style="margin:6px 0 10px">Pastor: ${escHtml(i.pastor||'—')}</div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
           <span class="estado-chip">👥 ${i.miembros}</span>
           <span class="estado-chip">📅 ${i.eventos}</span>
@@ -2223,12 +2226,12 @@ async function verIglesiaObispo(id, mes){
   let d; try{ d=await api('/obispo/iglesia/'+id+(_obMes?('?mes='+_obMes):'')); }catch(e){ $('obd').innerHTML='<p class="error">'+e.message+'</p>'; return; }
   _obMes=d.mes;
   const igs=window._obIglesias||[];
-  const selIglesia=`<select onchange="verIglesiaObispo(Number(this.value))" style="max-width:220px">${igs.map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${i.nombre}</option>`).join('')}</select>`;
+  const selIglesia=`<select onchange="verIglesiaObispo(Number(this.value))" style="max-width:220px">${igs.map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${escHtml(i.nombre)}</option>`).join('')}</select>`;
   const card=(titulo,inner)=>`<div class="card" style="margin-bottom:16px"><div class="widget-head">${titulo}</div>${inner}</div>`;
   const lista=(arr,fn,vacio)=>arr.length?'<div class="list" style="margin-top:6px">'+arr.map(fn).join('')+'</div>':`<p class="muted small">${vacio}</p>`;
   $('obd').className='';
   $('obd').innerHTML=`
-    <div class="hero"><h2>⛪ ${d.iglesia.nombre}</h2><p>${d.iglesia.codigo_unico} · Pastor: ${d.pastor} · 👁️ informe mensual (solo lectura)</p></div>
+    <div class="hero"><h2>⛪ ${escHtml(d.iglesia.nombre)}</h2><p>${escHtml(d.iglesia.codigo_unico)} · Pastor: ${escHtml(d.pastor)} · 👁️ informe mensual (solo lectura)</p></div>
     <div class="head-row" style="margin:16px 0;gap:10px;flex-wrap:wrap;align-items:center">
       <span class="muted small">Iglesia:</span> ${selIglesia}
       <span class="muted small" style="margin-left:8px">Mes:</span>
@@ -2240,15 +2243,15 @@ async function verIglesiaObispo(id, mes){
       <div class="widget" style="cursor:pointer" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green)':'var(--red)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></div>
     </div>
     ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${id})">Ver movimientos ›</button>`)}
-    ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${e.grupo||''} · ${e.estado}</div></div><span class="estado-chip">✅ ${e.asistencia}</span></div>`, 'Sin eventos este mes.'))}
-    ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<div class="item-card flex" style="cursor:pointer" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${p.predicador||''}</div></div><span class="muted" style="font-size:18px">›</span></div>`, 'Sin prédicas este mes.'))}
+    ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${escHtml(e.grupo||'')} · ${escHtml(e.estado)}</div></div><span class="estado-chip">✅ ${e.asistencia}</span></div>`, 'Sin eventos este mes.'))}
+    ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<div class="item-card flex" style="cursor:pointer" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${escHtml(p.predicador||'')}</div></div><span class="muted" style="font-size:18px">›</span></div>`, 'Sin prédicas este mes.'))}
     <div class="widgets" style="margin-bottom:16px">
       <div class="widget"><div class="widget-head">📢 Anuncios (mes)</div><div class="stat-num">${d.anunciosMes}</div></div>
       <div class="widget"><div class="widget-head">❤️ Casos de cuidado abiertos</div><div class="stat-num">${d.cuidado.casosAbiertos}</div></div>
       <div class="widget"><div class="widget-head">👶 Niños / clases</div><div class="stat-num">${d.ninos.ninos}</div><div class="muted small">${d.ninos.clases} clase(s)</div></div>
     </div>
     ${card('🧩 Grupos', lista(d.grupos, g=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(g.nombre)}</b></div><span class="estado-chip">👥 ${g.miembros}</span></div>`, 'Sin grupos.'))}
-    ${card('⭐ Líderes', lista(d.lideres, l=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(l.nombre)}</b><div class="muted small">${cap((l.rol||'').replace('_',' '))} · ${l.grupo}</div></div></div>`, 'Sin líderes.'))}`;
+    ${card('⭐ Líderes', lista(d.lideres, l=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(l.nombre)}</b><div class="muted small">${cap((l.rol||'').replace('_',' '))} · ${escHtml(l.grupo)}</div></div></div>`, 'Sin líderes.'))}`;
 }
 // --- Modal genérico de detalle (drill-down del obispo) ---
 function modalDetalle(titulo, html){
@@ -2264,7 +2267,7 @@ async function obTesoreria(id){
   try{ const m=await api('/obispo/iglesia/'+id+'/tesoreria'+_qmes());
     const ing=m.filter(x=>x.tipo==='ingreso').reduce((a,b)=>a+b.monto,0), gas=m.filter(x=>x.tipo==='gasto').reduce((a,b)=>a+b.monto,0);
     modalDetalle('💰 Movimientos · '+_obMes, m.length
-      ? `<div class="muted small" style="margin-bottom:10px">↑ ${money(ing)} · ↓ ${money(gas)} · balance ${money(ing-gas)}</div><div class="list">`+m.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.tipo==='ingreso'?'↑':'↓'} ${cap(x.categoria||x.tipo)}</b><div class="muted small">${escHtml(x.descripcion||'')} · ${x.fecha}${x.comprobante_url?` · 📎 <a href="${escHtml(x.comprobante_url)}" target="_blank">comprobante</a>`:''}</div></div><b style="color:${x.tipo==='ingreso'?'var(--green)':'var(--red)'}">${x.tipo==='ingreso'?'+':'−'}${money(x.monto)}</b></div>`).join('')+'</div>'
+      ? `<div class="muted small" style="margin-bottom:10px">↑ ${money(ing)} · ↓ ${money(gas)} · balance ${money(ing-gas)}</div><div class="list">`+m.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.tipo==='ingreso'?'↑':'↓'} ${cap(x.categoria||x.tipo)}</b><div class="muted small">${escHtml(x.descripcion||'')} · ${escHtml(x.fecha)}${x.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(x.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div><b style="color:${x.tipo==='ingreso'?'var(--green)':'var(--red)'}">${x.tipo==='ingreso'?'+':'−'}${money(x.monto)}</b></div>`).join('')+'</div>'
       : '<p class="muted small">Sin movimientos este mes.</p>');
   }catch(e){ toast(e.message); }
 }
@@ -2277,7 +2280,7 @@ async function obAsistencia(id){
 }
 async function obPredica(pid){
   try{ const p=await api('/obispo/predica/'+pid);
-    const recs=(p.recursos||[]).map(r=>`<div class="item-card flex"><div style="flex:1"><b>${r.tipo==='archivo'?'📎':r.tipo==='libro'?'📚':'🔗'} ${escHtml(r.titulo)}</b></div>${r.url?`<a href="${escHtml(r.url)}" target="_blank" class="link">abrir</a>`:''}</div>`).join('');
+    const recs=(p.recursos||[]).map(r=>`<div class="item-card flex"><div style="flex:1"><b>${r.tipo==='archivo'?'📎':r.tipo==='libro'?'📚':'🔗'} ${escHtml(r.titulo)}</b></div>${r.url?`<a href="${escHtml(safeUrl(r.url))}" target="_blank" class="link">abrir</a>`:''}</div>`).join('');
     modalDetalle('📖 '+escHtml(p.titulo), `<div class="muted small">${p.fecha?'📅 '+fechaTxt(p.fecha):''}${p.predicador?' · 🎤 '+escHtml(p.predicador):''}</div>${p.notas?`<div style="margin-top:12px;white-space:pre-wrap;line-height:1.5">${escHtml(p.notas)}</div>`:'<p class="muted small" style="margin-top:8px">Sin notas.</p>'}${recs?'<h3 class="section-title" style="margin-top:14px">Recursos</h3><div class="list">'+recs+'</div>':''}`);
   }catch(e){ toast(e.message); }
 }
@@ -3106,7 +3109,7 @@ const Chat = {
     const cuerpo=document.createElement('div');
     if(m.texto) cuerpo.appendChild(document.createTextNode(m.texto));
     if(m.adjunto_url){
-      const a=document.createElement('a'); a.className='adj'; a.href=m.adjunto_url; a.target='_blank'; a.rel='noopener';
+      const a=document.createElement('a'); a.className='adj'; a.href=safeUrl(m.adjunto_url); a.target='_blank'; a.rel='noopener';
       a.textContent='📎 archivo';
       cuerpo.appendChild(a);
     }
