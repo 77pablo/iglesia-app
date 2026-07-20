@@ -7,8 +7,10 @@
 //  Aislamiento por iglesia_id en todo.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderOAdmin, esPastor } from './auth.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -53,12 +55,20 @@ r.get('/:id', (req, res) => {
 
 // --- Publicar un bosquejo (solo lider/pastor) ---
 // body: { titulo, predicador, fecha, texto_base, bosquejo, puntos:[...], evento_id }
-r.post('/', (req, res) => {
+const publicarSermonSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  predicador: z.string().trim().optional(),
+  fecha: z.string().trim().optional(),
+  texto_base: z.string().trim().optional(),
+  bosquejo: z.string().trim().optional(),
+  puntos: z.array(z.string()).optional(),
+  evento_id: z.coerce.number().int().positive().optional()
+});
+r.post('/', validar(publicarSermonSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   if (!esLiderOAdmin(persona_id))
     return res.status(403).json({ error: 'No tienes permiso para publicar bosquejos' });
-  const { titulo, predicador, fecha, texto_base, bosquejo, puntos, evento_id } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el título' });
+  const { titulo, predicador, fecha, texto_base, bosquejo, puntos, evento_id } = req.body;
 
   // Si se asocia a un evento, debe ser de la misma iglesia.
   let evId = null;
@@ -77,13 +87,21 @@ r.post('/', (req, res) => {
 });
 
 // --- Editar bosquejo (pastor o autor) ---
-r.patch('/:id', (req, res) => {
+const editarSermonSchema = z.object({
+  titulo: z.string().trim().optional(),
+  predicador: z.string().trim().optional(),
+  fecha: z.string().trim().optional(),
+  texto_base: z.string().trim().optional(),
+  bosquejo: z.string().trim().optional(),
+  puntos: z.array(z.string()).optional()
+});
+r.patch('/:id', validar(editarSermonSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const s = db.prepare('SELECT * FROM sermon WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!s) return res.status(404).json({ error: 'No encontrado' });
   if (!(esPastor(persona_id) || s.creado_por === persona_id))
     return res.status(403).json({ error: 'No tienes permiso' });
-  const { titulo, predicador, fecha, texto_base, bosquejo, puntos } = req.body || {};
+  const { titulo, predicador, fecha, texto_base, bosquejo, puntos } = req.body;
   const puntosJson = Array.isArray(puntos) ? JSON.stringify(puntos.filter(x => x && x.trim()).map(x => x.trim())) : s.puntos;
   db.prepare(
     'UPDATE sermon SET titulo=?, predicador=?, fecha=?, texto_base=?, bosquejo=?, puntos=? WHERE id=?'
@@ -122,12 +140,16 @@ r.get('/notas/mias', (req, res) => {
 
 // --- Capturar / crear una nota personal ---
 // body: { sermon_id, texto, comentario, origen:'captura'|'propia' }
-r.post('/:id/notas', (req, res) => {
+const notaSchema = z.object({
+  texto: z.string().trim().min(1, 'falta el texto de la nota'),
+  comentario: z.string().trim().optional(),
+  origen: z.enum(['captura', 'propia']).optional()
+});
+r.post('/:id/notas', validar(notaSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const s = db.prepare('SELECT id FROM sermon WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!s) return res.status(404).json({ error: 'Sermón no encontrado' });
-  const { texto, comentario, origen } = req.body || {};
-  if (!texto || !texto.trim()) return res.status(400).json({ error: 'Falta el texto de la nota' });
+  const { texto, comentario, origen } = req.body;
   const info = db.prepare(
     'INSERT INTO nota_personal (iglesia_id, persona_id, sermon_id, texto, comentario, origen) VALUES (?,?,?,?,?,?)'
   ).run(iglesia_id, persona_id, s.id, texto.trim(), (comentario || '').trim() || null,
@@ -136,11 +158,15 @@ r.post('/:id/notas', (req, res) => {
 });
 
 // --- Editar una nota propia (texto/comentario) ---
-r.patch('/notas/:notaId', (req, res) => {
+const editarNotaSchema = z.object({
+  texto: z.string().trim().optional(),
+  comentario: z.string().trim().optional()
+});
+r.patch('/notas/:notaId', validar(editarNotaSchema), (req, res) => {
   const { persona_id } = req.user;
   const n = db.prepare('SELECT * FROM nota_personal WHERE id = ? AND persona_id = ?').get(req.params.notaId, persona_id);
   if (!n) return res.status(404).json({ error: 'Nota no encontrada' });
-  const { texto, comentario } = req.body || {};
+  const { texto, comentario } = req.body;
   db.prepare('UPDATE nota_personal SET texto=?, comentario=? WHERE id=?')
     .run(texto || n.texto, (comentario ?? n.comentario) || null, n.id);
   res.json({ ok: true });
