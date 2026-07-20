@@ -8,7 +8,7 @@ import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import multer from 'multer';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import db from './db.js';
 import { login, authMiddleware, getRoles, modulosVisibles, perfilPublico, auditar } from './auth.js';
 import eventosRouter from './eventos.js';
@@ -31,6 +31,7 @@ import obispoRouter from './obispo.js';
 import pushRouter from './push.js';
 import cuentaRouter from './cuenta.js';
 import adminRouter from './admin.js';
+import mensajesRouter from './mensajes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -191,6 +192,7 @@ app.use('/api/obispo', obispoRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/cuenta', cuentaRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/mensajes', mensajesRouter);
 
 // Lista de personas de la iglesia (para asignar servicios)
 app.get('/api/personas', authMiddleware, (req, res) => {
@@ -218,6 +220,9 @@ if (process.env.SEED_ON_EMPTY === '1') {
 }
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`[server] API escuchando en el puerto ${PORT}`);
-});
+const ejecutadoDirecto = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (ejecutadoDirecto) {
+  app.listen(PORT, () => console.log(`[server] API escuchando en el puerto ${PORT}`));
+}
+
+export { app };
