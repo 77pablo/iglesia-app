@@ -191,8 +191,17 @@ db.prepare("INSERT INTO mensaje (conversacion_id, persona_id, texto) VALUES (?,?
 // 18) Onboarding: Super-admin (rol_global='super_admin') — entra a /api/superadmin
 //     para crear nuevas iglesias + su pastor (con contrasena temporal).
 //     NO es el obispo: el obispo es solo-lectura sobre iglesias existentes.
-db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global) VALUES (?,?,?,?, 'super_admin')")
-  .run(iglesiaId, 'superadmin', 'Super Administrador', hashPassword('1234'));
+// El seed es SOLO para demo/tests. La contraseña se toma de SUPERADMIN_PASSWORD;
+// solo fuera de producción se admite un fallback fijo para pruebas locales. En
+// producción NO se debe ejecutar el seed (SEED_ON_EMPTY=0) ni sembrar claves fijas.
+const superadminPass = process.env.SUPERADMIN_PASSWORD
+  || (process.env.NODE_ENV !== 'production' ? '1234' : null);
+if (superadminPass) {
+  db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global) VALUES (?,?,?,?, 'super_admin')")
+    .run(iglesiaId, 'superadmin', 'Super Administrador', hashPassword(superadminPass));
+} else {
+  console.warn('[seed] super_admin NO sembrado: define SUPERADMIN_PASSWORD (no se usan claves fijas en producción).');
+}
 
 console.log('\n[seed] Datos de prueba creados:');
 console.log('  Iglesia: Monte Sion  (codigo: MONTESION)');

@@ -16,7 +16,13 @@ services:
       - key: JWT_SECRET
         generateValue: true          # Render genera un secreto seguro
       - key: SEED_ON_EMPTY
-        value: "1"                    # siembra datos de demo si la BD está vacía
+        value: "0"                    # NUNCA sembrar datos demo en producción (evita credenciales fijas expuestas)
+      # Contraseña del super_admin (dueño de la app). SECRETA: la define el dueño
+      # en Render → Environment (sync:false = no va en el repo). En cada arranque,
+      # server.js la usa para CREAR el super_admin si no existe, o ROTAR su clave
+      # si ya existe (así se elimina la antigua "1234"). Usa una contraseña fuerte.
+      - key: SUPERADMIN_PASSWORD
+        sync: false
       - key: DB_PATH
         value: /data/iglesia.db       # en free /data es EFÍMERO (se re-siembra al reiniciar)
       - key: UPLOADS_DIR
