@@ -64,8 +64,9 @@ r.post('/usuarios', validar(crearUsuarioSchema), (req, res) => {
   const { nombre, usuario, password, email } = req.body;
   const existe = db.prepare('SELECT 1 FROM persona WHERE iglesia_id = ? AND usuario = ?').get(ig, usuario);
   if (existe) return res.status(409).json({ error: 'Ya existe un usuario con ese nombre de usuario' });
+  // El pastor pone una contrasena TEMPORAL: la cuenta exige cambiarla en el primer ingreso.
   const info = db.prepare(
-    'INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, email, es_pastor, activo) VALUES (?,?,?,?,?,0,1)'
+    'INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, email, es_pastor, activo, debe_cambiar_pass) VALUES (?,?,?,?,?,0,1,1)'
   ).run(ig, usuario, nombre, hashPassword(String(password)), email ? String(email).trim() : null);
   auditar(ig, req.user.persona_id, 'crear_usuario', 'admin', `${nombre} (${usuario})`);
   res.json({ ok: true, id: info.lastInsertRowid });

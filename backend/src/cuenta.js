@@ -101,7 +101,9 @@ r.post('/recuperar/confirmar', limiterLogin, validar(confirmarSchema), (req, res
   ).get(code, mail);
   if (!fila) return res.status(400).json({ error: 'Código incorrecto o vencido' });
 
-  db.prepare('UPDATE persona SET password_hash = ? WHERE id = ?').run(hashPassword(String(nueva)), fila.persona_id);
+  // Limpia tambien el flag de "debe cambiar contrasena": este reseteo YA es
+  // un cambio de contrasena en toda regla (verificado por codigo al correo).
+  db.prepare('UPDATE persona SET password_hash = ?, debe_cambiar_pass = 0 WHERE id = ?').run(hashPassword(String(nueva)), fila.persona_id);
   db.prepare('UPDATE reset_codigo SET usado = 1 WHERE id = ?').run(fila.id);
   auditar(null, fila.persona_id, 'recuperar_password', 'cuenta');
   res.json({ ok: true });
@@ -126,7 +128,8 @@ r.patch('/password', validar(passwordSchema), (req, res) => {
   const p = db.prepare('SELECT password_hash FROM persona WHERE id = ?').get(req.user.persona_id);
   if (!p || !verifyPassword(String(actual || ''), p.password_hash))
     return res.status(403).json({ error: 'La contraseña actual no es correcta' });
-  db.prepare('UPDATE persona SET password_hash = ? WHERE id = ?').run(hashPassword(String(nueva)), req.user.persona_id);
+  // Limpia el flag de contrasena temporal (onboarding): ya cambio su contrasena.
+  db.prepare('UPDATE persona SET password_hash = ?, debe_cambiar_pass = 0 WHERE id = ?').run(hashPassword(String(nueva)), req.user.persona_id);
   auditar(req.user.iglesia_id, req.user.persona_id, 'cambiar_password', 'cuenta');
   res.json({ ok: true });
 });
