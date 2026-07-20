@@ -80,8 +80,10 @@ r.patch('/:id', validar(editarAnuncioSchema), (req, res) => {
   if (!a) return res.status(404).json({ error: 'No encontrado' });
   if (!(esPastor(persona_id) || a.creado_por === persona_id)) return res.status(403).json({ error: 'No tienes permiso' });
   const { titulo, texto, urgente } = req.body;
+  // PATCH parcial: un campo ausente (undefined) conserva el valor actual.
+  // 'urgente' distingue "no enviado" de "enviado como false" (ver auditoria backend.md #4).
   db.prepare('UPDATE anuncio SET titulo=?, texto=?, urgente=? WHERE id=?')
-    .run(titulo || a.titulo, texto || null, urgente ? 1 : 0, a.id);
+    .run(titulo ?? a.titulo, texto ?? a.texto, typeof urgente === 'boolean' ? (urgente ? 1 : 0) : a.urgente, a.id);
   res.json({ ok: true });
 });
 
