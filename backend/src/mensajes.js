@@ -5,12 +5,29 @@
 // ============================================================
 import { Router } from 'express';
 import db from './db.js';
-import { authMiddleware, esPastor, auditar, puedeIniciarChatCon } from './auth.js';
+import { authMiddleware, esPastor, auditar, puedeIniciarChatCon, verificarToken } from './auth.js';
 import { enviarPush } from './push.js';
-import { emitir, estaConectada } from './sse.js';
+import { emitir, estaConectada, registrar } from './sse.js';
 
 const r = Router();
 
+// --- STREAM SSE (sin authMiddleware: valida el token por query param) ---
+r.get('/stream', (req, res) => {
+  const payload = verificarToken(String(req.query.token || ''));
+  if (!payload) return res.status(401).json({ error: 'Token invalido' });
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.write(': conectado\n\n');
+  const baja = registrar(payload.persona_id, res);
+  const hb = setInterval(() => { try { res.write(': hb\n\n'); } catch {} }, 25000);
+  req.on('close', () => { clearInterval(hb); baja(); });
+});
+
+// A partir de aqui, todo requiere token en header
 r.use(authMiddleware);
 
 const LARGO_MAX = 4000;

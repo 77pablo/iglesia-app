@@ -159,3 +159,35 @@ test('moderacion: pastor borra en grupo pero no en 1:1', async () => {
   res = await fetch(base + `/api/mensajes/${gm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.miembro2) });
   assert.equal(res.status, 403);
 });
+
+test('SSE entrega en vivo un mensaje nuevo', async () => {
+  // 1:1 lider<->miembro1
+  const conv = await (await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
+
+  // miembro1 abre el stream (token por query, como hace el frontend)
+  const tk = signToken({ id: SEM.miembro1.id, iglesia_id: SEM.iglesiaId });
+  const ac = new AbortController();
+  const streamResp = await fetch(base + '/api/mensajes/stream?token=' + tk, { signal: ac.signal });
+  assert.match(streamResp.headers.get('content-type'), /text\/event-stream/);
+  const reader = streamResp.body.getReader();
+  const dec = new TextDecoder();
+
+  // dar un tick para que el server registre la conexion
+  await new Promise(r => setTimeout(r, 50));
+
+  // lider envia
+  await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'en vivo' }) });
+
+  // leer hasta encontrar el evento 'mensaje'
+  let buf = '', encontrado = false;
+  for (let i = 0; i < 20 && !encontrado; i++) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    if (/event: mensaje/.test(buf) && /en vivo/.test(buf)) encontrado = true;
+  }
+  ac.abort();
+  assert.ok(encontrado, 'llego el evento SSE con el mensaje');
+});
