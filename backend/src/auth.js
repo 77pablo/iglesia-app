@@ -33,9 +33,26 @@ export function verifyPassword(plano, hash) {
 // Recibe: codigo o nombre de iglesia, usuario, contrasena.
 // Devuelve: { token, persona } o lanza Error.
 export function login(iglesiaRef, usuario, password) {
+  const ref = String(iglesiaRef || '').trim();
+
+  // Login de super-admin SIN iglesia: en el lanzamiento real puede no existir
+  // ninguna iglesia todavía, así que el super-admin entra solo con usuario +
+  // contraseña (se busca su cuenta a nivel global). Un feligrés/pastor que deje
+  // la iglesia vacía no coincide aquí (no tiene rol_global='super_admin') y cae
+  // en el error genérico, sin filtrar información.
+  if (!ref) {
+    const admin = db.prepare(
+      "SELECT * FROM persona WHERE usuario = ? AND rol_global = 'super_admin' AND activo = 1"
+    ).get(usuario);
+    if (!admin || !verifyPassword(password, admin.password_hash))
+      throw new Error('Usuario o contrasena incorrectos');
+    const token = signToken(admin);
+    return { token, persona: perfilPublico(admin) };
+  }
+
   const iglesia = db.prepare(
     'SELECT * FROM iglesia WHERE codigo_unico = ? OR lower(nombre) = lower(?)'
-  ).get(iglesiaRef, iglesiaRef);
+  ).get(ref, ref);
   if (!iglesia) throw new Error('Iglesia no encontrada');
   if (!iglesia.activa) throw new Error('Esta iglesia está desactivada. Contacta al administrador.');
 

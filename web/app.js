@@ -92,6 +92,14 @@ function next(n){
   err(''); showStep(n);
 }
 function err(m){ $('error').textContent=m; }
+// Login del super-admin: NO tiene iglesia (en el lanzamiento real puede no
+// existir ninguna todavía). Salta el paso de iglesia dejándola vacía; el
+// backend lo reconoce por usuario + rol_global='super_admin'.
+function loginAdmin(){
+  $('iglesia').value='';
+  $('ig-label').textContent='· administrador';
+  err(''); showStep(2);
+}
 async function entrar(){
   const iglesia=$('iglesia').value.trim(), usuario=$('usuario').value.trim(), password=$('password').value;
   err('');

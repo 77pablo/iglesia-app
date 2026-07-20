@@ -165,7 +165,9 @@ app.get('/api/health', (req, res) => {
 // Rate limit: 5 intentos/IP cada 15 min (limiterLogin, express-rate-limit).
 // Validacion: zod exige los 3 campos como texto no vacio.
 const loginSchema = z.object({
-  iglesia: z.string().trim().min(1, 'falta la iglesia'),
+  // Vacío = login de super-admin (en lanzamiento real puede no existir aún
+  // ninguna iglesia). Los feligreses/pastores sí deben indicar su iglesia.
+  iglesia: z.string().trim().optional().default(''),
   usuario: z.string().trim().min(1, 'falta el usuario'),
   password: z.string().min(1, 'falta la contraseña')
 });

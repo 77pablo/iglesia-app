@@ -283,3 +283,53 @@ test('sin token: /api/superadmin/iglesias -> 401', async () => {
   const res = await fetch(base + '/api/superadmin/iglesias');
   assert.equal(res.status, 401);
 });
+
+// ------------------------------------------------------------
+// Login del super-admin SIN iglesia (en lanzamiento real puede no haber
+// ninguna iglesia todavia). Entra solo con usuario + contrasena.
+// ------------------------------------------------------------
+function sembrarSuperAdmin(usuario = 'root', pass = 'secreta123') {
+  db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, es_pastor, activo) VALUES (?,?,?,?, 'super_admin', 0, 1)"
+  ).run(SEM.iglesiaId, usuario, 'Root', hashPassword(pass));
+}
+
+test('POST /api/login: el super-admin entra SIN indicar iglesia (usuario + contraseña)', async () => {
+  sembrarSuperAdmin();
+  const res = await fetch(base + '/api/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'root', password: 'secreta123' }) // sin campo iglesia
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(body.token);
+  assert.equal(body.persona.usuario, 'root');
+  assert.equal(body.persona.rol_global, 'super_admin');
+});
+
+test('POST /api/login: super-admin con iglesia vacía ("") también entra', async () => {
+  sembrarSuperAdmin();
+  const res = await fetch(base + '/api/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ iglesia: '', usuario: 'root', password: 'secreta123' })
+  });
+  assert.equal(res.status, 200);
+});
+
+test('POST /api/login SIN iglesia: contraseña incorrecta -> 401', async () => {
+  sembrarSuperAdmin();
+  const res = await fetch(base + '/api/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'root', password: 'incorrecta' })
+  });
+  assert.equal(res.status, 401);
+});
+
+test('POST /api/login SIN iglesia: un usuario que NO es super-admin no entra (no filtra info)', async () => {
+  // 'pastor' existe (sembrarMinimo) pero no es super_admin: sin iglesia no debe entrar.
+  const res = await fetch(base + '/api/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'pastor', password: 'loquesea' })
+  });
+  assert.equal(res.status, 401);
+});
