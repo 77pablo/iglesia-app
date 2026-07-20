@@ -5,8 +5,10 @@
 //  Todo aislado por iglesia_id.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, esObispo, hashPassword, auditar } from './auth.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -40,14 +42,15 @@ r.get('/datos', (req, res) => {
 });
 
 // --- Crear usuario ---
-r.post('/usuarios', (req, res) => {
+const crearUsuarioSchema = z.object({
+  nombre: z.string().trim().min(1, 'falta el nombre'),
+  usuario: z.string().trim().min(1, 'falta el usuario'),
+  password: z.string().min(4, 'la contraseña debe tener al menos 4 caracteres'),
+  email: z.string().trim().email('correo invalido').optional().or(z.literal(''))
+});
+r.post('/usuarios', validar(crearUsuarioSchema), (req, res) => {
   const ig = req.user.iglesia_id;
-  let { nombre, usuario, password, email } = req.body || {};
-  nombre = String(nombre || '').trim();
-  usuario = String(usuario || '').trim();
-  if (!nombre || !usuario) return res.status(400).json({ error: 'Falta el nombre o el usuario' });
-  if (!password || String(password).length < 4) return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres' });
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) return res.status(400).json({ error: 'Correo inválido' });
+  const { nombre, usuario, password, email } = req.body;
   const existe = db.prepare('SELECT 1 FROM persona WHERE iglesia_id = ? AND usuario = ?').get(ig, usuario);
   if (existe) return res.status(409).json({ error: 'Ya existe un usuario con ese nombre de usuario' });
   const info = db.prepare(
@@ -63,12 +66,16 @@ function personaDeIglesia(id, ig) {
 }
 
 // --- Activar/desactivar o marcar/quitar pastor ---
-r.patch('/usuarios/:id', (req, res) => {
+const editarUsuarioSchema = z.object({
+  activo: z.boolean().optional(),
+  es_pastor: z.boolean().optional()
+});
+r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   const ig = req.user.iglesia_id;
   const p = personaDeIglesia(req.params.id, ig);
   if (!p) return res.status(404).json({ error: 'Usuario no encontrado' });
   const yo = req.user.persona_id;
-  const { activo, es_pastor } = req.body || {};
+  const { activo, es_pastor } = req.body;
   if (typeof activo === 'boolean') {
     if (p.id === yo && !activo) return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta' });
     db.prepare('UPDATE persona SET activo = ? WHERE id = ?').run(activo ? 1 : 0, p.id);
@@ -82,12 +89,15 @@ r.patch('/usuarios/:id', (req, res) => {
 });
 
 // --- Asignar un rol (en un grupo) a un usuario ---
-r.post('/usuarios/:id/rol', (req, res) => {
+const asignarRolSchema = z.object({
+  grupo_id: z.coerce.number().int().positive('grupo invalido'),
+  rol: z.enum(ROLES_GRUPO)
+});
+r.post('/usuarios/:id/rol', validar(asignarRolSchema), (req, res) => {
   const ig = req.user.iglesia_id;
   const p = personaDeIglesia(req.params.id, ig);
   if (!p) return res.status(404).json({ error: 'Usuario no encontrado' });
-  const { grupo_id, rol } = req.body || {};
-  if (!ROLES_GRUPO.includes(rol)) return res.status(400).json({ error: 'Rol inválido' });
+  const { grupo_id, rol } = req.body;
   const g = db.prepare('SELECT id, nombre FROM grupo WHERE id = ? AND iglesia_id = ?').get(grupo_id, ig);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   try {
@@ -115,24 +125,30 @@ r.delete('/rol/:pertenenciaId', (req, res) => {
 });
 
 // --- Crear grupo ---
-r.post('/grupos', (req, res) => {
+const crearGrupoSchema = z.object({
+  nombre: z.string().trim().min(1, 'falta el nombre del grupo'),
+  color: z.string().trim().optional()
+});
+r.post('/grupos', validar(crearGrupoSchema), (req, res) => {
   const ig = req.user.iglesia_id;
-  const nombre = String((req.body || {}).nombre || '').trim();
-  const color = String((req.body || {}).color || '').trim() || null;
-  if (!nombre) return res.status(400).json({ error: 'Falta el nombre del grupo' });
-  const info = db.prepare('INSERT INTO grupo (iglesia_id, nombre, color) VALUES (?,?,?)').run(ig, nombre, color);
+  const { nombre, color } = req.body;
+  const info = db.prepare('INSERT INTO grupo (iglesia_id, nombre, color) VALUES (?,?,?)').run(ig, nombre, color || null);
   auditar(ig, req.user.persona_id, 'crear_grupo', 'admin', nombre);
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
 // --- Editar grupo (nombre / color) ---
-r.patch('/grupos/:id', (req, res) => {
+const editarGrupoSchema = z.object({
+  nombre: z.string().trim().min(1).optional(),
+  color: z.string().trim().optional()
+});
+r.patch('/grupos/:id', validar(editarGrupoSchema), (req, res) => {
   const ig = req.user.iglesia_id;
   const g = db.prepare('SELECT * FROM grupo WHERE id = ? AND iglesia_id = ?').get(req.params.id, ig);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
-  const { nombre, color } = req.body || {};
+  const { nombre, color } = req.body;
   db.prepare('UPDATE grupo SET nombre = ?, color = ? WHERE id = ?')
-    .run(nombre != null ? String(nombre).trim() : g.nombre, color != null ? String(color).trim() : g.color, g.id);
+    .run(nombre != null ? nombre : g.nombre, color != null ? color : g.color, g.id);
   auditar(ig, req.user.persona_id, 'editar_grupo', 'admin', g.nombre);
   res.json({ ok: true });
 });
