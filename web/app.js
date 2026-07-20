@@ -353,6 +353,11 @@ const EMOJI_ICON={
   '🌙':_ic('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'),
   '🖥':_ic('<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>'),
   '📌':_ic('<line x1="12" y1="17" x2="12" y2="22"/><path d="M9 2h6l-1 7 3 3v2H7v-2l3-3z"/>'),
+  '🛡':NAV_ICON.superadmin,
+  '🎂':_ic('<path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s1-1 2.5-1 2.5 2 4 2 2.5-2 4-2 2.5 1 2.5 1"/><line x1="2" y1="21" x2="22" y2="21"/><path d="M7 8v2M12 8v2M17 8v2"/><path d="M7 4h.01M12 4h.01M17 4h.01"/>'),
+  '⛔':_ic('<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>'),
+  '🌐':_ic('<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'),
+  '🖨':_ic('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'),
 };
 const _EMOJI_RE=/\p{Extended_Pictographic}(\uFE0F|\u200D\p{Extended_Pictographic})*/gu;
 function _iconForGrapheme(g){
@@ -1462,7 +1467,7 @@ async function cargarMaterialMusica(){
 }
 function toggleFormMaterialMus(){
   const z=$('form-material-mus'); if(z.innerHTML){ z.innerHTML=''; return; }
-  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+  z.innerHTML=`<div class="form-panel">
     <input id="mm-titulo" placeholder="Título (ej. Acordes Cuán Grande es Él)"/>
     <label style="margin-top:10px">📎 Archivo (PDF, Word, imagen…)</label>
     <input id="mm-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"/>
@@ -1864,7 +1869,7 @@ async function cargarMaterial(){
   }catch{}
 }
 function formMaterial(){ const z=$('form-material'); if(z.innerHTML){z.innerHTML='';return;}
-  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+  z.innerHTML=`<div class="form-panel">
     <input id="m-titulo" placeholder="Título de la lección"/>
     <div class="row" style="margin-top:10px;align-items:center">${fechaSelectHTML('m','',{opcional:true})}<input id="m-vers" placeholder="Versículo"/></div>
     <label style="margin-top:10px">📎 Subir documento (PDF, imagen, Word…)</label>
@@ -1891,7 +1896,7 @@ async function cargarNinos(){
   }catch{}
 }
 function formNino(){ const z=$('form-nino'); if(z.innerHTML){z.innerHTML='';return;}
-  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+  z.innerHTML=`<div class="form-panel">
     <div class="row"><input id="n-nombre" placeholder="Nombre"/><input id="n-edad" type="number" placeholder="Edad" style="max-width:90px"/></div>
     <input id="n-familia" placeholder="Familia" style="margin-top:10px"/>
     <input id="n-alergias" placeholder="Alergias / notas" style="margin-top:10px"/>
@@ -1988,7 +1993,7 @@ async function cargarAvisosGrupo(){
   }catch{ $('mg-avisos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formAvisoGrupo(){ const z=$('mg-aviso-form'); if(z.innerHTML){z.innerHTML='';return;}
-  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+  z.innerHTML=`<div class="form-panel">
     <div class="row" style="gap:8px;align-items:center"><select id="ag-tipo" style="max-width:170px"><option value="aviso">📢 Aviso</option><option value="recordatorio">⏰ Recordatorio</option></select>
       ${fechaSelectHTML('ag','',{opcional:true})}</div>
     <input id="ag-titulo" placeholder="Título del aviso" style="margin-top:10px"/>
@@ -2010,7 +2015,7 @@ async function cargarRecursosGrupo(){
   }catch{ $('mg-recursos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formRecursoGrupo(){ const z=$('mg-rec-form'); if(z.innerHTML){z.innerHTML='';return;}
-  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+  z.innerHTML=`<div class="form-panel">
     <input id="rg-titulo" placeholder="Título (ej. Canción del campamento)"/>
     <div class="row" style="gap:8px;margin-top:10px">
       <select id="rg-tipo" onchange="_rgTipo(this.value)" style="max-width:140px"><option value="link">🔗 Link</option><option value="archivo">📎 Archivo</option></select>
@@ -2068,7 +2073,7 @@ function quitarMiembroGrupo(id,nombre){ modalConfirm('¿Quitar a '+nombre+' del 
 function formTareaGrupo(){ const z=$('mg-tarea-form'); if(z.innerHTML){z.innerHTML='';return;}
   const ms=window._mgMiembros||[];
   if(!ms.length){ z.innerHTML='<p class="muted small" style="margin-bottom:10px">Agrega miembros primero.</p>'; return; }
-  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+  z.innerHTML=`<div class="form-panel">
     <select id="tg-persona" style="max-width:220px">${ms.map(m=>`<option value="${m.id}">${escHtml(m.nombre)}</option>`).join('')}</select>
     <input id="tg-titulo" placeholder="Tarea (ej. Traer la ofrenda especial)" style="margin-top:10px"/>
     <textarea id="tg-detalle" placeholder="Detalle (opcional)" style="margin-top:10px"></textarea>
@@ -2524,7 +2529,7 @@ function renderAdmin(){
 // --- Crear usuario ---
 function adminFormUsuario(){
   const z=$('adm-userform'); if(z.innerHTML){ z.innerHTML=''; return; }
-  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+  z.innerHTML=`<div class="form-panel">
     <div class="row" style="gap:8px"><input id="au-nombre" placeholder="Nombre completo"/><input id="au-usuario" placeholder="Usuario (para entrar)"/></div>
     <div class="row" style="gap:8px;margin-top:8px">
       <input id="au-pass" type="text" placeholder="Contraseña inicial"/>
@@ -2579,7 +2584,7 @@ function adminFormGrupo(id){
   const z=$('adm-grupoform'); const g=id?(window._admin.grupos.find(x=>x.id===id)||{}):{};
   if(z.innerHTML && z.dataset.id===String(id)){ z.innerHTML=''; z.dataset.id=''; return; }
   z.dataset.id=String(id);
-  z.innerHTML=`<div style="background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px">
+  z.innerHTML=`<div class="form-panel">
     <div class="row" style="gap:8px">
       <input id="ag-nombre" placeholder="Nombre del grupo" value="${(g.nombre||'').replace(/"/g,'&quot;')}"/>
       <input id="ag-color" type="color" value="${g.color||'#1C61A6'}" style="max-width:60px;padding:4px"/></div>
