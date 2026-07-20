@@ -5,9 +5,11 @@
 //  Ver: miembros del grupo + el pastor (observa). Editar: el líder.
 // ============================================================
 import { Router } from 'express';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esEncargadoGrupo, esPastor, auditar } from './auth.js';
 import { enviarPush } from './push.js';
+import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -43,12 +45,14 @@ r.get('/mis', (req, res) => {
 });
 
 // --- Vincular / actualizar la carpeta de Google Drive del grupo (solo el líder) ---
-r.post('/:gid/drive', (req, res) => {
+const driveSchema = z.object({
+  url: z.string().trim().refine(u => u === '' || /^https?:\/\//i.test(u), 'Pega un enlace válido (https://…)').optional()
+});
+r.post('/:gid/drive', validar(driveSchema), (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   if (!esEncargadoGrupo(req.user.persona_id, g.id)) return res.status(403).json({ error: 'Solo el líder del grupo' });
-  let url = String((req.body || {}).url || '').trim();
-  if (url && !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Pega un enlace válido (https://…)' });
+  const url = String(req.body.url || '').trim();
   db.prepare('UPDATE grupo SET drive_url = ? WHERE id = ?').run(url || null, g.id);
   auditar(req.user.iglesia_id, req.user.persona_id, 'grupo_drive', 'grupo', g.nombre);
   res.json({ ok: true });
@@ -80,12 +84,15 @@ r.get('/:gid/candidatos', (req, res) => {
 });
 
 // --- Agregar un miembro (+ aviso a la persona) ---
-r.post('/:gid/miembros', (req, res) => {
+const miembroSchema = z.object({
+  persona_id: z.coerce.number().int().positive('falta la persona')
+});
+r.post('/:gid/miembros', validar(miembroSchema), (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   if (!esEncargadoGrupo(req.user.persona_id, g.id)) return res.status(403).json({ error: 'Solo el líder del grupo' });
   const p = db.prepare('SELECT id, nombre FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1')
-    .get((req.body || {}).persona_id, req.user.iglesia_id);
+    .get(req.body.persona_id, req.user.iglesia_id);
   if (!p) return res.status(404).json({ error: 'Persona no encontrada en tu iglesia' });
   try {
     db.prepare("INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?, 'miembro')").run(p.id, g.id);
@@ -116,12 +123,16 @@ r.get('/:gid/recursos', (req, res) => {
   if (!puedeVer(req.user.persona_id, g.id)) return res.status(403).json({ error: 'No perteneces a este grupo' });
   res.json(db.prepare('SELECT id, tipo, titulo, url, creado_en FROM recurso_grupo WHERE grupo_id = ? ORDER BY creado_en DESC').all(g.id));
 });
-r.post('/:gid/recursos', (req, res) => {
+const recursoSchema = z.object({
+  tipo: z.string().trim().optional(),
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  url: z.string().trim().min(1, 'falta el enlace/archivo')
+});
+r.post('/:gid/recursos', validar(recursoSchema), (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   if (!esEncargadoGrupo(req.user.persona_id, g.id)) return res.status(403).json({ error: 'Solo el líder del grupo' });
-  const { tipo, titulo, url } = req.body || {};
-  if (!titulo || !url) return res.status(400).json({ error: 'Falta el título o el enlace/archivo' });
+  const { tipo, titulo, url } = req.body;
   db.prepare('INSERT INTO recurso_grupo (iglesia_id, grupo_id, tipo, titulo, url, creado_por) VALUES (?,?,?,?,?,?)')
     .run(req.user.iglesia_id, g.id, tipo === 'archivo' ? 'archivo' : 'link', String(titulo).trim(), url, req.user.persona_id);
   auditar(req.user.iglesia_id, req.user.persona_id, 'grupo_recurso_add', 'grupo', String(titulo).trim());
@@ -143,12 +154,17 @@ r.get('/:gid/avisos', (req, res) => {
   if (!puedeVer(req.user.persona_id, g.id)) return res.status(403).json({ error: 'No perteneces a este grupo' });
   res.json(db.prepare('SELECT id, tipo, titulo, texto, fecha, creado_en FROM aviso_grupo WHERE grupo_id = ? ORDER BY creado_en DESC').all(g.id));
 });
-r.post('/:gid/avisos', (req, res) => {
+const avisoSchema = z.object({
+  tipo: z.string().trim().optional(),
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  texto: z.string().trim().optional(),
+  fecha: z.string().trim().optional()
+});
+r.post('/:gid/avisos', validar(avisoSchema), (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   if (!esEncargadoGrupo(req.user.persona_id, g.id)) return res.status(403).json({ error: 'Solo el líder del grupo' });
-  const { tipo, titulo, texto, fecha } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el título' });
+  const { tipo, titulo, texto, fecha } = req.body;
   const t = tipo === 'recordatorio' ? 'recordatorio' : 'aviso';
   db.prepare('INSERT INTO aviso_grupo (iglesia_id, grupo_id, tipo, titulo, texto, fecha, creado_por) VALUES (?,?,?,?,?,?,?)')
     .run(req.user.iglesia_id, g.id, t, String(titulo).trim(), texto || null, fecha || null, req.user.persona_id);
@@ -169,12 +185,16 @@ r.delete('/:gid/avisos/:id', (req, res) => {
 });
 
 // --- Avisar directo: a UN miembro o a TODOS (solo notificación, sin board) ---
-r.post('/:gid/avisar', (req, res) => {
+const avisarSchema = z.object({
+  persona_id: z.coerce.number().int().positive().optional(),
+  titulo: z.string().trim().min(1, 'falta el mensaje'),
+  texto: z.string().trim().optional()
+});
+r.post('/:gid/avisar', validar(avisarSchema), (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   if (!esEncargadoGrupo(req.user.persona_id, g.id)) return res.status(403).json({ error: 'Solo el líder del grupo' });
-  const { persona_id, titulo, texto } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el mensaje' });
+  const { persona_id, titulo, texto } = req.body;
   let destinos;
   if (persona_id) {
     if (!esMiembro(persona_id, g.id)) return res.status(400).json({ error: 'Esa persona no es del grupo' });
@@ -198,12 +218,16 @@ r.get('/:gid/tareas', (req, res) => {
       WHERE t.grupo_id = ? ORDER BY (t.estado='hecho'), t.creado_en DESC`
   ).all(g.id));
 });
-r.post('/:gid/tareas', (req, res) => {
+const tareaSchema = z.object({
+  persona_id: z.coerce.number().int().positive('falta la persona'),
+  titulo: z.string().trim().min(1, 'falta el titulo de la tarea'),
+  detalle: z.string().trim().optional()
+});
+r.post('/:gid/tareas', validar(tareaSchema), (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   if (!esEncargadoGrupo(req.user.persona_id, g.id)) return res.status(403).json({ error: 'Solo el líder del grupo' });
-  const { persona_id, titulo, detalle } = req.body || {};
-  if (!titulo) return res.status(400).json({ error: 'Falta el título de la tarea' });
+  const { persona_id, titulo, detalle } = req.body;
   if (!esMiembro(persona_id, g.id)) return res.status(400).json({ error: 'Esa persona no es del grupo' });
   db.prepare('INSERT INTO tarea_grupo (iglesia_id, grupo_id, persona_id, titulo, detalle, creado_por) VALUES (?,?,?,?,?,?)')
     .run(req.user.iglesia_id, g.id, persona_id, String(titulo).trim(), detalle || null, req.user.persona_id);
