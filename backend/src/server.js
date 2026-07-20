@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import db from './db.js';
-import { login, authMiddleware, getRoles, modulosVisibles, perfilPublico, auditar } from './auth.js';
+import { login, authMiddleware, getRoles, modulosVisibles, perfilPublico, auditar, hashPassword } from './auth.js';
 import { limiterGeneral, limiterLogin, limiterSensible, limiterChat, validar } from './seguridad.js';
 import eventosRouter from './eventos.js';
 import anunciosRouter from './anuncios.js';
@@ -293,6 +293,26 @@ if (process.env.SEED_ON_EMPTY === '1') {
     if (vacia) { console.log('[seed] BD vacía → sembrando datos de demo…'); await import('./seed.js'); }
   } catch (e) { console.error('[seed] no se pudo auto-sembrar:', e.message); }
 }
+
+// Asegurar que exista un super-admin en CADA arranque (idempotente). Necesario
+// porque la BD persistente (Litestream/R2) fue sembrada antes de que existiera
+// el super_admin en el seed, y SEED_ON_EMPTY no re-siembra una BD no vacía.
+try {
+  const hay = db.prepare("SELECT 1 FROM persona WHERE rol_global = 'super_admin' AND activo = 1 LIMIT 1").get();
+  if (!hay) {
+    const ig = db.prepare('SELECT id FROM iglesia ORDER BY id LIMIT 1').get();
+    if (ig) {
+      const yaUsuario = db.prepare("SELECT id FROM persona WHERE iglesia_id = ? AND usuario = 'superadmin'").get(ig.id);
+      if (yaUsuario) {
+        db.prepare("UPDATE persona SET rol_global = 'super_admin', activo = 1 WHERE id = ?").run(yaUsuario.id);
+      } else {
+        db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, es_pastor, activo) VALUES (?, 'superadmin', 'Super Admin', ?, 'super_admin', 0, 1)")
+          .run(ig.id, hashPassword('1234'));
+      }
+      console.log('[startup] super_admin asegurado (usuario: superadmin) — CAMBIA su contraseña 1234');
+    }
+  }
+} catch (e) { console.error('[startup] no se pudo asegurar super_admin:', e.message); }
 
 const PORT = process.env.PORT || 3000;
 const ejecutadoDirecto = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
