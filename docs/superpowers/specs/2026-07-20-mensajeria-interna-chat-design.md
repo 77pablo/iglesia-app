@@ -93,11 +93,13 @@ excepto que `GET /stream` valida el JWT por query param (ver §5).
 | GET | `/stream?token=<jwt>` | Canal **SSE** (ver §4). |
 
 ### Permisos (helpers en `auth.js`)
-- `puedeIniciarChatCon(db, actor, destinoId)` → `true` si:
-  - actor es **pastor** o **líder** (cualquier rol de liderazgo: `admin`, `lider_musica`, etc.), **o**
+- `puedeIniciarChatCon(actorId, destinoId)` → `true` si (firma sin `db`, usando el `db` de módulo,
+  como el resto de helpers de `auth.js`):
+  - actor es **pastor** o **líder** (`esPastor` o `esLiderOAdmin`, que cubre `admin`/`lider_musica`/`lider_ed`), **o**
   - destino es **líder/pastor de un grupo del actor** (el actor le puede escribir a su liderazgo), **o**
-  - actor y destino **comparten al menos un grupo**.
+  - actor y destino **comparten al menos un grupo** (vía tabla `pertenencia`).
   - Siempre dentro de la **misma iglesia**.
+  - Reutiliza los helpers existentes `esPastor`, `esLiderOAdmin` y consultas a `pertenencia`.
 - Escritura en conversación: ser **miembro** de esa conversación.
 - Moderación (DELETE): `esPastor(actor)` **y** `tipo ∈ {grupo, custom}`.
 - Toda ruta valida `iglesia_id` del actor contra el de la conversación/persona.
