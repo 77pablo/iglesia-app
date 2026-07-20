@@ -1,0 +1,6 @@
+# Los scripts de shell y la config de Litestream DEBEN tener saltos de línea LF
+# (si quedan en CRLF, el contenedor Linux falla con "bad interpreter").
+*.sh            text eol=lf
+docker-entrypoint.sh text eol=lf
+litestream.yml  text eol=lf
+Dockerfile      text eol=lf
