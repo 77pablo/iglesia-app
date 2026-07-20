@@ -16,6 +16,7 @@ const NAV = [
   ['servicio_gestion','🤝','Servicio'],
   ['asistencia','✅','Asistencia'],
   ['panel_pastor','📊','Panel del pastor'],
+  ['reportes','📈','Reportes'],
   ['musicos','🎵','Grupo de Alabanza'],
   ['cuidado_pastoral','❤️','Cuidado pastoral'],
   ['ninos','👶','Niños / Esc. Dominical'],
@@ -314,6 +315,7 @@ function navTo(key){
   if(key==='servicio_gestion') return vistaServicio();
   if(key==='asistencia') return vistaAsistencia();
   if(key==='panel_pastor') return vistaPanel();
+  if(key==='reportes') return vistaReportes();
   if(key==='musicos') return vistaMusica();
   if(key==='cuidado_pastoral') return vistaCuidado();
   if(key==='tesoreria') return vistaTesoreria();
@@ -1022,6 +1024,131 @@ async function exportarAsistencia(){
     a.href=url; a.download='asistencia.csv'; document.body.appendChild(a); a.click();
     a.remove(); URL.revokeObjectURL(url);
     toast('📥 Asistencia exportada');
+  }catch(e){ toast(e.message); }
+}
+
+// ============================================================
+//  REPORTES Y ESTADÍSTICAS (panel del pastor)
+//  Tendencias de asistencia/tesorería/crecimiento + export CSV.
+//  Gráficos dibujados a mano en <canvas> (sin librerías externas:
+//  la CSP no permite cargar CDNs).
+// ============================================================
+function mesLabel(m){
+  const p=String(m||'').split('-');
+  if(p.length<2) return String(m||'—');
+  return (MESES[(+p[1])-1]||p[1])+' '+p[0].slice(2);
+}
+// Ajusta el canvas a su tamaño real en pantalla (nítido en pantallas retina).
+function _prepararCanvas(cv){
+  const dpr=window.devicePixelRatio||1;
+  const w=Math.max(1,cv.clientWidth||300), h=Math.max(1,cv.clientHeight||220);
+  cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  return { ctx, w, h };
+}
+// Gráfico de línea simple: una serie de valores contra etiquetas de mes.
+function trazarLineas(canvasId, labels, valores, color){
+  const cv=$(canvasId); if(!cv) return;
+  const { ctx, w, h } = _prepararCanvas(cv);
+  const pad={l:34,r:14,t:16,b:24};
+  const plotW=w-pad.l-pad.r, plotH=h-pad.t-pad.b;
+  const max=Math.max(1,...valores);
+  const n=labels.length, stepX=n>1?plotW/(n-1):0;
+  ctx.strokeStyle='rgba(84,96,122,.28)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+plotH); ctx.lineTo(pad.l+plotW,pad.t+plotH); ctx.stroke();
+  ctx.strokeStyle=color; ctx.lineWidth=2.4; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.beginPath();
+  valores.forEach((v,i)=>{ const x=pad.l+stepX*i, y=pad.t+plotH-(v/max*plotH); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+  ctx.stroke();
+  ctx.fillStyle=color;
+  valores.forEach((v,i)=>{ const x=pad.l+stepX*i, y=pad.t+plotH-(v/max*plotH); ctx.beginPath(); ctx.arc(x,y,3.4,0,Math.PI*2); ctx.fill(); });
+  ctx.fillStyle='#54607a'; ctx.font='11px Inter,system-ui,sans-serif'; ctx.textAlign='center';
+  labels.forEach((l,i)=>{ ctx.fillText(l, pad.l+stepX*i, h-6); });
+}
+// Gráfico de barras (una o varias series agrupadas por mes).
+function trazarBarras(canvasId, labels, series){
+  const cv=$(canvasId); if(!cv) return;
+  const { ctx, w, h } = _prepararCanvas(cv);
+  const pad={l:40,r:14,t:16,b:24};
+  const plotW=w-pad.l-pad.r, plotH=h-pad.t-pad.b;
+  const n=Math.max(1,labels.length);
+  const max=Math.max(1,...series.flatMap(s=>s.valores));
+  ctx.strokeStyle='rgba(84,96,122,.28)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+plotH); ctx.lineTo(pad.l+plotW,pad.t+plotH); ctx.stroke();
+  const groupW=plotW/n;
+  const barW=Math.min(26, groupW/(series.length+1));
+  labels.forEach((l,i)=>{
+    const gx=pad.l+groupW*i+groupW/2;
+    series.forEach((s,si)=>{
+      const v=s.valores[i]||0, bh=(v/max)*plotH;
+      const x=gx-(series.length*barW)/2+si*barW;
+      ctx.fillStyle=s.color;
+      ctx.fillRect(x, pad.t+plotH-bh, Math.max(2,barW-3), bh);
+    });
+    ctx.fillStyle='#54607a'; ctx.font='11px Inter,system-ui,sans-serif'; ctx.textAlign='center';
+    ctx.fillText(l, gx, h-6);
+  });
+}
+async function vistaReportes(){
+  const c=$('content'); c.innerHTML=`<div id="rep" class="muted">Cargando…</div>`;
+  try{
+    const [asis, teso, crec]=await Promise.all([
+      api('/reportes/asistencia'), api('/reportes/tesoreria'), api('/reportes/crecimiento')
+    ]);
+    $('rep').className='';
+    const ultimaAsis=asis.mensual[asis.mensual.length-1];
+    const mesActual=new Date().toISOString().slice(0,7);
+    const altasMesActual=(crec.mensual.find(m=>m.mes===mesActual)||{altas:0}).altas;
+
+    $('rep').innerHTML=`
+      <div class="head-row no-print" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+        <button class="btn ghost small-btn" onclick="exportarReporte('asistencia')">📥 Asistencia CSV</button>
+        <button class="btn ghost small-btn" onclick="exportarReporte('tesoreria')">📥 Tesorería CSV</button>
+        <button class="btn ghost small-btn" onclick="exportarReporte('crecimiento')">📥 Crecimiento CSV</button>
+        <button class="btn ghost small-btn" onclick="window.print()">🖨️ Imprimir</button>
+      </div>
+      <div class="widgets" style="margin-bottom:18px">
+        <div class="widget"><div class="widget-head">✅ Asistencia último mes</div><div class="stat-num">${ultimaAsis?ultimaAsis.total:'—'}</div></div>
+        <div class="widget"><div class="widget-head">💰 Saldo total</div><div class="stat-num">${money(teso.saldoTotal)}</div></div>
+        <div class="widget"><div class="widget-head">👥 Miembros activos</div><div class="stat-num">${crec.totalActivos}</div></div>
+        <div class="widget"><div class="widget-head">🌱 Altas este mes</div><div class="stat-num">${altasMesActual}</div></div>
+      </div>
+      <div class="card" style="margin-bottom:18px">
+        <div class="widget-head">📈 Tendencia de asistencia (por mes)</div>
+        ${asis.mensual.length?'<canvas id="cv-asis" height="220" style="width:100%;height:220px;display:block"></canvas>'
+          :'<p class="muted small">Aún no hay datos de asistencia.</p>'}
+      </div>
+      <div class="card" style="margin-bottom:18px">
+        <div class="widget-head">💰 Ingresos vs. gastos (por mes)</div>
+        ${teso.mensual.length?'<canvas id="cv-teso" height="220" style="width:100%;height:220px;display:block"></canvas>'+
+          '<div class="chart-legend"><span><i style="background:#16A34A"></i>Ingresos</span><span><i style="background:#DC2626"></i>Gastos</span></div>'
+          :'<p class="muted small">Aún no hay movimientos de tesorería.</p>'}
+      </div>
+      <div class="card">
+        <div class="widget-head">🌱 Crecimiento: altas de miembros por mes</div>
+        ${crec.mensual.length?'<canvas id="cv-crec" height="220" style="width:100%;height:220px;display:block"></canvas>'
+          :'<p class="muted small">Aún no hay datos de crecimiento.</p>'}
+      </div>`;
+
+    if(asis.mensual.length) trazarLineas('cv-asis', asis.mensual.map(m=>mesLabel(m.mes)), asis.mensual.map(m=>m.total), '#1C61A6');
+    if(teso.mensual.length) trazarBarras('cv-teso', teso.mensual.map(m=>mesLabel(m.mes)), [
+      {nombre:'Ingresos', color:'#16A34A', valores:teso.mensual.map(m=>m.ingresos)},
+      {nombre:'Gastos', color:'#DC2626', valores:teso.mensual.map(m=>m.gastos)}
+    ]);
+    if(crec.mensual.length) trazarBarras('cv-crec', crec.mensual.map(m=>mesLabel(m.mes)), [
+      {nombre:'Altas', color:'#F5A623', valores:crec.mensual.map(m=>m.altas)}
+    ]);
+  }catch(e){ $('rep').innerHTML='<p class="error">'+e.message+'</p>'; }
+}
+async function exportarReporte(tipo){
+  try{
+    const r=await fetch(API+'/reportes/export.csv?tipo='+tipo, {headers:{Authorization:'Bearer '+token()}});
+    if(!r.ok) throw new Error('No se pudo exportar');
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='reporte-'+tipo+'.csv'; document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+    toast('📥 Reporte exportado');
   }catch(e){ toast(e.message); }
 }
 
