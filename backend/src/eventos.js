@@ -152,6 +152,11 @@ r.get('/:id', (req, res) => {
       WHERE e.id = ? AND e.iglesia_id = ?`
   ).get(req.params.id, req.user.iglesia_id);
   if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
+  // Mismo criterio de visibilidad que el listado: quien no ve el calendario
+  // completo solo puede ver el detalle de eventos ya aprobados (evita
+  // enumerar ids para leer solicitudes pendientes/rechazadas ajenas).
+  if (ev.estado !== 'aprobado' && !veCalendarioCompleto(req.user.persona_id))
+    return res.status(404).json({ error: 'Evento no encontrado' });
   res.json(ev);
 });
 
@@ -171,8 +176,13 @@ function puedeBorrar(personaId, ev) {
 // Quita la notificacion-solicitud ("Revisar y aprobar") cuando la fecha ya se
 // resolvio o se borro, para que no quede activa.
 function limpiarSolicitud(ev) {
-  db.prepare("DELETE FROM notificacion WHERE tipo='aprobacion' AND titulo='Solicitud de fecha' AND texto = ?")
-    .run(ev.titulo + ' · ' + ev.fecha);
+  // La tabla notificacion no tiene iglesia_id: filtramos por persona_id
+  // perteneciente a la iglesia del evento para no borrar avisos de otra
+  // iglesia que coincidan en titulo+fecha (ver auditoria backend.md #6).
+  db.prepare(
+    `DELETE FROM notificacion WHERE tipo='aprobacion' AND titulo='Solicitud de fecha' AND texto = ?
+       AND persona_id IN (SELECT id FROM persona WHERE iglesia_id = ?)`
+  ).run(ev.titulo + ' · ' + ev.fecha, ev.iglesia_id);
 }
 // Registra en el historial de aprobaciones/rechazos del pastor.
 function registrarAprobacion(req, ev, accion, motivo) {
@@ -206,8 +216,18 @@ r.patch('/:id', validar(editarEventoSchema), (req, res) => {
   if (!ev) return res.status(404).json({ error: 'No encontrado' });
   if (!puedeGestionar(persona_id, ev)) return res.status(403).json({ error: 'No tienes permiso' });
   const { titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body;
+  // PATCH parcial: un campo ausente (undefined) conserva el valor actual,
+  // no lo borra (ver auditoria backend.md #3).
   db.prepare('UPDATE evento SET titulo=?, fecha=?, hora_inicio=?, hora_fin=?, lugar=?, descripcion=? WHERE id=?')
-    .run(titulo || ev.titulo, fecha || ev.fecha, hora_inicio || null, hora_fin || null, lugar || null, descripcion || null, ev.id);
+    .run(
+      titulo ?? ev.titulo,
+      fecha ?? ev.fecha,
+      hora_inicio ?? ev.hora_inicio,
+      hora_fin ?? ev.hora_fin,
+      lugar ?? ev.lugar,
+      descripcion ?? ev.descripcion,
+      ev.id
+    );
   auditar(iglesia_id, persona_id, 'editar_evento', 'calendario', ev.titulo);
   res.json({ ok: true });
 });
