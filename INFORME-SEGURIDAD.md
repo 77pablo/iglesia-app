@@ -10,8 +10,18 @@ variables de entorno, validacion de inputs con zod, cabeceras de seguridad con
 helmet, revision de autenticacion/sesiones, y logging de seguridad), sin romper
 la app existente. El servidor arranca, `/` y `/api/health` responden 200 con
 las cabeceras de helmet, el login sigue funcionando y el rate limit de login
-da 429 tras superar el limite. Se anadieron 6 pruebas con `node:test`, todas
-en verde.
+da 429 tras superar el limite.
+
+**Actualizacion (Pasada 2):** se cerraron los 3 pendientes que quedaban
+abiertos: **(1)** los 14 routers restantes con endpoints POST/PATCH se
+migraron a `validar()`/zod (todo `backend/src` queda cubierto salvo
+`recordatorios.js`/`obispo.js`, que no tienen POST/PATCH con body);
+**(2)** `/api/cuenta/recuperar` y `/recuperar/confirmar` ahora llevan rate
+limit estricto (5 req/IP/15min, reusando `limiterLogin`); **(3)** se verifico
+con Playwright (navegador Chromium real) que la CSP no rompe login ni las
+pantallas de Tesoreria/Administracion — cero errores de consola, no hizo
+falta tocar la CSP. Se anadio 1 prueba nueva con `node:test` (total 7),
+todas en verde. Detalle completo en la seccion "Pasada 2" mas abajo.
 
 ---
 
@@ -110,15 +120,11 @@ Aplicado a:
 | `PATCH /api/cuenta/email` | `cuenta.js` | email opcional valido |
 | `PATCH /api/cuenta/password` | `cuenta.js` | nueva password min 4 |
 
-**Pendiente (no cubierto en esta pasada, documentado para priorizar despues):**
-`eventos.js`, `anuncios.js`, `asignaciones.js`, `asistencia.js`, `musica.js`,
-`cuidado.js`, `ninos.js`, `facial.js`, `sermones.js`, `devocional.js`,
-`recordatorios.js`, `grupo.js`, `predica.js`, `obispo.js`, `push.js`,
-`notificaciones.js`. Todos siguen con sus validaciones manuales (`if (!x) return
-400`) que ya existian y siguen funcionando — no quedaron sin ninguna
-validacion, solo sin migrar al middleware `validar()`/zod. Se prioriza asi
-por instruccion explicita ("prioriza auth + sensibles + los POST con body
-principales; no hace falta cubrir el 100% de una vez").
+**Actualizacion (segunda pasada, ver seccion "Pendientes resueltos" al final
+del informe): se migro el resto de routers a `validar()`/zod.** Quedan
+`recordatorios.js` y `obispo.js` sin cambios porque no tienen ningun
+POST/PATCH con body (recordatorios solo tiene `POST /generar` sin body;
+obispo.js es 100% de solo lectura, GET).
 
 **SQL**: se audito el codigo buscando concatenacion de input de usuario en
 SQL. **No se encontro ninguna.** Todas las queries usan
@@ -329,32 +335,163 @@ $ npm test
 
 ## Pendientes / trabajo futuro sugerido
 
-1. Migrar el resto de routers (eventos, anuncios, musica, grupo, ninos,
-   sermones, predica, obispo, cuidado, asistencia, asignaciones, push,
-   notificaciones, recordatorios, facial, devocional) a `validar()`/zod.
-   Hoy conservan sus validaciones manuales, funcionales pero menos
-   consistentes/estrictas que zod.
-2. Considerar aplicar un rate limit mas estricto tambien a
-   `POST /api/cuenta/recuperar` y `/recuperar/confirmar` (hoy solo cubiertos
-   por el limitador general de 100/15min) ya que son endpoints publicos de
-   recuperacion de contrasena, superficie clasica de abuso.
-3. Si se quiere endurecer la CSP mas alla de `'unsafe-inline'`, requeriria
-   una refactorizacion del frontend (mover `onclick`/`style` inline a
-   listeners/clases CSS y usar nonces) — no forma parte de esta tarea de
-   backend.
+1. ~~Migrar el resto de routers ... a `validar()`/zod.~~ **RESUELTO** (ver
+   seccion "Pasada 2" mas abajo): se migraron los 14 routers restantes que
+   tenian POST/PATCH con body. Detalle completo en la tabla de la seccion
+   siguiente.
+2. ~~Considerar aplicar un rate limit mas estricto tambien a
+   `POST /api/cuenta/recuperar` y `/recuperar/confirmar`.~~ **RESUELTO**: se
+   aplico `limiterLogin` (el mismo limitador de `/api/login`, 5 req/IP/15min)
+   a ambas rutas. Ver detalle mas abajo.
+3. ~~Verificar con Playwright que la CSP no rompe nada en un navegador
+   real.~~ **RESUELTO**: se probo login + Tesoreria + Administracion con
+   Playwright; cero errores de CSP en consola, cero ajustes necesarios en
+   `server.js`. Ver detalle mas abajo.
 4. El limite sensible de `/api/admin` (10 req/15min, todo el router) puede
    agotarse rapido en una sesion de administracion pesada (crear varios
    usuarios y asignar varios roles seguidos). Es el comportamiento pedido
    explicitamente por la politica; si en el uso real resulta molesto, se
    podria subir el limite o aplicarlo solo a las rutas mutantes (mismo
-   criterio que se uso para tesoreria).
+   criterio que se uso para tesoreria). **Sigue pendiente a proposito** (decision
+   ya tomada y aceptada, no forma parte de esta pasada).
+
+---
+
+## Pasada 2: cierre de los pendientes 1-3
+
+### 1. Migracion de los 14 routers restantes a `validar()`/zod
+
+Se aplico el mismo patron ya usado en `admin.js`/`tesoreria.js`/`cuenta.js`:
+un schema `zod` por endpoint que replica fielmente la validacion manual que
+ya existia (`if (!x) return 400 {...}`), montado como middleware
+`validar(schema)` antes del handler. La logica que depende de la base de
+datos (permisos, "ya existe", pertenencia a la iglesia, etc.) se dejo tal
+cual en el handler, despues de que zod ya valido la forma del body.
+
+`recordatorios.js` y `obispo.js` **no se tocaron**: `recordatorios.js` solo
+tiene `POST /generar` sin body, y `obispo.js` es 100% de solo lectura (GET).
+No hay ningun endpoint con body sin cubrir.
+
+| Endpoint | Archivo | Notas |
+|---|---|---|
+| `POST /api/eventos` | `eventos.js` | grupo_id/titulo/fecha requeridos |
+| `PATCH /api/eventos/:id/rechazar` | `eventos.js` | motivo opcional |
+| `PATCH /api/eventos/:id` | `eventos.js` | todos los campos opcionales |
+| `POST /api/anuncios` | `anuncios.js` | titulo requerido, segmento tipado (todos/grupo/rol) |
+| `PATCH /api/anuncios/:id` | `anuncios.js` | todos los campos opcionales |
+| `POST /api/asignaciones` | `asignaciones.js` | evento_id/persona_id requeridos, tipo en enum |
+| `PATCH /api/asignaciones/:id` | `asignaciones.js` | accion/motivo opcionales |
+| `POST /api/asistencia/evento/:id` | `asistencia.js` | presentes: array de ids numericos |
+| `POST /api/musica/canciones` | `musica.js` | titulo requerido |
+| `PATCH /api/musica/canciones/:id` | `musica.js` | todos opcionales |
+| `POST /api/musica/setlist/:eventoId` | `musica.js` | cancion_id requerido |
+| `POST /api/musica/plan/:eventoId/equipo` | `musica.js` | persona_id requerido |
+| `POST /api/musica/plan/:eventoId/ensayo` | `musica.js` | todos opcionales |
+| `POST /api/musica/material` | `musica.js` | titulo + archivo_url requeridos |
+| `POST /api/cuidado` | `cuidado.js` | persona_id requerido |
+| `POST /api/cuidado/:id/contacto` | `cuidado.js` | tipo/nota opcionales |
+| `POST /api/ninos/clases` | `ninos.js` | nombre requerido |
+| `POST /api/ninos/ninos` | `ninos.js` | clase_id/nombre requeridos |
+| `POST /api/ninos/material` | `ninos.js` | clase_id/titulo requeridos |
+| `POST /api/ninos/asistencia` | `ninos.js` | clase_id/fecha requeridos, presentes: array de {nino_id, retiro_por?} |
+| `POST /api/facial/inscribir` | `facial.js` | persona_id requerido, image: string min(1) sin limite de largo (imagenes base64) |
+| `POST /api/facial/reconocer` | `facial.js` | image requerida |
+| `POST /api/sermones` | `sermones.js` | titulo requerido, puntos: array de strings |
+| `PATCH /api/sermones/:id` | `sermones.js` | todos opcionales |
+| `POST /api/sermones/:id/notas` | `sermones.js` | texto requerido, origen en enum |
+| `PATCH /api/sermones/notas/:notaId` | `sermones.js` | texto/comentario opcionales |
+| `POST /api/devocional` | `devocional.js` | titulo requerido |
+| `PATCH /api/devocional/:id` | `devocional.js` | todos opcionales |
+| `POST /api/grupo/:gid/drive` | `grupo.js` | url opcional, formato https:// validado con `.refine()` |
+| `POST /api/grupo/:gid/miembros` | `grupo.js` | persona_id requerido |
+| `POST /api/grupo/:gid/recursos` | `grupo.js` | titulo/url requeridos |
+| `POST /api/grupo/:gid/avisos` | `grupo.js` | titulo requerido |
+| `POST /api/grupo/:gid/avisar` | `grupo.js` | titulo requerido, persona_id opcional |
+| `POST /api/grupo/:gid/tareas` | `grupo.js` | persona_id/titulo requeridos |
+| `POST /api/predica` | `predica.js` | titulo requerido |
+| `PATCH /api/predica/:id` | `predica.js` | todos opcionales |
+| `POST /api/predica/:id/recurso` | `predica.js` | titulo requerido |
+| `POST /api/predica/predicadores` | `predica.js` | persona_id/desde/hasta requeridos |
+| `POST /api/push/suscribir` | `push.js` | endpoint + keys.p256dh + keys.auth requeridos |
+| `POST /api/push/baja` | `push.js` | endpoint opcional |
+| `POST /api/notificaciones/segmentada` | `notificaciones.js` | titulo requerido, segmento tipado |
+
+**Verificacion**: cada endpoint de la tabla se probo con curl (servidor local
+`SEED_ON_EMPTY=1 JWT_SECRET=test`) con al menos un caso invalido (400 por
+zod) y un caso valido (200, usando el usuario con el rol correcto cuando el
+endpoint es exclusivo de un rol — p.ej. `joaquin`/lider_musica para
+`musica.js`, `marta`/lider_ed para `ninos.js`). Todos respondieron como se
+esperaba. `npm test` se corrio despues de cada 3-4 archivos migrados; se
+mantuvo en verde durante todo el proceso.
+
+### 2. Rate limit en recuperacion de contrasena
+
+`POST /api/cuenta/recuperar` y `POST /api/cuenta/recuperar/confirmar` ahora
+montan `limiterLogin` (el mismo limitador ya usado en `/api/login`, 5
+req/IP/15 min) ademas de `validar()`. Decision: **reusar el limitador
+existente en vez de crear uno nuevo**, porque el perfil de riesgo es
+identico al de login (credenciales/codigos de acceso, mismo endpoint
+publico sin auth) y 5 intentos/15min es razonable tanto para pedir un codigo
+como para probarlo — un feligres real que se equivoca una vez no se ve
+afectado, pero un atacante que intenta fuerza bruta sobre el codigo de 6
+digitos (1 millon de combinaciones) queda frenado con creces.
+
+**Nota importante sobre el comportamiento**: `express-rate-limit` cuenta por
+IP, no por ruta, y como es el **mismo objeto limitador** (`limiterLogin`)
+montado en `/api/login`, `/api/cuenta/recuperar` y
+`/api/cuenta/recuperar/confirmar`, las tres rutas **comparten el mismo
+cupo de 5 peticiones/15min por IP**. Es decir, alguien que ya gasto su cupo
+intentando loguearse tambien queda bloqueado temporalmente de pedir
+recuperacion de contrasena (y viceversa). Se considero deliberadamente: son
+todas rutas de "acceso a la cuenta" con el mismo perfil de riesgo, y
+mantenerlas en un solo cupo compartido es mas simple y mas estricto (mejor
+para seguridad) que separarlas — el costo en UX es minimo (5 intentos entre
+las tres rutas combinadas siguen alcanzando para un uso normal).
+
+Verificado con curl: 6 peticiones seguidas a `/api/cuenta/recuperar` desde la
+misma IP → las primeras 5 pasan la validacion (400 con email invalido, o 503
+por SMTP no configurado en el entorno de prueba — logica de negocio, no rate
+limit), la 6ta responde
+`429 {"error":"Demasiados intentos de acceso. Espera unos minutos e intentalo de nuevo."}`.
+Tambien se agrego un test nuevo en `seguridad.test.js` que confirma esto
+(ver seccion de pruebas mas abajo).
+
+### 3. Verificacion en navegador real (Playwright) de la CSP
+
+Se uso la skill `webapp-testing` para levantar el servidor
+(`SEED_ON_EMPTY=1 JWT_SECRET=test`) y automatizar un navegador Chromium
+headless real:
+
+1. Cargar `/` → formulario de login (wizard de 3 pasos: iglesia → usuario →
+   contraseña).
+2. Login con `MONTESION` / `pastor` / `1234` (credenciales de seed) → llega
+   al dashboard ("Inicio") con datos reales (proximo evento, notificaciones,
+   anuncios).
+3. Navegar a **Tesoreria** → carga saldo ($2,100), campañas, transparencia y
+   movimientos reales, todo renderizado con estilos.
+4. Navegar a **Administracion** → carga la lista completa de usuarios con
+   sus roles, los 4 grupos/ministerios y la tabla de roles y accesos, todo
+   renderizado con estilos.
+
+En las 4 pantallas se capturo la consola del navegador completa (todos los
+niveles: log/warn/error) y se busco especificamente cualquier mensaje con
+"Content-Security-Policy" o "Refused to". **Resultado: consola vacia en las
+4 pantallas, cero violaciones de CSP.** Las capturas de pantalla confirman
+visualmente que las pantallas cargan con estilos y datos (no en blanco).
+
+**No se necesito ningun ajuste a la CSP de `server.js`.** La configuracion
+existente (`'unsafe-inline'` en script-src/style-src, Google Fonts en
+style-src/font-src) ya cubria exactamente lo que el frontend real usa, tal
+como se habia auditado en la Pasada 1.
 
 ---
 
 ## Commits en `feat/seguridad`
 
-Ver `git log` de la rama para el detalle; en resumen, se hicieron commits
-logicos separados para: dependencias + modulo de seguridad (rate limit +
-validar), cabeceras helmet en server.js + login, validacion zod en admin,
-validacion zod en tesoreria + trade-off de rate limit, validacion zod en
-cuenta, `.env.example` + chequeo de env vars, y pruebas `node:test`.
+Ver `git log` de la rama para el detalle. Pasada 1: dependencias + modulo de
+seguridad (rate limit + validar), cabeceras helmet en server.js + login,
+validacion zod en admin, validacion zod en tesoreria + trade-off de rate
+limit, validacion zod en cuenta, `.env.example` + chequeo de env vars, y
+pruebas `node:test`. Pasada 2: migracion a zod del resto de routers (en
+varios commits agrupados por modulos relacionados), rate limit en
+recuperacion de contrasena, y este informe actualizado.
