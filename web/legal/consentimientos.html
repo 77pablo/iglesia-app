@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Consentimientos — Iglesia App</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/styles.css" />
+<link rel="stylesheet" href="legal.css" />
+</head>
+<body class="legal-body">
+  <div class="legal-wrap">
+    <a href="/index.html" class="link legal-back">‹ Volver a Iglesia App</a>
+    <div class="legal-banner">📝 <b>Documento en BORRADOR</b> — es una plantilla de referencia y no constituye asesoría legal. Antes de usarlo o publicarlo debe ser revisado por un profesional del derecho.</div>
+    <article class="card legal-card">
+<blockquote>
+<p><strong>BORRADOR — no es asesoría legal.</strong> Estos son textos base para recabar consentimiento dentro de
+la aplicación. Revísalos con un abogado antes de usarlos en producción, <strong>especialmente los de
+datos biométricos (reconocimiento facial) y de menores de edad</strong>, que en Chile reciben protección
+reforzada. Jurisdicción de referencia: <strong>Chile</strong> (Ley N° 19.628 sobre Protección de la Vida
+Privada y Ley N° 21.719 que crea la Agencia de Protección de Datos Personales y actualiza el marco
+de protección de datos). <strong>Completa</strong> todos los campos entre corchetes <code>[...]</code> antes de publicar
+estos textos, y actualiza la fecha de versión cada vez que los modifiques.</p>
+</blockquote>
+<hr />
+<h2>0) Principios generales del consentimiento en esta app</h2>
+<p>Todo consentimiento que se pida dentro de la aplicación debe cumplir con estas características:</p>
+<ul>
+<li><strong>Libre</strong>: la persona lo otorga sin presión ni condicionamiento. Ninguna funcionalidad esencial de
+  la app (por ejemplo, poder registrarse o asistir a actividades) puede depender de aceptar un
+  consentimiento <strong>opcional</strong> como el facial o la difusión de fotos.</li>
+<li><strong>Informado</strong>: antes de marcar la casilla, la persona ve un texto claro que explica <strong>qué</strong> dato se
+  trata, <strong>para qué</strong>, <strong>quién</strong> es responsable y <strong>cómo</strong> puede ejercer sus derechos.</li>
+<li><strong>Específico</strong>: cada finalidad tiene <strong>su propia casilla</strong>. No se agrupan finalidades distintas
+  (por ejemplo, "tratamiento general" y "reconocimiento facial") bajo un solo "Acepto".</li>
+<li><strong>Inequívoco</strong>: se expresa mediante una acción afirmativa clara (marcar una casilla, firmar). Las
+  casillas <strong>nunca vienen premarcadas</strong>.</li>
+<li><strong>Revocable</strong>: puede retirarse en cualquier momento, con una facilidad razonablemente equivalente a
+  la de otorgarlo (ver sección 6).</li>
+<li><strong>Trazable</strong>: la app debe <strong>guardar registro</strong> de qué se aceptó, cuándo, quién lo aceptó (titular o
+  apoderado/a) y a qué <strong>versión</strong> de este documento corresponde. Ver la nota de implementación al
+  final.</li>
+</ul>
+<p>Estos principios aplican a los seis consentimientos siguientes.</p>
+<hr />
+<h2>1) Consentimiento para TRATAMIENTO GENERAL DE DATOS PERSONALES</h2>
+<p>Se presenta al crear la cuenta o el perfil de un miembro/usuario de la iglesia. Es la base de
+tratamiento para los datos de contacto y de participación que la app necesita para funcionar.</p>
+<p><strong>Encabezado sugerido en pantalla:</strong></p>
+<blockquote>
+<p>Autorización para el tratamiento de mis datos personales</p>
+</blockquote>
+<p><strong>Texto:</strong>
+Declaro que he leído la <strong>Política de Privacidad</strong> de <strong>[NOMBRE DEL RESPONSABLE / iglesia]</strong> y que
+autorizo, de forma <strong>libre, informada y expresa</strong>, el tratamiento de mis datos personales (tales
+como nombre, correo electrónico, teléfono, dirección, fecha de nacimiento y datos de participación
+en actividades) para las siguientes finalidades:</p>
+<ul>
+<li>Administrar mi registro como miembro, asistente o colaborador de la iglesia.</li>
+<li>Gestionar mi asistencia y participación en actividades, grupos y ministerios.</li>
+<li>Contactarme por los medios que indique (correo, teléfono, notificaciones de la app) para fines
+  administrativos y pastorales.</li>
+<li>Elaborar estadísticas internas de participación, sin fines comerciales.</li>
+</ul>
+<p>Entiendo que:
+- El responsable del tratamiento es <strong>[NOMBRE DEL RESPONSABLE / iglesia]</strong>.
+- Mis datos <strong>no se venden ni se ceden a terceros</strong> con fines comerciales.
+- Puedo ejercer mis derechos de <strong>acceso, rectificación, cancelación y oposición</strong> (derechos ARCO)
+  sobre mis datos escribiendo a <strong>[CORREO DE CONTACTO — PENDIENTE]</strong>.
+- El detalle completo del tratamiento está en la <strong>Política de Privacidad</strong>, disponible en la app.
+- Este consentimiento es <strong>necesario</strong> para usar la aplicación; los consentimientos de las secciones
+  2, 4 y 5 son <strong>independientes y opcionales</strong>.</p>
+<p>☐ <strong>Acepto</strong> el tratamiento de mis datos personales para las finalidades descritas arriba.</p>
+<p><em>Nombre: <strong><em>_</em></strong><strong><em>  ·  RUT: </em></strong><strong><em>_</em></strong>  ·  Fecha: <strong><em>_</em></strong><strong><em>  ·  Firma / aceptación en app: </em></strong><strong><em>_</em></strong></em></p>
+<hr />
+<h2>2) Consentimiento para RECONOCIMIENTO FACIAL (dato biométrico)</h2>
+<p>El dato biométrico recibe protección especial en la legislación chilena. Este consentimiento debe
+pedirse <strong>por separado</strong> del consentimiento general y <strong>nunca</strong> puede ser condición para usar la app.</p>
+<p><strong>Encabezado sugerido en pantalla:</strong></p>
+<blockquote>
+<p>Activar reconocimiento facial para el registro de asistencia (opcional)</p>
+</blockquote>
+<p><strong>Texto:</strong>
+Autorizo de forma <strong>libre, expresa y voluntaria</strong> a <strong>[NOMBRE DEL RESPONSABLE / iglesia]</strong> a capturar
+y tratar una <strong>representación matemática de mi rostro</strong> (dato biométrico, conocido técnicamente como
+"plantilla" o "template" facial) con la <strong>única finalidad</strong> de registrar automáticamente mi
+asistencia a las actividades de la iglesia.</p>
+<p>Entiendo y acepto que:
+- Esta función es <strong>completamente opcional</strong>. Si no la activo, puedo registrar mi asistencia de
+  forma <strong>manual</strong> (por ejemplo, con mi nombre, un código o un escaneo de lista) sin ninguna
+  desventaja ni restricción de acceso a la app o a las actividades.
+- Lo que se guarda es una <strong>representación matemática</strong> derivada de mi rostro, <strong>no una fotografía</strong>
+  que pueda reutilizarse o compartirse como imagen.
+- Este dato se usa <strong>exclusivamente</strong> para comparar y confirmar mi identidad al momento de marcar
+  asistencia; <strong>no</strong> se usa para otros fines (por ejemplo, vigilancia, evaluación o perfiles).
+- Mi dato biométrico se almacena de forma cifrada y con medidas de seguridad reforzadas, según se
+  describe en la Política de Privacidad.
+- Puedo <strong>retirar este consentimiento</strong> y solicitar la <strong>eliminación</strong> de mi registro facial en
+  cualquier momento, sin necesidad de justificar el motivo, escribiendo a
+  <strong>[CORREO DE CONTACTO — PENDIENTE]</strong> o desde la configuración de mi cuenta en la app.
+- Si retiro este consentimiento, mi plantilla facial se elimina y la app pasa automáticamente al
+  registro manual de asistencia.
+- Si soy menor de edad, este consentimiento debe ser otorgado por mi padre/madre/apoderado/a (ver
+  sección 3).</p>
+<p>☐ <strong>Acepto</strong> que se capture y trate mi rostro (dato biométrico) para el control de asistencia.</p>
+<p><em>Nombre: <strong><em>_</em></strong><strong><em>  ·  RUT: </em></strong><strong><em>_</em></strong>  ·  Fecha: <strong><em>_</em></strong><strong><em>  ·  Firma / aceptación en app: </em></strong><strong><em>_</em></strong></em></p>
+<p><em>(Si la persona es menor de edad, este consentimiento se otorga como sub-casilla dentro de la
+sección 3, con la firma del padre/madre/apoderado/a).</em></p>
+<hr />
+<h2>3) Autorización de PADRE, MADRE O APODERADO/A (datos de niños, niñas y adolescentes)</h2>
+<p>Aplica a los datos de menores que participan en actividades como la Escuela Dominical, grupos
+infantiles o de adolescentes. Debe ser aceptado por el padre, madre o apoderado/a legal, no por el
+menor.</p>
+<p><strong>Encabezado sugerido en pantalla:</strong></p>
+<blockquote>
+<p>Autorización para el registro de mi hijo/a o pupilo/a</p>
+</blockquote>
+<p><strong>Texto:</strong>
+Yo, <strong>[nombre completo del padre/madre/apoderado/a]</strong>, RUT <strong>[RUT del apoderado/a]</strong>, en mi calidad
+de padre, madre o apoderado/a legal de <strong>[nombre completo del niño/a o adolescente]</strong>, RUT o fecha de
+nacimiento <strong>[dato del menor]</strong>, autorizo a <strong>[NOMBRE DEL RESPONSABLE / iglesia]</strong> a tratar los datos
+personales de mi hijo/a o pupilo/a que sean necesarios para su participación y cuidado en las
+actividades infantiles y juveniles (por ejemplo, Escuela Dominical, grupos de niños o de
+adolescentes), que pueden incluir:</p>
+<ul>
+<li>Nombre completo y fecha de nacimiento.</li>
+<li>Registro de asistencia a las actividades.</li>
+<li>Datos de salud relevantes para su cuidado (por ejemplo, <strong>alergias</strong>, condiciones médicas o
+  indicaciones especiales).</li>
+<li>Nombre y datos de contacto de los padres/apoderados y de personas autorizadas para retirarlo.</li>
+</ul>
+<p>Entiendo y acepto que:
+- Estos datos se usan <strong>exclusivamente</strong> para el cuidado, la seguridad y la organización de las
+  actividades en las que participa mi hijo/a o pupilo/a.
+- Puedo <strong>acceder, corregir, actualizar o solicitar la eliminación</strong> de estos datos en cualquier
+  momento, escribiendo a <strong>[CORREO DE CONTACTO — PENDIENTE]</strong>.
+- El tratamiento de estos datos se rige por la <strong>Política de Privacidad</strong> de la aplicación.
+- Puedo retirar esta autorización en cualquier momento; esto puede implicar que mi hijo/a o pupilo/a
+  deje de estar registrado en el sistema de gestión de actividades infantiles.
+- Las sub-casillas opcionales de reconocimiento facial y fotografías (más abajo) son
+  <strong>independientes</strong> de esta autorización general y puedo marcarlas o no sin afectar la
+  participación de mi hijo/a en las actividades.</p>
+<p>☐ <strong>Autorizo</strong> el registro y tratamiento de los datos de mi hijo/a o pupilo/a descritos arriba
+   (incluye asistencia y datos de salud relevantes como alergias).</p>
+<p><strong>Autorizaciones adicionales (opcionales):</strong></p>
+<p>☐ <em>(Opcional)</em> Autorizo el <strong>reconocimiento facial</strong> de mi hijo/a o pupilo/a para el control de
+   asistencia, entendiendo que aplican las mismas condiciones descritas en la sección 2 (dato
+   biométrico, retirable en cualquier momento, alternativa manual siempre disponible).</p>
+<p>☐ <em>(Opcional)</em> Autorizo el <strong>uso de fotografías</strong> de mi hijo/a o pupilo/a para <strong>uso interno</strong> de la
+   app (materiales del grupo, avisos a los padres del mismo grupo).</p>
+<p>☐ <em>(Opcional)</em> Autorizo la <strong>difusión de fotografías</strong> de mi hijo/a o pupilo/a en los <strong>canales
+   públicos de la iglesia</strong> (redes sociales, boletines, sitio web) — <em>marcar solo si se está de
+   acuerdo con este uso más amplio</em>.</p>
+<p>Entiendo que puedo marcar la autorización general sin marcar ninguna de las opcionales, y que puedo
+retirar cualquiera de ellas por separado en el futuro.</p>
+<p><em>Nombre del apoderado/a: <strong><em>_</em></strong><strong><em>  ·  RUT: </em></strong><strong><em>_</em></strong>  ·  Relación con el menor: <strong><em>_</em></strong><strong><em>
+Fecha: </em></strong><strong><em>_</em></strong>  ·  Firma: <strong><em>_</em></strong>___</em></p>
+<hr />
+<h2>4) Consentimiento para USO DE FOTOGRAFÍAS E IMÁGENES</h2>
+<p>Aplica a personas adultas. Para menores de edad, el consentimiento equivalente está integrado en la
+sección 3.</p>
+<p><strong>Encabezado sugerido en pantalla:</strong></p>
+<blockquote>
+<p>Uso de mis fotografías e imágenes</p>
+</blockquote>
+<p><strong>Texto:</strong>
+Autorizo a <strong>[NOMBRE DEL RESPONSABLE / iglesia]</strong> a usar fotografías, videos o imágenes en las que
+aparezco, tomadas durante actividades de la iglesia, para los fines que marque a continuación. Cada
+finalidad es independiente y puedo aceptar una, ambas o ninguna:</p>
+<p>☐ <strong>Uso interno</strong>: dentro de la aplicación y materiales internos de la iglesia (por ejemplo,
+   álbumes de grupo, avisos, presentaciones internas), visibles solo para miembros registrados.</p>
+<p>☐ <strong>Difusión pública</strong>: en los <strong>canales de la iglesia</strong> abiertos al público (redes sociales,
+   sitio web, boletines impresos o digitales, publicidad de actividades).</p>
+<p>Entiendo que:
+- Puedo aceptar el uso interno sin aceptar la difusión pública, o viceversa.
+- Puedo <strong>retirar</strong> esta autorización en cualquier momento, escribiendo a
+  <strong>[CORREO DE CONTACTO — PENDIENTE]</strong>. El retiro aplica a <strong>usos futuros</strong>; no siempre es posible
+  eliminar materiales ya publicados o distribuidos por terceros antes del retiro (por ejemplo,
+  boletines impresos ya entregados o publicaciones ya compartidas por otras personas).
+- No marcar ninguna casilla no me impide participar en las actividades de la iglesia ni usar la app.</p>
+<p><em>Nombre: <strong><em>_</em></strong><strong><em>  ·  RUT: </em></strong><strong><em>_</em></strong>  ·  Fecha: <strong><em>_</em></strong><strong><em>  ·  Firma / aceptación en app: </em></strong><strong><em>_</em></strong></em></p>
+<hr />
+<h2>5) Consentimiento para COMUNICACIONES (notificaciones push y avisos)</h2>
+<p>Aplica al envío de notificaciones y avisos a través de la app (notificaciones push, y opcionalmente
+correo o WhatsApp si la app los usa).</p>
+<p><strong>Encabezado sugerido en pantalla:</strong></p>
+<blockquote>
+<p>Recibir notificaciones y avisos de la iglesia</p>
+</blockquote>
+<p><strong>Texto:</strong>
+Autorizo a <strong>[NOMBRE DEL RESPONSABLE / iglesia]</strong> a enviarme <strong>notificaciones push</strong> y avisos a
+través de la aplicación sobre:</p>
+<ul>
+<li>Recordatorios de actividades, cultos o reuniones en las que estoy inscrito/a o participo.</li>
+<li>Avisos generales de la iglesia (cambios de horario, eventos, campañas).</li>
+<li>Comunicaciones administrativas relacionadas con mi participación (por ejemplo, confirmaciones de
+  registro).</li>
+</ul>
+<p>Entiendo que:
+- Puedo <strong>desactivar</strong> estas notificaciones en cualquier momento desde la configuración de la app
+  (<strong>Ajustes → Notificaciones</strong>) o escribiendo a <strong>[CORREO DE CONTACTO — PENDIENTE]</strong>, sin que esto
+  afecte mi acceso a la app ni mi participación en la iglesia.
+- Desactivar las notificaciones no elimina otros datos ni consentimientos ya otorgados; solo detiene
+  el envío de avisos.
+- Algunas comunicaciones estrictamente necesarias para el funcionamiento del servicio (por ejemplo,
+  avisos de seguridad de la cuenta) pueden no depender de este consentimiento, si así se indica en la
+  Política de Privacidad.</p>
+<p>☐ <strong>Acepto</strong> recibir notificaciones push y avisos de la iglesia a través de la aplicación.</p>
+<p><em>Nombre: <strong><em>_</em></strong><strong><em>  ·  Fecha: </em></strong><strong><em>_</em></strong>  ·  Aceptación en app: <strong><em>_</em></strong>___</em></p>
+<hr />
+<h2>6) Retiro de consentimientos y registro de versiones</h2>
+<p>Cualquiera de los consentimientos anteriores puede <strong>retirarse en cualquier momento</strong>, con una
+facilidad equivalente a la de haberlo otorgado. Para retirar uno o más consentimientos:</p>
+<ol>
+<li>Desde la app: <strong>Ajustes → Privacidad y consentimientos</strong>, donde cada finalidad aparece por
+   separado con su estado actual (aceptado / no aceptado) y un botón para retirarlo.</li>
+<li>Por correo, escribiendo a <strong>[CORREO DE CONTACTO — PENDIENTE]</strong>, indicando el consentimiento que
+   se desea retirar y los datos de identificación del titular (o del apoderado/a, si corresponde).</li>
+</ol>
+<p>El retiro de un consentimiento <strong>opcional</strong> (reconocimiento facial, fotografías, notificaciones) no
+afecta el acceso a la app ni la participación en las actividades de la iglesia, salvo por la función
+específica asociada a ese consentimiento (por ejemplo, al retirar el consentimiento facial, la app
+pasa al registro manual de asistencia).</p>
+<p>El retiro del consentimiento general de tratamiento de datos (sección 1) puede implicar la
+imposibilidad de mantener una cuenta activa en la app, ya que ese tratamiento es necesario para su
+funcionamiento básico; en ese caso se informará a la persona qué ocurrirá con sus datos y se
+procederá conforme a la Política de Privacidad.</p>
+<p>Para cada consentimiento aceptado, la aplicación registra internamente:</p>
+<ul>
+<li>Identidad del titular (o del apoderado/a que consintió en su nombre).</li>
+<li>Fecha y hora de aceptación.</li>
+<li><strong>Versión</strong> de este documento de consentimientos vigente al momento de aceptar.</li>
+<li>Fecha y hora de retiro, si corresponde.</li>
+</ul>
+<p>Este documento fue actualizado por última vez el <strong>[FECHA]</strong>. Ante cambios sustanciales en las
+finalidades descritas, se solicitará <strong>nuevamente</strong> el consentimiento correspondiente a los usuarios
+ya registrados.</p>
+<hr />
+<blockquote>
+<p><strong>Nota de implementación en la app:</strong>
+- Cada consentimiento se presenta con <strong>su propia casilla independiente</strong>, nunca premarcada.
+- Ninguna funcionalidad esencial de la app puede quedar bloqueada por no aceptar un consentimiento
+  <strong>opcional</strong> (facial, fotografías, notificaciones).
+- El <strong>reconocimiento facial</strong> (secciones 2 y 3) <strong>no debe poder activarse</strong> en ningún caso sin que
+  la casilla correspondiente haya sido marcada explícitamente por el titular o su apoderado/a.
+- Al aceptar cualquier consentimiento, la app debe guardar: identificador del usuario/apoderado,
+  <strong>fecha y hora</strong>, y la <strong>versión</strong> de este documento vigente en ese momento.
+- La pantalla de <strong>Ajustes → Privacidad y consentimientos</strong> debe listar todos los consentimientos
+  otorgados, con su fecha, y permitir <strong>retirarlos individualmente</strong> con la misma facilidad con que
+  se otorgaron.
+- Si se modifica sustancialmente alguno de estos textos, se debe incrementar la versión y volver a
+  solicitar el consentimiento afectado a los usuarios existentes.</p>
+</blockquote>
+    </article>
+    <nav class="legal-footnav">
+      <a href="privacidad.html">Privacidad</a> · <a href="terminos.html">Términos</a> · <a href="cookies.html">Cookies</a> · <a href="aviso-legal.html">Aviso legal</a> · <b>Consentimientos</b>
+    </nav>
+  </div>
+</body>
+</html>

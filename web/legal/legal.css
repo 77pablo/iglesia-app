@@ -1,0 +1,27 @@
+/* Estilos de las páginas legales (privacidad, términos, cookies, aviso legal, consentimientos).
+   Reutiliza las variables de tema definidas en /styles.css (colores, tipografía). */
+.legal-body{background:var(--bg);}
+.legal-wrap{max-width:820px;margin:0 auto;padding:28px 20px 60px;}
+.legal-back{display:inline-block;margin-bottom:16px;}
+.legal-banner{background:var(--amber-bg);color:#7a4a06;border:1px solid #f3d9a3;border-radius:var(--r-sm,10px);
+  padding:14px 16px;font-size:0.875rem;line-height:1.5;margin-bottom:20px;}
+.legal-card{line-height:1.65;}
+.legal-card h1{font-size:1.5rem;margin-bottom:6px;}
+.legal-card h2{font-size:1.15rem;margin:26px 0 10px;padding-top:10px;border-top:1px solid var(--border);color:var(--primary-700);}
+.legal-card h2:first-child{border-top:none;padding-top:0;}
+.legal-card h3{font-size:1rem;margin:18px 0 8px;}
+.legal-card p{margin:10px 0;}
+.legal-card ul,.legal-card ol{margin:10px 0 10px 22px;}
+.legal-card li{margin:4px 0;}
+.legal-card blockquote{background:var(--amber-bg);border-left:4px solid var(--amber);
+  border-radius:0 var(--r-sm,10px) var(--r-sm,10px) 0;padding:10px 14px;margin:14px 0;font-size:0.875rem;color:#7a4a06;}
+.legal-card blockquote p{margin:4px 0;}
+.legal-card table{width:100%;border-collapse:collapse;margin:14px 0;font-size:0.875rem;}
+.legal-card th,.legal-card td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top;}
+.legal-card th{background:var(--surface);font-weight:700;}
+.legal-card hr{border:none;border-top:1px solid var(--border);margin:22px 0;}
+.legal-card code{background:var(--surface);padding:1px 5px;border-radius:4px;font-size:0.85em;}
+.legal-card strong{color:var(--text);}
+.legal-footnav{margin-top:22px;text-align:center;font-size:0.8125rem;color:var(--muted);}
+.legal-footnav a{color:var(--primary);text-decoration:none;font-weight:600;}
+.legal-footnav a:hover{text-decoration:underline;}

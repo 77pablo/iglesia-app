@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Política de Cookies — Iglesia App</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/styles.css" />
+<link rel="stylesheet" href="legal.css" />
+</head>
+<body class="legal-body">
+  <div class="legal-wrap">
+    <a href="/index.html" class="link legal-back">‹ Volver a Iglesia App</a>
+    <div class="legal-banner">📝 <b>Documento en BORRADOR</b> — es una plantilla de referencia y no constituye asesoría legal. Antes de usarlo o publicarlo debe ser revisado por un profesional del derecho.</div>
+    <article class="card legal-card">
+<blockquote>
+<p><strong>BORRADOR — no es asesoría legal.</strong> Este documento es una plantilla redactada a partir de cómo
+funciona realmente la aplicación. Antes de publicarlo para uso real, <strong>revísalo con un abogado</strong>
+en Chile, donde aplican la <strong>Ley N° 19.628</strong> sobre protección de la vida privada y la
+<strong>Ley N° 21.719</strong> (nueva ley de protección de datos personales y su Agencia). Este documento debe
+leerse junto con la <a href="./politica-privacidad.md">Política de Privacidad</a> de la aplicación.</p>
+<p><strong>Completar antes de publicar</strong> los campos marcados con <code>[…]</code>.</p>
+</blockquote>
+<p><em>Última actualización: [FECHA]</em></p>
+<p><strong>Responsable:</strong> [NOMBRE DEL RESPONSABLE / iglesia]
+<strong>Contacto:</strong> [CORREO DE CONTACTO — PENDIENTE]</p>
+<hr />
+<h2>1. Qué son las cookies y el almacenamiento local (explicado simple)</h2>
+<p>Cuando usas una página web o una aplicación desde tu navegador (Chrome, Safari, Firefox, Edge,
+etc.), el navegador puede guardar pequeños datos en tu propio dispositivo —tu computador, celular
+o tablet— para "recordar" cosas entre una visita y otra. Existen varias formas técnicas de hacer
+esto, y todas suelen agruparse bajo el nombre genérico de <strong>"cookies"</strong>, aunque no todas son cookies
+en sentido estricto:</p>
+<ul>
+<li><strong>Cookies</strong> (en sentido estricto): pequeños archivos de texto que el navegador envía de vuelta al
+  servidor en cada solicitud. Son la tecnología clásica, usada sobre todo por sitios web
+  tradicionales para publicidad y rastreo.</li>
+<li><strong><code>localStorage</code></strong> ("almacenamiento local"): un espacio de almacenamiento dentro del propio
+  navegador, exclusivo de cada sitio web, que <strong>no se envía automáticamente al servidor</strong>. Solo lo
+  lee la propia aplicación cuando la usas. Es la tecnología que usa principalmente esta app.</li>
+<li><strong>Caché de aplicación (Service Worker / Cache API)</strong>: un mecanismo que permite que la aplicación
+  guarde copias de sus propios archivos (pantallas, código, estilos) en tu dispositivo, para que la
+  próxima vez cargue más rápido y pueda funcionar aunque tengas poca o nula conexión a internet.
+  Esto es lo que permite que la app funcione como <strong>PWA</strong> (aplicación web progresiva), es decir,
+  que puedas "instalarla" en tu celular o computador y usarla de forma parecida a una app nativa.</li>
+</ul>
+<p>En resumen: <strong>no todo lo que un navegador guarda en tu dispositivo es una "cookie de rastreo"</strong>.
+Esta política explica, de forma clara, <strong>qué guarda esta aplicación, para qué y cómo puedes
+eliminarlo</strong>.</p>
+<h2>2. Aclaración importante: esta app NO usa cookies de rastreo ni de publicidad</h2>
+<p>Queremos ser explícitos sobre esto, porque es la duda más común:</p>
+<ul>
+<li>Esta aplicación <strong>no usa cookies de publicidad</strong>.</li>
+<li>Esta aplicación <strong>no usa cookies ni herramientas de rastreo de terceros</strong> (no hay Google
+  Analytics, Facebook Pixel, redes publicitarias, ni similares).</li>
+<li>Esta aplicación <strong>no vende ni comparte tu información de navegación con terceros con fines
+  comerciales</strong>.</li>
+<li>Todo lo que se guarda en tu navegador tiene un <strong>propósito funcional</strong>: que puedas iniciar
+  sesión sin escribir tu contraseña cada vez, que la app recuerde tus preferencias de pantalla, y
+  que puedas seguir usando ciertas funciones aunque tengas mala conexión.</li>
+</ul>
+<h2>3. Qué guarda exactamente esta aplicación en tu navegador</h2>
+<p>La siguiente tabla detalla, de forma completa, todo lo que esta aplicación puede llegar a guardar
+en tu dispositivo:</p>
+<table>
+<thead>
+<tr>
+<th>Nombre / tipo de dato</th>
+<th>Tecnología</th>
+<th>Finalidad</th>
+<th>Duración</th>
+<th>¿Es imprescindible?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Token de sesión (JWT)</strong></td>
+<td><code>localStorage</code></td>
+<td>Mantener tu sesión abierta para que no tengas que volver a escribir tu usuario y contraseña cada vez que entras</td>
+<td>Hasta que cierres sesión, borres los datos del sitio, o el token expire por seguridad</td>
+<td><strong>Sí</strong>, imprescindible para poder usar la app estando "conectado"</td>
+</tr>
+<tr>
+<td><strong>Preferencias de apariencia</strong> (tema claro/oscuro/automático, color de acento, tamaño de texto)</td>
+<td><code>localStorage</code></td>
+<td>Recordar cómo prefieres ver la app, para no tener que configurarla de nuevo cada vez</td>
+<td>Hasta que las cambies o borres los datos del sitio</td>
+<td>No es imprescindible; mejora la experiencia de uso</td>
+</tr>
+<tr>
+<td><strong>Devocionales / notas descargadas para leer sin conexión</strong></td>
+<td><code>localStorage</code></td>
+<td>Permitirte leer contenido (por ejemplo, un devocional) aunque no tengas internet en ese momento, solo si tú decides descargarlo</td>
+<td>Hasta que la elimines manualmente o borres los datos del sitio</td>
+<td>No es imprescindible; es una función opcional que activas tú</td>
+</tr>
+<tr>
+<td><strong>Caché de la aplicación (archivos de la interfaz: HTML, JS, CSS, íconos)</strong></td>
+<td>Service Worker + Cache API</td>
+<td>Que la app cargue más rápido en próximas visitas y siga funcionando (al menos parcialmente) con poca o nula conexión, como corresponde a una <strong>PWA</strong></td>
+<td>Se renueva automáticamente cuando se publica una nueva versión de la app; puede borrarse manualmente</td>
+<td>No es imprescindible para el funcionamiento básico, pero es necesario para el <strong>modo offline</strong> y la instalación como PWA</td>
+</tr>
+<tr>
+<td><strong>Suscripción a notificaciones push</strong></td>
+<td>API del navegador (Push API), asociada a <code>localStorage</code>/registro del Service Worker</td>
+<td>Poder enviarte avisos (por ejemplo, recordatorios de reuniones) si tú activaste las notificaciones</td>
+<td>Hasta que desactives las notificaciones o borres los datos del sitio</td>
+<td>No es imprescindible; solo existe si tú activaste las notificaciones</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Importante:</strong> esta app <strong>no guarda las respuestas de la API (tus datos personales, mensajes,
+información de tesorería, etc.) en la caché del Service Worker</strong>, ni los archivos que subes. La
+caché del Service Worker solo guarda el "esqueleto" técnico de la aplicación (el código de la
+interfaz), no tu información. Tus datos personales viajan al servidor mediante conexión cifrada
+(HTTPS) y se almacenan según lo descrito en la Política de Privacidad.</p>
+<h2>4. Tecnologías usadas en detalle</h2>
+<h3>4.1 <code>localStorage</code> (almacenamiento local del navegador)</h3>
+<p>Es un espacio de almacenamiento propio de cada sitio web dentro del navegador. A diferencia de las
+cookies clásicas, <strong>no se envía automáticamente al servidor</strong> en cada solicitud: solo la propia
+aplicación, cuando la tienes abierta, puede leer o escribir en ese espacio. En esta app se usa para
+guardar el token de sesión, tus preferencias de apariencia y, si tú lo decides, contenido descargado
+para leer sin conexión.</p>
+<h3>4.2 Service Worker y Cache API</h3>
+<p>Un <strong>Service Worker</strong> es un pequeño programa que el navegador ejecuta "de fondo", separado de la
+página que estás viendo. Permite que la app intercepte las solicitudes de red y decida si responde
+con una copia guardada localmente (más rápido, y funciona sin conexión) o si va a buscar la versión
+más reciente al servidor. La <strong>Cache API</strong> es el almacén donde el Service Worker guarda esas copias.
+Esta combinación es la que permite que la aplicación funcione como <strong>PWA</strong>: que puedas "instalarla"
+en la pantalla de inicio de tu celular o computador y que abra rápido incluso con mala señal.</p>
+<p>Esta app <strong>no usa cookies clásicas de sesión</strong> para mantenerte conectado: usa el token guardado en
+<code>localStorage</code>, tal como se explica en el punto 3.</p>
+<h2>5. Cookies y servicios de terceros</h2>
+<p>Aunque esta aplicación no usa cookies de publicidad ni rastreo propio, al cargarla se comunican con
+tu navegador algunos <strong>servicios externos</strong> necesarios para su funcionamiento técnico:</p>
+<table>
+<thead>
+<tr>
+<th>Servicio de terceros</th>
+<th>Qué hace</th>
+<th>Qué implica para ti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Google Fonts</strong></td>
+<td>Sirve las tipografías (letras) que usa la interfaz de la app</td>
+<td>Al cargar la página, tu navegador solicita esas tipografías a servidores de Google, que puede recibir tu <strong>dirección IP</strong> como parte de esa solicitud técnica (algo normal en cualquier solicitud de internet). Google no recibe tus datos de la iglesia ni tu contraseña por esta vía</td>
+</tr>
+<tr>
+<td><strong>Servicio de notificaciones push del navegador</strong> (Google/Firebase Cloud Messaging para Android/Chrome, Apple Push Notification service para iPhone/Safari, Mozilla para Firefox)</td>
+<td>Entrega las notificaciones push a tu dispositivo cuando la app las activa</td>
+<td>Este servicio es operado por el fabricante de tu navegador o sistema operativo, no por la iglesia ni por esta app. Solo se activa <strong>si tú diste permiso</strong> para recibir notificaciones. Puedes desactivarlo cuando quieras (ver punto 7)</td>
+</tr>
+<tr>
+<td><strong>Render</strong> (proveedor de hosting del backend)</td>
+<td>Aloja el servidor donde corre la aplicación</td>
+<td>No instala cookies de rastreo en tu navegador; es la infraestructura donde vive la app. Ver más detalles en la Política de Privacidad</td>
+</tr>
+</tbody>
+</table>
+<p>Ninguno de estos servicios se usa para mostrarte publicidad ni para perfilarte comercialmente.</p>
+<h2>6. Base legal del uso de estas tecnologías</h2>
+<p>El uso de <code>localStorage</code> y de la caché del Service Worker se basa en que son <strong>estrictamente
+necesarios</strong> para el funcionamiento de la aplicación que tú decidiste usar: sin el token de sesión
+no podrías mantenerte conectado, y sin la caché de la PWA no habría modo offline. Para funciones
+opcionales, como las <strong>notificaciones push</strong>, el uso se basa en tu <strong>consentimiento expreso</strong>, que
+otorgas al activar esa función desde tu navegador o dispositivo, y que puedes retirar en cualquier
+momento. En ningún caso se usan estas tecnologías con fines de publicidad o perfilamiento comercial
+que requieran un consentimiento adicional bajo la normativa chilena.</p>
+<h2>7. Cómo gestionar o eliminar esta información</h2>
+<p>Tienes control total sobre lo que se guarda en tu propio dispositivo. Puedes hacerlo de varias
+formas:</p>
+<h3>7.1 Dentro de la aplicación</h3>
+<ul>
+<li><strong>Cerrar sesión</strong>: elimina el token de sesión guardado (<code>localStorage</code>) desde la propia app, sin
+  necesidad de tocar la configuración del navegador.</li>
+<li><strong>Desactivar notificaciones</strong>: puedes desactivar las notificaciones push desde los ajustes de la
+  app o desde los permisos del navegador/sistema operativo.</li>
+<li><strong>Borrar contenido descargado offline</strong>: si descargaste devocionales o notas para leer sin
+  conexión, puedes eliminarlos manualmente desde la app cuando ya no los necesites.</li>
+</ul>
+<h3>7.2 Borrar los datos del sitio desde el navegador</h3>
+<p>Esto elimina <strong>todo</strong> lo guardado por la app en tu dispositivo (sesión, preferencias, caché offline)
+y equivale a "empezar de cero" la próxima vez que entres.</p>
+<table>
+<thead>
+<tr>
+<th>Navegador</th>
+<th>Cómo borrar los datos del sitio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Google Chrome</strong> (computador o Android)</td>
+<td>Ícono de candado o "i" junto a la dirección web → <em>Configuración del sitio</em> (o <em>Permisos del sitio</em>) → <em>Borrar datos</em>. También: Menú (⋮) → <em>Configuración</em> → <em>Privacidad y seguridad</em> → <em>Borrar datos de navegación</em> → seleccionar <em>Cookies y otros datos de sitios</em> y/o <em>Imágenes y archivos almacenados en caché</em>, filtrando por el sitio de la app si tu versión lo permite</td>
+</tr>
+<tr>
+<td><strong>Safari en iPhone / iPad</strong></td>
+<td><em>Ajustes</em> del iPhone → <em>Safari</em> → <em>Avanzado</em> → <em>Datos de sitios web</em> → buscar el sitio de la app → <em>Eliminar</em>. Alternativamente: <em>Ajustes</em> → <em>Safari</em> → <em>Borrar historial y datos de sitios web</em> (esto borra de <strong>todos</strong> los sitios, no solo esta app)</td>
+</tr>
+<tr>
+<td><strong>Safari en Mac</strong></td>
+<td>Menú <em>Safari</em> → <em>Ajustes</em> (o <em>Preferencias</em>) → pestaña <em>Privacidad</em> → <em>Gestionar datos de sitios web</em> → buscar el sitio de la app → <em>Eliminar</em></td>
+</tr>
+<tr>
+<td><strong>Mozilla Firefox</strong></td>
+<td>Ícono de candado junto a la dirección → <em>Borrar cookies y datos del sitio</em>. También: Menú (☰) → <em>Configuración</em> → <em>Privacidad y seguridad</em> → <em>Cookies y datos del sitio</em> → <em>Gestionar datos</em> → buscar el sitio → <em>Eliminar</em></td>
+</tr>
+<tr>
+<td><strong>Microsoft Edge</strong></td>
+<td>Ícono de candado junto a la dirección → <em>Permisos para este sitio</em> → <em>Borrar datos</em>. También: Menú (⋯) → <em>Configuración</em> → <em>Cookies y permisos del sitio</em> → <em>Administrar y eliminar cookies y datos del sitio</em> → buscar el sitio → <em>Eliminar</em></td>
+</tr>
+<tr>
+<td><strong>App instalada como PWA</strong> (ícono en pantalla de inicio)</td>
+<td>Al ser una PWA, sus datos suelen gestionarse desde los ajustes de la app en el sistema operativo: en Android, <em>Ajustes → Apps → [nombre de la app] → Almacenamiento → Borrar datos</em>; en iOS, desinstalar y volver a instalar la PWA suele limpiar sus datos locales</td>
+</tr>
+</tbody>
+</table>
+<h2>8. Consecuencias de desactivar o borrar estos datos</h2>
+<p>Es tu decisión borrar esta información cuando quieras, pero es bueno que sepas qué pasará después:</p>
+<ul>
+<li><strong>Si borras el token de sesión o cierras sesión</strong>: deberás <strong>volver a iniciar sesión</strong> con tu
+  usuario y contraseña la próxima vez que uses la app. No perderás ninguna información guardada en
+  el servidor (tus datos, mensajes, registros de la iglesia, etc.), solo tendrás que autenticarte
+  de nuevo.</li>
+<li><strong>Si borras las preferencias de apariencia</strong>: la app volverá a mostrarse con la configuración
+  predeterminada (por ejemplo, tema automático) hasta que la ajustes de nuevo.</li>
+<li><strong>Si borras la caché de la aplicación / datos del sitio</strong>: perderás el contenido descargado para
+  leer sin conexión y, además, la app <strong>dejará de poder funcionar en modo offline</strong> hasta que
+  vuelvas a cargarla con internet disponible, momento en el cual el Service Worker reconstruirá la
+  caché automáticamente.</li>
+<li><strong>Si desactivas las notificaciones push</strong>: dejarás de recibir avisos y recordatorios enviados
+  desde la app (por ejemplo, sobre reuniones o eventos), pero podrás seguir usando todas las demás
+  funciones con normalidad.</li>
+<li><strong>Si bloqueas completamente <code>localStorage</code> o los Service Workers</strong> en tu navegador (algunos
+  navegadores lo permiten desde su configuración de privacidad avanzada), es posible que la
+  aplicación <strong>no funcione correctamente</strong> o no pueda mantenerte con la sesión iniciada.</li>
+</ul>
+<p>En ningún caso borrar estos datos locales elimina tu cuenta ni tu información dentro de la
+aplicación: esa información vive en el servidor y se gestiona conforme a la Política de Privacidad,
+no mediante el borrado de datos del navegador.</p>
+<h2>9. Cambios a esta política</h2>
+<p>Podemos actualizar esta Política de Cookies y Almacenamiento Local cuando cambien las tecnologías
+usadas por la aplicación (por ejemplo, si en el futuro se incorporan nuevos servicios de terceros).
+Publicaremos la versión vigente con su fecha de actualización al inicio de este documento.</p>
+<h2>10. Contacto</h2>
+<p>Si tienes dudas sobre esta política, sobre qué se guarda en tu navegador, o quieres solicitar ayuda
+para eliminar esta información, escríbenos a: <strong>[CORREO DE CONTACTO — PENDIENTE]</strong>.</p>
+    </article>
+    <nav class="legal-footnav">
+      <a href="privacidad.html">Privacidad</a> · <a href="terminos.html">Términos</a> · <b>Cookies</b> · <a href="aviso-legal.html">Aviso legal</a> · <a href="consentimientos.html">Consentimientos</a>
+    </nav>
+  </div>
+</body>
+</html>
