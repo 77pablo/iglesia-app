@@ -96,11 +96,18 @@ const asistenciaNinoSchema = z.object({
 r.post('/asistencia', soloEncargado, validar(asistenciaNinoSchema), (req, res) => {
   const { clase_id, fecha, presentes } = req.body;
   if (!claseDeIglesia(clase_id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
+  // No confiar en nino_id tal cual: debe pertenecer a esta clase (evita
+  // vincular asistencia a un nino de otra clase/iglesia; ver auditoria
+  // backend.md #7).
+  const ninosValidos = new Set(
+    db.prepare('SELECT id FROM nino WHERE clase_id = ?').all(clase_id).map(n => n.id)
+  );
+  const presentesValidos = (presentes || []).filter(p => ninosValidos.has(p.nino_id));
   db.prepare('DELETE FROM asistencia_nino WHERE clase_id = ? AND fecha = ?').run(clase_id, fecha);
   const st = db.prepare('INSERT INTO asistencia_nino (clase_id, nino_id, fecha, retiro_por) VALUES (?,?,?,?)');
-  for (const p of (presentes || [])) st.run(clase_id, p.nino_id, fecha, p.retiro_por || null);
+  for (const p of presentesValidos) st.run(clase_id, p.nino_id, fecha, p.retiro_por || null);
   auditar(req.user.iglesia_id, req.user.persona_id, 'asistencia_ninos', 'ninos', 'clase ' + clase_id);
-  res.json({ ok: true, total: (presentes || []).length });
+  res.json({ ok: true, total: presentesValidos.length });
 });
 
 export default r;
