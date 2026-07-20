@@ -7,3 +7,6 @@ backend/uploads/
 .DS_Store
 .env
 backend/.env
+
+# Bases de datos temporales de pruebas/smokes
+backend/tmp-*.db*
