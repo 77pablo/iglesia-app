@@ -35,6 +35,7 @@ import pushRouter from './push.js';
 import cuentaRouter from './cuenta.js';
 import adminRouter from './admin.js';
 import mensajesRouter from './mensajes.js';
+import directorioRouter, { generarCumpleanosHoy } from './directorio.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -170,6 +171,7 @@ app.get('/api/me', authMiddleware, (req, res) => {
   if (!persona) return res.status(404).json({ error: 'Persona no encontrada' });
   // Genera recordatorios pendientes de la iglesia al iniciar sesion (no duplica).
   try { generarRecordatoriosThrottled(persona.iglesia_id); } catch (e) { console.error('[recordatorios]', e.message); }
+  try { generarCumpleanosHoy(persona.iglesia_id); } catch (e) { console.error('[cumple]', e.message); }
   const iglesia = db.prepare('SELECT nombre, codigo_unico FROM iglesia WHERE id = ?').get(persona.iglesia_id);
   res.json({
     persona: perfilPublico(persona),
@@ -226,6 +228,8 @@ app.use('/api/devocional', devocionalRouter);
 // --- Fase 4.4: Recordatorios automaticos ---
 app.use('/api/recordatorios', recordatoriosRouter);
 app.use('/api/grupo', grupoRouter);
+// --- Directorio de miembros + cumpleaños ---
+app.use('/api/directorio', directorioRouter);
 app.use('/api/predica', predicaRouter);
 app.use('/api/obispo', obispoRouter);
 app.use('/api/push', pushRouter);

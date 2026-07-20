@@ -18,7 +18,7 @@ export async function cargarDb() {
 // Limpia todas las tablas usadas por los tests (para reusar la misma BD entre tests).
 export function reiniciar(db) {
   db.exec('PRAGMA foreign_keys=OFF');
-  for (const t of ['mensaje', 'conversacion_miembro', 'conversacion', 'pertenencia', 'grupo', 'persona', 'iglesia'])
+  for (const t of ['mensaje', 'conversacion_miembro', 'conversacion', 'notificacion', 'recordatorio_enviado', 'pertenencia', 'grupo', 'persona', 'iglesia'])
     db.exec('DELETE FROM ' + t);
   db.exec('PRAGMA foreign_keys=ON');
 }

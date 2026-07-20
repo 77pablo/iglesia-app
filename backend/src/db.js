@@ -500,6 +500,11 @@ agregarColumna('anuncio', 'rol', 'TEXT');
 agregarColumna('movimiento', 'comprobante_url', 'TEXT');
 // GRUPO: carpeta de Google Drive vinculada por el líder (compartir archivos/fotos)
 agregarColumna('grupo', 'drive_url', 'TEXT');
+// PERSONA: Directorio de miembros + cumpleaños — foto y toggles de privacidad
+//  (default 0 = OCULTO: telefono/email solo se ven si la propia persona los activa).
+agregarColumna('persona', 'foto_url', 'TEXT');
+agregarColumna('persona', 'mostrar_telefono', 'INTEGER NOT NULL DEFAULT 0');
+agregarColumna('persona', 'mostrar_email', 'INTEGER NOT NULL DEFAULT 0');
 
 // --- Índices: aceleran los filtros más usados (por iglesia, persona, evento, grupo) ---
 // Sin esto, cada consulta hace un escaneo completo; se nota al crecer los datos.
