@@ -1,7 +1,28 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 20 de julio de 2026*
+*Última actualización: 20 de julio de 2026 (sesión auditoría + blindaje)*
 
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
+
+---
+
+## 🔎 SESIÓN AUDITORÍA + BLINDAJE (commiteado LOCAL, **NO desplegado todavía**)
+
+Se corrió una auditoría honesta con 4 agentes (seguridad, fiabilidad, funcional/UX, legal+interfaz). **Veredicto: la app NO es lanzable hoy**, pero la brecha es corta. Los 5 bloqueantes reales:
+1. **`superadmin/1234` público** → ✅ ARREGLADO (código, sin desplegar). `SEED_ON_EMPTY=0`, clave del super-admin ahora viene de la var `SUPERADMIN_PASSWORD` (Render), y el super-admin es cuenta de sistema (`iglesia_id=NULL`).
+2. **XSS almacenado** (campos sin escapar en innerHTML) → ✅ ARREGLADO. `escHtml()`/`safeUrl()` en ~40 campos.
+3. **Pérdida de datos en persistencia** (restore que traga errores, rclone sync destructivo, degradación silenciosa) → ❌ PENDIENTE. Arreglo real = disco de pago Render (~US$7/mes) o endurecer scripts.
+4. **Recuperación de contraseña muerta** (SMTP sin config; pastor no puede resetear clave de miembros) → ❌ PENDIENTE.
+5. **Legal sin implementar** (docs marcados "borrador", sin responsable/ARCO, sin checkboxes de consentimiento: general, parental, biométrico) → ❌ PENDIENTE (necesita abogado + 3 checkboxes).
+
+También hecho esta sesión: **login del super-admin SIN iglesia** (enlace "Soy administrador del sistema"), `trust proxy` (rate-limit ya no es colectivo), mínimo de contraseña unificado a 8, y **pulido de interfaz** (touch targets 44px, emojis→SVG, utilidad `.form-panel`).
+
+### ⚠️ ANTES DE DESPLEGAR (próxima sesión) — nada de esto está en producción aún
+- **Verificar en smoke el arreglo del super-admin de sistema** (`iglesia_id=NULL`): BD vacía → se crea → login sin iglesia → `/me` → crear primera iglesia. **Quedó SIN probar** (interrumpido). Commit `3b5beae`.
+- **Pasada visual del frontend**: el agente escapó ~40 campos y tocó iconos sin poder abrir navegador. Revisar que no haya `&lt;` literales ni dropdowns rotos.
+- **Push a `main`** para desplegar (8 commits locales por delante de origin, desde `e4d3d5f` hasta `3b5beae`). Solo tras las dos verificaciones de arriba.
+
+### 👉 ACCIÓN DEL DUEÑO EN RENDER (imprescindible tras desplegar)
+- Definir **`SUPERADMIN_PASSWORD`** (contraseña fuerte) en Render → Environment. Al primer arranque, rota automáticamente la vieja `1234` del super-admin de producción. Sin esta variable, la `1234` actual sigue vigente.
 
 ---
 
