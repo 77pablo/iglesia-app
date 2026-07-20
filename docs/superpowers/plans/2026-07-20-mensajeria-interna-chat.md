@@ -59,9 +59,9 @@ export function puedeIniciarChatCon(actorId: number, destinoId: number): boolean
 
 // mensajes.js  → export default (Router montado en /api/mensajes)
 
-// test/helpers.js
-export function dbTemporal(): string          // setea process.env.DB_PATH a un archivo temp y lo devuelve
-export async function cargarDb(): Promise<db>  // import dinamico de db.js (tras setear DB_PATH)
+// test/helpers.js  (fija DB_PATH/JWT_SECRET como efecto de import)
+export async function cargarDb(): Promise<db>  // import dinamico de db.js (BD temporal), cacheado
+export function reiniciar(db): void            // limpia todas las tablas de test
 export function sembrarMinimo(db): {iglesiaId, pastor, lider, miembro1, miembro2, ajeno, grupoId}
 ```
 
@@ -89,24 +89,37 @@ Cada persona del helper es `{id, usuario, nombre}`.
 
 `backend/test/helpers.js`:
 
+> **Clave del arnés:** los `import` de ESM se cachean por proceso. Por eso: (1) `helpers.js`
+> setea `DB_PATH`/`JWT_SECRET` **como efecto de import** (al tope del módulo), de modo que cualquier
+> carga posterior de `db.js` use la BD temporal; (2) `db.js` se carga **una sola vez** por archivo de
+> test (dynamic import dentro de `before()`); (3) entre tests se limpia con `reiniciar(db)` y se
+> re-siembra, en `beforeEach`. `node --test` corre cada archivo en su propio proceso, así que la BD
+> temporal está aislada entre archivos.
+
 ```js
 // Utilidades de prueba: BD temporal aislada + siembra minima determinista.
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 
-// Debe llamarse ANTES de importar db.js/auth.js/etc. Setea DB_PATH a un archivo temp unico.
-export function dbTemporal() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iglesia-test-'));
-  const file = path.join(dir, 'test.db');
-  process.env.DB_PATH = file;
-  process.env.JWT_SECRET = 'test-secret';
-  return file;
-}
+// Efecto de import: fija una BD temporal unica y el secreto JWT ANTES de que se
+// cargue db.js/auth.js (que se importan dinamicamente en los tests, despues de esto).
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iglesia-test-'));
+process.env.DB_PATH = path.join(dir, 'test.db');
+process.env.JWT_SECRET = 'test-secret';
 
+// Carga db.js (cacheado tras la 1a vez): devuelve el singleton apuntando a la BD temporal.
 export async function cargarDb() {
   const mod = await import('../src/db.js');
   return mod.default;
+}
+
+// Limpia todas las tablas usadas por los tests (para reusar la misma BD entre tests).
+export function reiniciar(db) {
+  db.exec('PRAGMA foreign_keys=OFF');
+  for (const t of ['mensaje', 'conversacion_miembro', 'conversacion', 'pertenencia', 'grupo', 'persona', 'iglesia'])
+    db.exec('DELETE FROM ' + t);
+  db.exec('PRAGMA foreign_keys=ON');
 }
 
 // Inserta una iglesia con pastor, un grupo (Jovenes) con lider + 2 miembros, y un feligres ajeno.
@@ -140,16 +153,17 @@ export function sembrarMinimo(db) {
 
 - [ ] **Step 2: Escribir el test que falla (tablas existen)**
 
-Crear `backend/test/mensajes.api.test.js` con solo esto por ahora:
+Crear `backend/test/mensajes.api.test.js` con solo esto por ahora (el arnés de boot se añade en Task 4):
 
 ```js
-import { test } from 'node:test';
+import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { dbTemporal, cargarDb } from './helpers.js';
+import { cargarDb } from './helpers.js';   // fija la BD temporal como efecto de import
 
-test('esquema: existen las tablas del chat', async () => {
-  dbTemporal();
-  const db = await cargarDb();
+let db;
+before(async () => { db = await cargarDb(); });
+
+test('esquema: existen las tablas del chat', () => {
   const cols = (t) => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
   assert.deepEqual(
     cols('conversacion').sort(),
@@ -366,18 +380,17 @@ git commit -m "feat(chat): hub SSE en memoria (registrar/emitir/estaConectada)"
 `backend/test/mensajes.permisos.test.js`:
 
 ```js
-import { test, before } from 'node:test';
+import { test, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { dbTemporal, cargarDb, sembrarMinimo } from './helpers.js';
+import { cargarDb, reiniciar, sembrarMinimo } from './helpers.js';
 
-let sem, puedeIniciarChatCon, verificarToken, signToken;
+let db, sem, puedeIniciarChatCon, verificarToken, signToken;
 
 before(async () => {
-  dbTemporal();
-  const db = await cargarDb();
-  sem = sembrarMinimo(db);
+  db = await cargarDb();
   ({ puedeIniciarChatCon, verificarToken, signToken } = await import('../src/auth.js'));
 });
+beforeEach(() => { reiniciar(db); sem = sembrarMinimo(db); });
 
 test('lider puede iniciar chat con cualquiera de su iglesia', () => {
   assert.equal(puedeIniciarChatCon(sem.lider.id, sem.ajeno.id), true);
@@ -472,33 +485,54 @@ git commit -m "feat(chat): verificarToken + puedeIniciarChatCon en auth.js"
 **Interfaces:**
 - Produces: `export { app }` en `server.js`; `mensajes.js` default = Router montado en `/api/mensajes`.
 
-- [ ] **Step 1: Escribir el test que falla (health del app importado)**
+- [ ] **Step 1: Convertir `mensajes.api.test.js` en el arnés compartido + test de health**
 
-Añadir a `backend/test/mensajes.api.test.js`:
+Reemplazar la cabecera del archivo (los `import` + el `before` de Task 1) por este arnés
+compartido, que **arranca el app una sola vez** (puerto efímero) y **resetea + re-siembra antes de
+cada test**. El test de esquema de Task 1 permanece; el nuevo test de health se agrega.
 
 ```js
-import { signToken } from '../src/auth.js';
+import { test, before, beforeEach, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { cargarDb, reiniciar, sembrarMinimo } from './helpers.js';
 
-// Arranca el app importado en un puerto efimero y devuelve base URL + cierre.
-async function bootApp() {
+let db, srv, base, signToken, SEM;
+
+before(async () => {
+  db = await cargarDb();
+  ({ signToken } = await import('../src/auth.js'));
   const { app } = await import('../src/server.js');
-  const srv = app.listen(0);
+  srv = app.listen(0);
   await new Promise(r => srv.once('listening', r));
-  const port = srv.address().port;
-  return { base: `http://127.0.0.1:${port}`, cerrar: () => new Promise(r => srv.close(r)) };
-}
+  base = `http://127.0.0.1:${srv.address().port}`;
+});
+after(() => new Promise(r => srv.close(r)));
+beforeEach(() => { reiniciar(db); SEM = sembrarMinimo(db); });
 
-test('el app se puede importar y responde /api/health', async () => {
-  dbTemporal();
-  await cargarDb();
-  const { base, cerrar } = await bootApp();
-  try {
-    const r = await fetch(base + '/api/health');
-    assert.equal(r.status, 200);
-    assert.equal((await r.json()).ok, true);
-  } finally { await cerrar(); }
+// Headers con token de una persona (mint directo, sin pasar por /api/login).
+const H = (p) => ({ 'Content-Type': 'application/json',
+  Authorization: 'Bearer ' + signToken({ id: p.id, iglesia_id: SEM.iglesiaId }) });
+
+test('esquema: existen las tablas del chat', () => {
+  const cols = (t) => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+  assert.deepEqual(cols('conversacion').sort(),
+    ['creado_en','creado_por','grupo_id','iglesia_id','id','tipo','titulo'].sort());
+  assert.deepEqual(cols('conversacion_miembro').sort(),
+    ['conversacion_id','persona_id','rol','silenciado','ultimo_leido_mensaje_id'].sort());
+  assert.deepEqual(cols('mensaje').sort(),
+    ['adjunto_tipo','adjunto_url','borrado','conversacion_id','creado_en','id','persona_id','texto'].sort());
+});
+
+test('el app responde /api/health', async () => {
+  const r = await fetch(base + '/api/health');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).ok, true);
 });
 ```
+
+> Nota: el test de esquema que Task 1 puso en este archivo queda **absorbido** aquí (ya no hay un
+> `before` separado ni el import de solo `cargarDb`). A partir de esta tarea, todos los tests usan el
+> `base`, `H` y `SEM` compartidos y NO vuelven a llamar `cargarDb`/boot ni redefinen `H`.
 
 - [ ] **Step 2: Ejecutar y ver que falla**
 
@@ -608,68 +642,49 @@ git commit -m "feat(chat): app importable + montar router /api/mensajes (base)"
 
 - [ ] **Step 1: Escribir los tests que fallan**
 
-Añadir a `backend/test/mensajes.api.test.js`. Reutiliza `bootApp()`. Helper de auth por token:
+Añadir este `test` a `backend/test/mensajes.api.test.js`. Usa `base`, `H` y `SEM` del **arnés
+compartido** (Task 4); no llama a `cargarDb`/boot ni redefine `H`.
 
 ```js
-function conToken(persona) {
-  return { Authorization: 'Bearer ' + signToken({ id: persona.id, iglesia_id: persona.iglesia_id ?? SEM.iglesiaId }) };
-}
-```
+test('1:1 + envio + listado', async () => {
+  // lider abre 1:1 con miembro1
+  let res = await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) });
+  assert.equal(res.status, 200);
+  const conv = await res.json();
+  assert.ok(conv.id);
 
-Y un `describe`-style con siembra compartida:
+  // llamar de nuevo devuelve la MISMA conversacion (no duplica)
+  res = await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ persona_id: SEM.lider.id }) });
+  assert.equal((await res.json()).id, conv.id);
 
-```js
-import { sembrarMinimo } from './helpers.js';
-let SEM;
+  // ajeno NO puede abrir 1:1 con miembro1
+  res = await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.ajeno), body: JSON.stringify({ persona_id: SEM.miembro1.id }) });
+  assert.equal(res.status, 403);
 
-test('1:1 + envio + listado', async (t) => {
-  dbTemporal();
-  const db = await cargarDb();
-  SEM = sembrarMinimo(db);
-  const { base, cerrar } = await bootApp();
-  const H = (p) => ({ 'Content-Type': 'application/json',
-    Authorization: 'Bearer ' + signToken({ id: p.id, iglesia_id: SEM.iglesiaId }) });
+  // enviar mensaje
+  res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'Hola!' }) });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).mensaje.texto, 'Hola!');
 
-  try {
-    // lider abre 1:1 con miembro1
-    let res = await fetch(base + '/api/mensajes/directo', {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) });
-    assert.equal(res.status, 200);
-    const conv = await res.json();
-    assert.ok(conv.id);
+  // mensaje vacio sin adjunto -> 400
+  res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: '   ' }) });
+  assert.equal(res.status, 400);
 
-    // llamar de nuevo devuelve la MISMA conversacion (no duplica)
-    res = await fetch(base + '/api/mensajes/directo', {
-      method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ persona_id: SEM.lider.id }) });
-    assert.equal((await res.json()).id, conv.id);
+  // no-miembro no puede leer la conversacion
+  res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, { headers: H(SEM.ajeno) });
+  assert.equal(res.status, 403);
 
-    // ajeno NO puede abrir 1:1 con miembro1
-    res = await fetch(base + '/api/mensajes/directo', {
-      method: 'POST', headers: H(SEM.ajeno), body: JSON.stringify({ persona_id: SEM.miembro1.id }) });
-    assert.equal(res.status, 403);
-
-    // enviar mensaje
-    res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'Hola!' }) });
-    assert.equal(res.status, 200);
-    assert.equal((await res.json()).mensaje.texto, 'Hola!');
-
-    // mensaje vacio sin adjunto -> 400
-    res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: '   ' }) });
-    assert.equal(res.status, 400);
-
-    // no-miembro no puede leer la conversacion
-    res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, { headers: H(SEM.ajeno) });
-    assert.equal(res.status, 403);
-
-    // listar: el miembro ve el mensaje
-    res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, { headers: H(SEM.miembro1) });
-    assert.equal(res.status, 200);
-    const data = await res.json();
-    assert.equal(data.mensajes.length, 1);
-    assert.equal(data.mensajes[0].texto, 'Hola!');
-  } finally { await cerrar(); }
+  // listar: el miembro ve el mensaje
+  res = await fetch(base + `/api/mensajes/conversacion/${conv.id}`, { headers: H(SEM.miembro1) });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.mensajes.length, 1);
+  assert.equal(data.mensajes[0].texto, 'Hola!');
 });
 ```
 
@@ -823,37 +838,29 @@ Añadir a `backend/test/mensajes.api.test.js`:
 
 ```js
 test('conversaciones: auto-provisiona canal de grupo y cuenta no-leidos', async () => {
-  dbTemporal();
-  const db = await cargarDb();
-  SEM = sembrarMinimo(db);
-  const { base, cerrar } = await bootApp();
-  const H = (p) => ({ 'Content-Type': 'application/json',
-    Authorization: 'Bearer ' + signToken({ id: p.id, iglesia_id: SEM.iglesiaId }) });
-  try {
-    // miembro1 entra a Mensajes -> debe aparecer el canal de Jovenes
-    let res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) });
-    let lista = await res.json();
-    const canal = lista.find(c => c.tipo === 'grupo' && c.grupo_id === SEM.grupoId);
-    assert.ok(canal, 'existe el canal del grupo');
+  // miembro1 entra a Mensajes -> debe aparecer el canal de Jovenes
+  let res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) });
+  let lista = await res.json();
+  const canal = lista.find(c => c.tipo === 'grupo' && c.grupo_id === SEM.grupoId);
+  assert.ok(canal, 'existe el canal del grupo');
 
-    // lider (tambien miembro del grupo) manda un mensaje al canal
-    res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.lider) }); // provisiona para lider
-    await res.json();
-    await fetch(base + `/api/mensajes/conversacion/${canal.id}`, {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'Reunion el sabado' }) });
+  // lider (tambien miembro del grupo) manda un mensaje al canal
+  res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.lider) }); // provisiona para lider
+  await res.json();
+  await fetch(base + `/api/mensajes/conversacion/${canal.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'Reunion el sabado' }) });
 
-    // miembro2 ve 1 no-leido en el canal
-    res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro2) });
-    lista = await res.json();
-    const c2 = lista.find(c => c.id === canal.id);
-    assert.equal(c2.no_leidos, 1);
-    assert.equal(c2.ultimo.texto, 'Reunion el sabado');
+  // miembro2 ve 1 no-leido en el canal
+  res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro2) });
+  lista = await res.json();
+  const c2 = lista.find(c => c.id === canal.id);
+  assert.equal(c2.no_leidos, 1);
+  assert.equal(c2.ultimo.texto, 'Reunion el sabado');
 
-    // ajeno (no es del grupo) NO ve el canal
-    res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.ajeno) });
-    lista = await res.json();
-    assert.equal(lista.find(c => c.id === canal.id), undefined);
-  } finally { await cerrar(); }
+  // ajeno (no es del grupo) NO ve el canal
+  res = await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.ajeno) });
+  lista = await res.json();
+  assert.equal(lista.find(c => c.id === canal.id), undefined);
 });
 ```
 
@@ -962,43 +969,35 @@ Añadir a `backend/test/mensajes.api.test.js`:
 
 ```js
 test('leido, contactos y grupo a medida', async () => {
-  dbTemporal();
-  const db = await cargarDb();
-  SEM = sembrarMinimo(db);
-  const { base, cerrar } = await bootApp();
-  const H = (p) => ({ 'Content-Type': 'application/json',
-    Authorization: 'Bearer ' + signToken({ id: p.id, iglesia_id: SEM.iglesiaId }) });
-  try {
-    // 1:1 lider<->miembro1 con un mensaje del lider
-    let conv = await (await fetch(base + '/api/mensajes/directo', {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
-    const m = await (await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'hey' }) })).json();
+  // 1:1 lider<->miembro1 con un mensaje del lider
+  let conv = await (await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
+  const m = await (await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'hey' }) })).json();
 
-    // miembro1 marca leido
-    let res = await fetch(base + `/api/mensajes/conversacion/${conv.id}/leido`, {
-      method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ mensaje_id: m.mensaje.id }) });
-    assert.equal(res.status, 200);
-    // ahora miembro1 no tiene no-leidos en esa conv
-    const lista = await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json();
-    assert.equal(lista.find(c => c.id === conv.id).no_leidos, 0);
+  // miembro1 marca leido
+  let res = await fetch(base + `/api/mensajes/conversacion/${conv.id}/leido`, {
+    method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ mensaje_id: m.mensaje.id }) });
+  assert.equal(res.status, 200);
+  // ahora miembro1 no tiene no-leidos en esa conv
+  const lista = await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json();
+  assert.equal(lista.find(c => c.id === conv.id).no_leidos, 0);
 
-    // contactos del ajeno: no incluye a miembro1
-    const contactos = await (await fetch(base + '/api/mensajes/contactos', { headers: H(SEM.ajeno) })).json();
-    assert.equal(contactos.find(c => c.id === SEM.miembro1.id), undefined);
+  // contactos del ajeno: no incluye a miembro1
+  const contactos = await (await fetch(base + '/api/mensajes/contactos', { headers: H(SEM.ajeno) })).json();
+  assert.equal(contactos.find(c => c.id === SEM.miembro1.id), undefined);
 
-    // grupo a medida creado por el lider con 2 participantes
-    res = await fetch(base + '/api/mensajes/custom', {
-      method: 'POST', headers: H(SEM.lider),
-      body: JSON.stringify({ titulo: 'Comision', participantes: [SEM.miembro1.id, SEM.miembro2.id] }) });
-    assert.equal(res.status, 200);
-    const custom = await res.json();
-    // los 3 lo ven en su lista
-    for (const p of [SEM.lider, SEM.miembro1, SEM.miembro2]) {
-      const l = await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(p) })).json();
-      assert.ok(l.find(c => c.id === custom.id), `${p.usuario} ve el grupo a medida`);
-    }
-  } finally { await cerrar(); }
+  // grupo a medida creado por el lider con 2 participantes
+  res = await fetch(base + '/api/mensajes/custom', {
+    method: 'POST', headers: H(SEM.lider),
+    body: JSON.stringify({ titulo: 'Comision', participantes: [SEM.miembro1.id, SEM.miembro2.id] }) });
+  assert.equal(res.status, 200);
+  const custom = await res.json();
+  // los 3 lo ven en su lista
+  for (const p of [SEM.lider, SEM.miembro1, SEM.miembro2]) {
+    const l = await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(p) })).json();
+    assert.ok(l.find(c => c.id === custom.id), `${p.usuario} ve el grupo a medida`);
+  }
 });
 ```
 
@@ -1100,38 +1099,29 @@ git commit -m "feat(chat): leido, escribiendo, contactos y grupo a medida"
 
 ```js
 test('moderacion: pastor borra en grupo pero no en 1:1', async () => {
-  dbTemporal();
-  const db = await cargarDb();
-  SEM = sembrarMinimo(db);
-  const { base, cerrar } = await bootApp();
-  const H = (p) => ({ 'Content-Type': 'application/json',
-    Authorization: 'Bearer ' + signToken({ id: p.id, iglesia_id: SEM.iglesiaId }) });
-  try {
-    // canal de grupo + un mensaje del miembro1
-    await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json();
-    const canal = (await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json())
-      .find(c => c.tipo === 'grupo');
-    const gm = await (await fetch(base + `/api/mensajes/conversacion/${canal.id}`, {
-      method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ texto: 'inapropiado' }) })).json();
+  // canal de grupo + un mensaje del miembro1
+  const canal = (await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json())
+    .find(c => c.tipo === 'grupo');
+  const gm = await (await fetch(base + `/api/mensajes/conversacion/${canal.id}`, {
+    method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ texto: 'inapropiado' }) })).json();
 
-    // pastor borra (soft)
-    let res = await fetch(base + `/api/mensajes/${gm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.pastor) });
-    assert.equal(res.status, 200);
-    const row = db.prepare('SELECT borrado FROM mensaje WHERE id = ?').get(gm.mensaje.id);
-    assert.equal(row.borrado, 1);
+  // pastor borra (soft)
+  let res = await fetch(base + `/api/mensajes/${gm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.pastor) });
+  assert.equal(res.status, 200);
+  const row = db.prepare('SELECT borrado FROM mensaje WHERE id = ?').get(gm.mensaje.id);
+  assert.equal(row.borrado, 1);
 
-    // 1:1 lider<->miembro1: pastor NO puede borrar
-    const conv = await (await fetch(base + '/api/mensajes/directo', {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
-    const dm = await (await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'privado' }) })).json();
-    res = await fetch(base + `/api/mensajes/${dm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.pastor) });
-    assert.equal(res.status, 403);
+  // 1:1 lider<->miembro1: pastor NO puede borrar
+  const conv = await (await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
+  const dm = await (await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'privado' }) })).json();
+  res = await fetch(base + `/api/mensajes/${dm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.pastor) });
+  assert.equal(res.status, 403);
 
-    // un feligres tampoco puede moderar
-    res = await fetch(base + `/api/mensajes/${gm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.miembro2) });
-    assert.equal(res.status, 403);
-  } finally { await cerrar(); }
+  // un feligres tampoco puede moderar
+  res = await fetch(base + `/api/mensajes/${gm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.miembro2) });
+  assert.equal(res.status, 403);
 });
 ```
 
@@ -1196,44 +1186,35 @@ git commit -m "feat(chat): moderacion del pastor (soft-delete en grupo/custom)"
 
 ```js
 test('SSE entrega en vivo un mensaje nuevo', async () => {
-  dbTemporal();
-  const db = await cargarDb();
-  SEM = sembrarMinimo(db);
-  const { base, cerrar } = await bootApp();
-  const H = (p) => ({ 'Content-Type': 'application/json',
-    Authorization: 'Bearer ' + signToken({ id: p.id, iglesia_id: SEM.iglesiaId }) });
-  const { signToken: st } = await import('../src/auth.js');
-  try {
-    // 1:1 lider<->miembro1
-    const conv = await (await fetch(base + '/api/mensajes/directo', {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
+  // 1:1 lider<->miembro1
+  const conv = await (await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
 
-    // miembro1 abre el stream
-    const tk = st({ id: SEM.miembro1.id, iglesia_id: SEM.iglesiaId });
-    const ac = new AbortController();
-    const streamResp = await fetch(base + '/api/mensajes/stream?token=' + tk, { signal: ac.signal });
-    assert.equal(streamResp.headers.get('content-type'), 'text/event-stream');
-    const reader = streamResp.body.getReader();
-    const dec = new TextDecoder();
+  // miembro1 abre el stream (token por query, como hace el frontend)
+  const tk = signToken({ id: SEM.miembro1.id, iglesia_id: SEM.iglesiaId });
+  const ac = new AbortController();
+  const streamResp = await fetch(base + '/api/mensajes/stream?token=' + tk, { signal: ac.signal });
+  assert.match(streamResp.headers.get('content-type'), /text\/event-stream/);
+  const reader = streamResp.body.getReader();
+  const dec = new TextDecoder();
 
-    // dar un tick para que el server registre la conexion
-    await new Promise(r => setTimeout(r, 50));
+  // dar un tick para que el server registre la conexion
+  await new Promise(r => setTimeout(r, 50));
 
-    // lider envia
-    await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
-      method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'en vivo' }) });
+  // lider envia
+  await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'en vivo' }) });
 
-    // leer hasta encontrar el evento 'mensaje'
-    let buf = '', encontrado = false;
-    for (let i = 0; i < 20 && !encontrado; i++) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      if (/event: mensaje/.test(buf) && /en vivo/.test(buf)) encontrado = true;
-    }
-    assert.ok(encontrado, 'llego el evento SSE con el mensaje');
-    ac.abort();
-  } finally { await cerrar(); }
+  // leer hasta encontrar el evento 'mensaje'
+  let buf = '', encontrado = false;
+  for (let i = 0; i < 20 && !encontrado; i++) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    if (/event: mensaje/.test(buf) && /en vivo/.test(buf)) encontrado = true;
+  }
+  ac.abort();
+  assert.ok(encontrado, 'llego el evento SSE con el mensaje');
 });
 ```
 
