@@ -133,3 +133,29 @@ test('leido, contactos y grupo a medida', async () => {
     assert.ok(l.find(c => c.id === custom.id), `${p.usuario} ve el grupo a medida`);
   }
 });
+
+test('moderacion: pastor borra en grupo pero no en 1:1', async () => {
+  // canal de grupo + un mensaje del miembro1
+  const canal = (await (await fetch(base + '/api/mensajes/conversaciones', { headers: H(SEM.miembro1) })).json())
+    .find(c => c.tipo === 'grupo');
+  const gm = await (await fetch(base + `/api/mensajes/conversacion/${canal.id}`, {
+    method: 'POST', headers: H(SEM.miembro1), body: JSON.stringify({ texto: 'inapropiado' }) })).json();
+
+  // pastor borra (soft)
+  let res = await fetch(base + `/api/mensajes/${gm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.pastor) });
+  assert.equal(res.status, 200);
+  const row = db.prepare('SELECT borrado FROM mensaje WHERE id = ?').get(gm.mensaje.id);
+  assert.equal(row.borrado, 1);
+
+  // 1:1 lider<->miembro1: pastor NO puede borrar
+  const conv = await (await fetch(base + '/api/mensajes/directo', {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ persona_id: SEM.miembro1.id }) })).json();
+  const dm = await (await fetch(base + `/api/mensajes/conversacion/${conv.id}`, {
+    method: 'POST', headers: H(SEM.lider), body: JSON.stringify({ texto: 'privado' }) })).json();
+  res = await fetch(base + `/api/mensajes/${dm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.pastor) });
+  assert.equal(res.status, 403);
+
+  // un feligres tampoco puede moderar
+  res = await fetch(base + `/api/mensajes/${gm.mensaje.id}`, { method: 'DELETE', headers: H(SEM.miembro2) });
+  assert.equal(res.status, 403);
+});

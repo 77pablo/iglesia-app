@@ -228,4 +228,25 @@ r.post('/custom', (req, res) => {
   res.json({ id: convId });
 });
 
+// --- Moderacion: el pastor borra (soft) mensajes de grupo/custom (no 1:1) ---
+r.delete('/:mensajeId', (req, res) => {
+  const msg = db.prepare(
+    `SELECT m.id, m.conversacion_id, c.tipo, c.iglesia_id
+       FROM mensaje m JOIN conversacion c ON c.id = m.conversacion_id
+      WHERE m.id = ?`
+  ).get(req.params.mensajeId);
+  if (!msg || msg.iglesia_id !== req.user.iglesia_id)
+    return res.status(404).json({ error: 'Mensaje no encontrado' });
+  if (msg.tipo === 'directo')
+    return res.status(403).json({ error: 'No se pueden moderar mensajes privados' });
+  if (!esPastor(req.user.persona_id))
+    return res.status(403).json({ error: 'Solo el pastor puede moderar' });
+  db.prepare('UPDATE mensaje SET borrado = 1, texto = ? WHERE id = ?').run('', msg.id);
+  emitir(miembrosConv(msg.conversacion_id), 'mensaje', {
+    conversacion_id: msg.conversacion_id, mensaje: { id: msg.id, borrado: 1 }
+  });
+  auditar(req.user.iglesia_id, req.user.persona_id, 'chat_moderar', 'mensaje', String(msg.id));
+  res.json({ ok: true });
+});
+
 export default r;
