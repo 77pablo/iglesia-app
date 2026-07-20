@@ -37,6 +37,7 @@ export function login(iglesiaRef, usuario, password) {
     'SELECT * FROM iglesia WHERE codigo_unico = ? OR lower(nombre) = lower(?)'
   ).get(iglesiaRef, iglesiaRef);
   if (!iglesia) throw new Error('Iglesia no encontrada');
+  if (!iglesia.activa) throw new Error('Esta iglesia está desactivada. Contacta al administrador.');
 
   const persona = db.prepare(
     'SELECT * FROM persona WHERE iglesia_id = ? AND usuario = ? AND activo = 1'
