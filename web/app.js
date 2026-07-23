@@ -1592,12 +1592,12 @@ function _transAcorde(tok,n){ const p=tok.split('/'); let o=_transRaiz(p[0],n); 
 const _ACORDE=/^(SOL#|SOLb|DO#|RE#|FA#|LA#|REb|MIb|FAb|LAb|SIb|DOb|DO|RE|MI|FA|SOL|LA|SI|[A-G])(#|b)?(m|maj7|maj|min|sus2|sus4|sus|add9|dim|aug|°|\+|6|7|9|11|13|2|4|5|m7|m9|m6)*(\/(SOL#|SOLb|DO#|RE#|FA#|LA#|REb|MIb|SIb|LAb|DO|RE|MI|FA|SOL|LA|SI|[A-G])(#|b)?)?$/;
 function _esAcorde(t){ return _ACORDE.test(t); }
 function _esLineaAcordes(l){ const t=l.trim().split(/\s+/).filter(Boolean); if(!t.length)return false; const a=t.filter(_esAcorde).length; return a>=1 && a/t.length>=0.6; }
-function _esc(s){ return escHtml(s); }   /* alias: una sola fuente de verdad para escapar */
+/* _esc: alias eliminado — usar escHtml directamente (una sola fuente de verdad) */
 // Devuelve HTML: líneas de acordes con los acordes resaltados y transpuestos.
 function _renderAcordes(contenido,n){
   return contenido.split('\n').map(l=>{
-    if(_esLineaAcordes(l)) return l.replace(/\S+/g, t=> _esAcorde(t)? `<span class="ac">${_esc(_transAcorde(t,n))}</span>` : _esc(t));
-    return _esc(l);
+    if(_esLineaAcordes(l)) return l.replace(/\S+/g, t=> _esAcorde(t)? `<span class="ac">${escHtml(_transAcorde(t,n))}</span>` : escHtml(t));
+    return escHtml(l);
   }).join('\n');
 }
 
@@ -1636,7 +1636,7 @@ function himnarioBuscar(q){
   const cont=$('hm-lista'); if(!cont) return;
   if(!lista.length){ cont.innerHTML='<p class="muted small">Sin resultados.</p>'; return; }
   cont.innerHTML=lista.slice(0,300).map(h=>`<div class="hmodal-song ${_hmSel&&_hmSel.n===h.n?'sel':''}" onclick="himnarioSel(${h.n})">
-    <b>#${h.n}</b> ${_esc(h.titulo)} <span class="muted small">(${_esc(h.tono||'')})</span></div>`).join('')
+    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span></div>`).join('')
     + (lista.length>300?`<p class="muted small" style="padding:8px">Mostrando 300 de ${lista.length}. Afina la búsqueda.</p>`:'');
 }
 function himnarioSel(n){
@@ -1651,13 +1651,13 @@ function renderHimno(){
   const tonoBase=_hmSel.tono||'';
   const tonoAhora=_transAcorde(tonoBase, _hmTrans);
   v.innerHTML=`<div class="transbar">
-      <h3 style="flex:1;font-size:17px;margin:0">#${_hmSel.n} ${_esc(_hmSel.titulo)}</h3>
+      <h3 style="flex:1;font-size:17px;margin:0">#${_hmSel.n} ${escHtml(_hmSel.titulo)}</h3>
     </div>
     <div class="transbar">
-      <span class="muted small">Tono:</span> <b style="color:var(--primary)">${_esc(tonoAhora)||'—'}</b>
+      <span class="muted small">Tono:</span> <b style="color:var(--primary)">${escHtml(tonoAhora)||'—'}</b>
       <button class="cal-navbtn" onclick="himnarioTrans(-1)" title="Bajar ½ tono">−</button>
       <button class="cal-navbtn" onclick="himnarioTrans(1)" title="Subir ½ tono">+</button>
-      ${_hmTrans!==0?`<button class="btn ghost small-btn" onclick="himnarioReset()">Original (${_esc(tonoBase)})</button>`:''}
+      ${_hmTrans!==0?`<button class="btn ghost small-btn" onclick="himnarioReset()">Original (${escHtml(tonoBase)})</button>`:''}
       <span class="muted small">${_hmTrans>0?'+'+_hmTrans:_hmTrans} semitono(s)</span>
     </div>
     <div class="acordes">${_renderAcordes(_hmSel.contenido||'', _hmTrans)}</div>`;
@@ -1682,7 +1682,7 @@ function abrirVisorCancion(id, trans){
   const puede=esLiderMusicaUI();
   ov.innerHTML=`<div class="hmodal" onclick="event.stopPropagation()">
     <div class="hmodal-head">
-      <b style="flex:1;font-size:16px">🎵 ${_esc(c.titulo)}</b>
+      <b style="flex:1;font-size:16px">🎵 ${escHtml(c.titulo)}</b>
       ${puede?`<button class="cal-navbtn" onclick="editarLetraCancion(${c.id})" title="Editar acordes">✏️</button>`:''}
       <button class="cal-navbtn" onclick="cerrarVisorCancion()" aria-label="Cerrar" style="margin-left:8px">✕</button>
     </div>
@@ -1709,10 +1709,10 @@ function renderVisorCancion(){
   const tonoBase=c.tono||'';
   const tonoAhora=tonoBase?_transAcorde(tonoBase,_vcTrans):'';
   v.innerHTML=`<div class="transbar">
-      <span class="muted small">${c.autor?_esc(c.autor)+' · ':''}Tono:</span> <b style="color:var(--primary)">${_esc(tonoAhora)||'—'}</b>
+      <span class="muted small">${c.autor?escHtml(c.autor)+' · ':''}Tono:</span> <b style="color:var(--primary)">${escHtml(tonoAhora)||'—'}</b>
       <button class="cal-navbtn" onclick="visorCancionTrans(-1)" title="Bajar ½ tono">−</button>
       <button class="cal-navbtn" onclick="visorCancionTrans(1)" title="Subir ½ tono">+</button>
-      ${_vcTrans!==0?`<button class="btn ghost small-btn" onclick="visorCancionReset()">Original${tonoBase?' ('+_esc(tonoBase)+')':''}</button>`:''}
+      ${_vcTrans!==0?`<button class="btn ghost small-btn" onclick="visorCancionReset()">Original${tonoBase?' ('+escHtml(tonoBase)+')':''}</button>`:''}
       <span class="muted small">${_vcTrans>0?'+'+_vcTrans:_vcTrans} semitono(s)</span>
     </div>
     <div class="acordes">${_renderAcordes(c.letra||'', _vcTrans)}</div>`;
@@ -1723,7 +1723,7 @@ function editarLetraCancion(id){
   v.innerHTML=`<label>Tono base</label>
     <input id="vc-tono" value="${(c.tono||'').replace(/"/g,'&quot;')}" placeholder="ej. SOL, G" style="max-width:140px"/>
     <label style="margin-top:10px">Acordes / letra</label>
-    <textarea id="vc-letra" rows="14" style="width:100%;font-family:monospace;white-space:pre">${_esc(c.letra||'')}</textarea>
+    <textarea id="vc-letra" rows="14" style="width:100%;font-family:monospace;white-space:pre">${escHtml(c.letra||'')}</textarea>
     <div class="row" style="margin-top:10px">
       <button class="btn small-btn" onclick="guardarLetraCancion(${id})">Guardar</button>
       <button class="btn ghost small-btn" onclick="renderVisorCancion()">Cancelar</button></div>`;
