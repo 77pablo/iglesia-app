@@ -16,12 +16,13 @@ Se corrió una auditoría honesta con 4 agentes (seguridad, fiabilidad, funciona
 
 También hecho esta sesión: **login del super-admin SIN iglesia** (enlace "Soy administrador del sistema"), `trust proxy` (rate-limit ya no es colectivo), mínimo de contraseña unificado a 8, y **pulido de interfaz** (touch targets 44px, emojis→SVG, utilidad `.form-panel`).
 
-### ⚠️ ANTES DE DESPLEGAR (próxima sesión) — nada de esto está en producción aún
-- **Verificar en smoke el arreglo del super-admin de sistema** (`iglesia_id=NULL`): BD vacía → se crea → login sin iglesia → `/me` → crear primera iglesia. **Quedó SIN probar** (interrumpido). Commit `3b5beae`.
-- **Pasada visual del frontend**: el agente escapó ~40 campos y tocó iconos sin poder abrir navegador. Revisar que no haya `&lt;` literales ni dropdowns rotos.
-- **Push a `main`** para desplegar (8 commits locales por delante de origin, desde `e4d3d5f` hasta `3b5beae`). Solo tras las dos verificaciones de arriba.
+### ⚠️ ANTES DE DESPLEGAR — nada de esto está en producción aún
+- ✅ **Pasada visual del frontend hecha (23 jul):** Fase 7 (Directorio) y los 26 módulos verificados en navegador real (Playwright) — sin `&lt;` literales, sin errores de consola. Ver Fase 7.
+- **Verificar en smoke el arreglo del super-admin de sistema** (`iglesia_id=NULL`): BD vacía → se crea → login sin iglesia → `/me` → crear primera iglesia. Commit `3b5beae`. *(Los tests de superadmin pasan; falta el smoke end-to-end contra un arranque limpio.)*
+- **Un solo `push` de `main` despliega TODO** (23 commits locales por delante de origin): el **blindaje de seguridad** (adiós `superadmin/1234` público, XSS, `SEED_ON_EMPTY=0`, trust proxy) **+** la feature de **consentimiento legal + ARCO** (ya integrada a `main`, 123/123 tests). Lo sube el dueño con **GitHub Desktop**.
+- 👉 Tras desplegar, en Render → Environment: definir **`SUPERADMIN_PASSWORD`** (rota la `1234` del super-admin). Y ver el bloqueante legal abajo antes de definir `LEGAL_CONTACT_EMAIL`.
 
-### 🟡 Bloqueante legal #5 — parcialmente cerrado (rama `feat/consentimiento-legal-arco`, sin desplegar)
+### 🟡 Bloqueante legal #5 — parcialmente cerrado (✅ integrado a `main` 23 jul, sin desplegar aún)
 - ✅ **IMPLEMENTADO:** consentimiento general (checkbox al registrarse + puerta para cuentas existentes vía `/me`) y ejercicio de derechos **ARCO autoservicio** (ver/editar/eliminar mis datos desde la cuenta).
 - ✅ **IMPLEMENTADO:** correo de contacto legal (ARCO) configurable por variable de entorno `LEGAL_CONTACT_EMAIL` — endpoint público `GET /api/legal/contacto`, inyectado en las 5 páginas de `web/legal/` (se muestra solo si la variable está definida).
 - ❌ **PENDIENTE del dueño:**
