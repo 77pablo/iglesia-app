@@ -63,3 +63,13 @@ test('un segundo pastor SI puede eliminarse (no es el unico)', async () => {
   const res = await fetch(base + '/api/cuenta/eliminar', { method: 'POST', headers: H(SEM.lider) });
   assert.equal(res.status, 200);
 });
+
+test('GET /api/cuenta/mis-datos: no filtra datos de otra persona', async () => {
+  const telefonoAjeno = '+56999999999';
+  db.prepare('UPDATE persona SET telefono = ? WHERE id = ?').run(telefonoAjeno, SEM.miembro2.id);
+  const res = await fetch(base + '/api/cuenta/mis-datos', { headers: H(SEM.miembro1) });
+  assert.equal(res.status, 200);
+  const j = await res.json();
+  assert.equal(j.perfil.usuario, 'miembro1');
+  assert.ok(!JSON.stringify(j).includes(telefonoAjeno), 'no debe aparecer el telefono de miembro2');
+});

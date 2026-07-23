@@ -9,6 +9,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, hashPassword, verifyPassword, auditar } from './auth.js';
@@ -16,6 +17,7 @@ import { enviarCorreo, mailActivo } from './mailer.js';
 import { validar, limiterLogin } from './seguridad.js';
 import { registrarConsentimiento } from './consentimiento.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const r = Router();
 
 const emailValido = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim());
@@ -165,13 +167,7 @@ r.post('/eliminar', (req, res) => {
       return res.status(409).json({ error: 'Eres el pastor responsable de la iglesia. Transfiere ese rol a otra persona antes de eliminar tu cuenta, o escribe al correo de contacto legal.' });
   }
 
-  // Borrar el archivo de la foto de perfil (best-effort).
-  if (yo.foto_url && String(yo.foto_url).startsWith('/uploads/')) {
-    try {
-      const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
-      fs.unlinkSync(path.join(uploadsDir, path.basename(yo.foto_url)));
-    } catch { /* si no existe, no pasa nada */ }
-  }
+  const fotoUrlOriginal = yo.foto_url;
 
   // Anonimizar en una transaccion.
   const claveMuerta = hashPassword(crypto.randomBytes(24).toString('hex'));
@@ -188,7 +184,18 @@ r.post('/eliminar', (req, res) => {
     db.exec('ROLLBACK');
     return res.status(500).json({ error: 'No se pudo completar la eliminación' });
   }
-  auditar(iid, pid, 'eliminar_cuenta', 'cuenta');
+
+  // Borrar el archivo de la foto de perfil (best-effort, solo tras COMMIT
+  // exitoso: si borramos antes y hay ROLLBACK, quedaria un archivo huerfano
+  // borrado pero la cuenta seguiria activa referenciando esa foto).
+  if (fotoUrlOriginal && String(fotoUrlOriginal).startsWith('/uploads/')) {
+    try {
+      const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
+      fs.unlinkSync(path.join(uploadsDir, path.basename(fotoUrlOriginal)));
+    } catch { /* si no existe, no pasa nada */ }
+  }
+
+  try { auditar(iid, pid, 'eliminar_cuenta', 'cuenta'); } catch { /* la anonimizacion ya esta commiteada */ }
   res.json({ ok: true });
 });
 
