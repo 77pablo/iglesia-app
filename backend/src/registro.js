@@ -9,6 +9,7 @@ import { z } from 'zod';
 import db from './db.js';
 import { hashPassword, signToken, perfilPublico, auditar } from './auth.js';
 import { limiterSensible, validar } from './seguridad.js';
+import { registrarConsentimiento } from './consentimiento.js';
 
 const r = Router();
 
@@ -18,7 +19,8 @@ const registroSchema = z.object({
   usuario: z.string().trim().min(1, 'falta el usuario'),
   password: z.string().min(6, 'la contraseña debe tener al menos 6 caracteres'),
   email: z.string().trim().email('correo invalido').optional().or(z.literal('')),
-  telefono: z.string().trim().max(50).optional().or(z.literal(''))
+  telefono: z.string().trim().max(50).optional().or(z.literal('')),
+  acepto: z.literal(true, { errorMap: () => ({ message: 'debes aceptar los Términos y la Política de Privacidad' }) })
 });
 
 // POST /api/registro — crea la cuenta del feligres y devuelve { token, persona }
@@ -54,6 +56,7 @@ r.post('/', limiterSensible, validar(registroSchema), (req, res) => {
   }
 
   const persona = db.prepare('SELECT * FROM persona WHERE id = ?').get(info.lastInsertRowid);
+  registrarConsentimiento(persona.id, iglesia.id, 'otorgado', req);
   const token = signToken(persona);
   auditar(iglesia.id, persona.id, 'registro_publico', 'registro', usuario);
   res.json({ token, persona: perfilPublico(persona) });

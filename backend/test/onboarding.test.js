@@ -45,7 +45,7 @@ function personaDe(usuario, iglesiaId = SEM.iglesiaId) {
 test('POST /api/registro: con codigo valido crea el feligres y devuelve {token, persona} (auto-login)', async () => {
   const res = await fetch(base + '/api/registro', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codigo: 'TEST', nombre: 'Nuevo Feligres', usuario: 'nuevof', password: '123456' })
+    body: JSON.stringify({ codigo: 'TEST', nombre: 'Nuevo Feligres', usuario: 'nuevof', password: '123456', acepto: true })
   });
   assert.equal(res.status, 200);
   const body = await res.json();
@@ -66,7 +66,7 @@ test('POST /api/registro: con codigo valido crea el feligres y devuelve {token, 
 test('POST /api/registro: el codigo es case-insensitive (se normaliza a MAYUSCULAS)', async () => {
   const res = await fetch(base + '/api/registro', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codigo: 'test', nombre: 'Minuscula', usuario: 'minusc', password: '123456' })
+    body: JSON.stringify({ codigo: 'test', nombre: 'Minuscula', usuario: 'minusc', password: '123456', acepto: true })
   });
   assert.equal(res.status, 200);
   assert.ok(personaDe('minusc'));
@@ -85,7 +85,7 @@ test('POST /api/registro: usuario duplicado dentro de la misma iglesia -> 409', 
   // SEM.pastor ya existe con usuario 'pastor' en la iglesia TEST.
   const res = await fetch(base + '/api/registro', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codigo: 'TEST', nombre: 'Otro', usuario: 'pastor', password: '123456' })
+    body: JSON.stringify({ codigo: 'TEST', nombre: 'Otro', usuario: 'pastor', password: '123456', acepto: true })
   });
   assert.equal(res.status, 409);
 });
@@ -103,13 +103,13 @@ test('POST /api/registro: aislamiento — el mismo nombre de usuario puede exist
 
   let res = await fetch(base + '/api/registro', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codigo: 'TEST', nombre: 'Compartido Uno', usuario: 'compartido', password: '123456' })
+    body: JSON.stringify({ codigo: 'TEST', nombre: 'Compartido Uno', usuario: 'compartido', password: '123456', acepto: true })
   });
   assert.equal(res.status, 200);
 
   res = await fetch(base + '/api/registro', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codigo: 'OTRA2', nombre: 'Compartido Dos', usuario: 'compartido', password: '123456' })
+    body: JSON.stringify({ codigo: 'OTRA2', nombre: 'Compartido Dos', usuario: 'compartido', password: '123456', acepto: true })
   });
   assert.equal(res.status, 200);
 
