@@ -979,7 +979,7 @@ async function vistaAsistencia(){
     $('lista').className='list';
     $('lista').innerHTML=ev.map(e=>`<div class="item-card flex" style="cursor:pointer" onclick="hojaAsistencia(${e.id})">
       ${fechaChip(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
-      <div class="muted small">${e.grupo||''}</div></div><span class="muted" style="font-size:20px">›</span></div>`).join('');
+      <div class="muted small">${escHtml(e.grupo||'')}</div></div><span class="muted" style="font-size:20px">›</span></div>`).join('');
   }catch{ $('lista').innerHTML='<p class="error">Error.</p>'; }
 }
 
@@ -1070,7 +1070,7 @@ async function cargarHistorialAprob(){
       <div class="list" style="margin-top:8px">${h.slice(0,30).map(x=>`<div class="item-card flex">
         <div style="flex:1"><b>${escHtml(x.evento_titulo||'')}</b>
           ${x.accion==='aprobado'?'<span class="estado-chip estado-aceptado">Aprobado</span>':'<span class="estado-chip estado-rechazado">Rechazado</span>'}
-          <div class="muted small">${x.grupo?escHtml(x.grupo)+' · ':''}${x.fecha_evento||''}${x.motivo?' · '+escHtml(x.motivo):''}</div></div>
+          <div class="muted small">${x.grupo?escHtml(x.grupo)+' · ':''}${escHtml(x.fecha_evento||'')}${x.motivo?' · '+escHtml(x.motivo):''}</div></div>
         <span class="muted small">${(x.creado_en||'').slice(0,10)}</span></div>`).join('')}</div></div>`;
   }catch{
     z.innerHTML='<p class="error small" style="margin-top:16px">No se pudo cargar el historial de aprobaciones · <a href="javascript:cargarHistorialAprob()" class="link" style="display:inline;padding:0">Reintentar</a></p>';
@@ -1360,7 +1360,7 @@ function renderCanciones(q){
   const term=(q||'').toLowerCase().trim();
   const todas=window._canciones||[];
   const lista=todas.filter(c=> !term || (c.titulo||'').toLowerCase().includes(term) || (c.autor||'').toLowerCase().includes(term));
-  if(!lista.length){ cont.className='muted'; cont.innerHTML='<p class="small">'+(todas.length?'Sin resultados para “'+(q||'')+'”.':'Aún no hay canciones.')+'</p>'; return; }
+  if(!lista.length){ cont.className='muted'; cont.innerHTML='<p class="small">'+(todas.length?'Sin resultados para “'+escHtml(q||'')+'”.':'Aún no hay canciones.')+'</p>'; return; }
   cont.className='list';
   const puede=esLiderMusicaUI();
   cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1;cursor:pointer" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
@@ -2103,7 +2103,7 @@ async function _renderAgregarMiembro(){
   z.innerHTML=`<div class="row" style="gap:8px;margin-bottom:12px"><select id="mg-nuevo" style="flex:1">${libres.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select><button class="btn small-btn" onclick="agregarMiembroGrupo()">Agregar al grupo</button></div>`;
 }
 async function agregarMiembroGrupo(){ try{ await api('/grupo/'+_grupoSel+'/miembros',{method:'POST',body:JSON.stringify({persona_id:$('mg-nuevo').value})}); $('mg-add-form').innerHTML=''; cargarMiembrosGrupo(); toast('👋 Agregado y avisado'); }catch(e){ toast(e.message); } }
-function quitarMiembroGrupo(id,nombre){ modalConfirm('¿Quitar a '+nombre+' del grupo?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/miembros/'+id,{method:'DELETE'}); cargarMiembrosGrupo(); toast('Listo'); }catch(e){ toast(e.message);} }); }
+function quitarMiembroGrupo(id,nombre){ modalConfirm('¿Quitar a '+escHtml(nombre)+' del grupo?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/miembros/'+id,{method:'DELETE'}); cargarMiembrosGrupo(); toast('Listo'); }catch(e){ toast(e.message);} }); }
 // --- Tareas (el líder asigna tareas a un miembro → aparecen en "Mi Servicio") ---
 function formTareaGrupo(){ const z=$('mg-tarea-form'); if(z.innerHTML){z.innerHTML='';return;}
   const ms=window._mgMiembros||[];
@@ -2355,7 +2355,7 @@ async function cargarCumpleanosDirectorio(){
 }
 function dirAvatar(p, size){
   size=size||48;
-  if(p.foto_url) return `<img src="${escHtml(p.foto_url)}" alt="" class="dir-avatar" style="width:${size}px;height:${size}px">`;
+  if(p.foto_url) return `<img src="${escHtml(safeUrl(p.foto_url))}" alt="" class="dir-avatar" style="width:${size}px;height:${size}px">`;
   const ini=(p.nombre||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
   return `<div class="dir-avatar dir-avatar-ini" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.38)}px">${escHtml(ini)}</div>`;
 }
