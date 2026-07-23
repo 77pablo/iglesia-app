@@ -116,6 +116,7 @@ async function cargarApp(){
   try{
     ME=await api('/me');
     if(ME && ME.persona && ME.persona.debe_cambiar_pass) return mostrarCambioObligatorio();
+    if(ME && ME.consentimiento_pendiente) return mostrarConsentimiento();
     abrirApp();
   }
   catch{ localStorage.removeItem('token'); mostrarLogin(); }
@@ -152,6 +153,8 @@ function abrirRegistro(){
       <input id="reg-email" type="email" placeholder="tucorreo@ejemplo.com" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
       <label style="margin-top:8px">Teléfono <span class="muted">(opcional)</span></label>
       <input id="reg-telefono" placeholder="+56 9 ..." onkeydown="if(event.key==='Enter')confirmarRegistro()" />
+      <label class="check" style="margin-top:12px;align-items:flex-start"><input type="checkbox" id="reg-acepto" style="margin-top:3px"/>
+        <span>He leído y acepto los <a href="/legal/terminos.html" target="_blank" rel="noopener">Términos</a> y la <a href="/legal/privacidad.html" target="_blank" rel="noopener">Política de Privacidad</a>.</span></label>
       <button class="btn" style="width:100%;margin-top:14px" onclick="confirmarRegistro()">Crear mi cuenta</button>
       <p id="reg-msg" class="error" style="margin-top:10px"></p>
     </div></div>`;
@@ -171,7 +174,8 @@ async function confirmarRegistro(){
   if(!nombre){ m.textContent='Escribe tu nombre'; return; }
   if(!usuario){ m.textContent='Elige un usuario'; return; }
   if(password.length<8){ m.textContent='La contraseña debe tener al menos 8 caracteres'; return; }
-  const body={codigo,nombre,usuario,password};
+  if(!$('reg-acepto').checked){ m.textContent='Debes aceptar los Términos y la Política de Privacidad'; return; }
+  const body={codigo,nombre,usuario,password,acepto:true};
   if(email) body.email=email;
   if(telefono) body.telefono=telefono;
   try{
@@ -208,6 +212,36 @@ async function confirmarCambioObligatorio(){
     toast('🔒 Contraseña actualizada');
     abrirApp();
   }catch(e){ err.textContent=(e&&e.message)||'No se pudo cambiar la contraseña'; }
+}
+
+// ============================================================
+//  CONSENTIMIENTO LEGAL (pantalla bloqueante)
+// ============================================================
+function mostrarConsentimiento(){
+  $('login').classList.add('hidden'); $('app').classList.add('hidden');
+  let ov=$('cons-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='cons-ov'; ov.className='hmodal-ov'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div class="hmodal" style="max-width:460px" onclick="event.stopPropagation()">
+    <div class="hmodal-head"><b style="flex:1;font-size:16px">📜 Antes de continuar</b></div>
+    <div style="padding:16px">
+      <p class="muted small" style="margin:0 0 12px">Para usar la app necesitamos tu consentimiento para tratar tus datos según nuestros documentos legales.</p>
+      <label class="check" style="align-items:flex-start"><input type="checkbox" id="cons-chk" style="margin-top:3px"/>
+        <span>He leído y acepto los <a href="/legal/terminos.html" target="_blank" rel="noopener">Términos</a> y la <a href="/legal/privacidad.html" target="_blank" rel="noopener">Política de Privacidad</a>.</span></label>
+      <button class="btn" style="width:100%;margin-top:14px" onclick="aceptarConsentimiento()">Acepto y continúo</button>
+      <button class="btn ghost small-btn" style="width:100%;margin-top:8px" onclick="salir()">Cerrar sesión</button>
+      <p id="cons-msg" class="error" style="margin-top:10px"></p>
+    </div></div>`;
+  ov.onclick=null; // no se cierra tocando fuera
+}
+async function aceptarConsentimiento(){
+  const m=$('cons-msg'); if(m) m.textContent='';
+  if(!$('cons-chk').checked){ if(m) m.textContent='Marca la casilla para continuar'; return; }
+  try{
+    await api('/consentimiento/aceptar',{method:'POST'});
+    if(ME) ME.consentimiento_pendiente=false;
+    const ov=$('cons-ov'); if(ov) ov.remove();
+    abrirApp();
+  }catch(e){ if(m) m.textContent=(e&&e.message)||'No se pudo registrar tu aceptación'; }
 }
 
 function puedePublicar(){
