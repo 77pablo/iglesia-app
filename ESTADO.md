@@ -25,8 +25,8 @@ También hecho esta sesión: **login del super-admin SIN iglesia** (enlace "Soy 
 - ✅ **IMPLEMENTADO:** consentimiento general (checkbox al registrarse + puerta para cuentas existentes vía `/me`) y ejercicio de derechos **ARCO autoservicio** (ver/editar/eliminar mis datos desde la cuenta).
 - ✅ **IMPLEMENTADO:** correo de contacto legal (ARCO) configurable por variable de entorno `LEGAL_CONTACT_EMAIL` — endpoint público `GET /api/legal/contacto`, inyectado en las 5 páginas de `web/legal/` (se muestra solo si la variable está definida).
 - ❌ **PENDIENTE del dueño:**
-  1. Definir `LEGAL_CONTACT_EMAIL` en Render (y en `backend/.env` local) con el correo real de contacto ARCO.
-  2. Completar con un **abogado** todos los placeholders `[…]` restantes de `web/legal/*.html` (razón social, RUT, domicilio, ciudad, fecha) antes de considerar esos documentos vigentes/vinculantes.
+  1. Completar con un **abogado** todos los placeholders `[…]` restantes de `web/legal/*.html` (razón social, RUT, domicilio, ciudad, fecha, y el `[CORREO DE CONTACTO — PENDIENTE]` del texto estático) antes de considerar esos documentos vigentes/vinculantes.
+  2. **Recién DESPUÉS** de limpiar esos placeholders, definir `LEGAL_CONTACT_EMAIL` en Render (y en `backend/.env` local) con el correo real de contacto ARCO. ⚠️ **Orden importante:** si defines `LEGAL_CONTACT_EMAIL` con el texto legal aún sin limpiar, la misma sección mostrará a la vez el placeholder `[CORREO…]` y el correo real inyectado — queda contradictorio de cara al usuario. Mientras el correo no esté definido, la línea dinámica simplemente no aparece (no rompe nada).
 
 ### 👉 ACCIÓN DEL DUEÑO EN RENDER (imprescindible tras desplegar)
 - Definir **`SUPERADMIN_PASSWORD`** (contraseña fuerte) en Render → Environment. Al primer arranque, rota automáticamente la vieja `1234` del super-admin de producción. Sin esta variable, la `1234` actual sigue vigente.
