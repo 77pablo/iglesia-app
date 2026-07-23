@@ -37,7 +37,7 @@ import pushRouter from './push.js';
 import cuentaRouter from './cuenta.js';
 import adminRouter from './admin.js';
 import mensajesRouter from './mensajes.js';
-import directorioRouter, { generarCumpleanosHoy } from './directorio.js';
+import directorioRouter, { generarCumpleanosHoyThrottled } from './directorio.js';
 import publicoRouter from './publico.js';
 import registroRouter from './registro.js';
 import superadminRouter from './superadmin.js';
@@ -212,7 +212,7 @@ app.get('/api/me', authMiddleware, (req, res) => {
   if (!persona) return res.status(404).json({ error: 'Persona no encontrada' });
   // Genera recordatorios pendientes de la iglesia al iniciar sesion (no duplica).
   try { generarRecordatoriosThrottled(persona.iglesia_id); } catch (e) { console.error('[recordatorios]', e.message); }
-  try { generarCumpleanosHoy(persona.iglesia_id); } catch (e) { console.error('[cumple]', e.message); }
+  try { generarCumpleanosHoyThrottled(persona.iglesia_id); } catch (e) { console.error('[cumple]', e.message); }
   const iglesia = db.prepare('SELECT nombre, codigo_unico FROM iglesia WHERE id = ?').get(persona.iglesia_id);
   res.json({
     persona: perfilPublico(persona),

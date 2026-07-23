@@ -9,12 +9,12 @@ import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { cargarDb, reiniciar, sembrarMinimo } from './helpers.js';
 
-let db, srv, base, signToken, SEM, generarCumpleanosHoy;
+let db, srv, base, signToken, SEM, generarCumpleanosHoy, generarCumpleanosHoyThrottled;
 
 before(async () => {
   db = await cargarDb();
   ({ signToken } = await import('../src/auth.js'));
-  ({ generarCumpleanosHoy } = await import('../src/directorio.js'));
+  ({ generarCumpleanosHoy, generarCumpleanosHoyThrottled } = await import('../src/directorio.js'));
   const { app } = await import('../src/server.js');
   srv = app.listen(0);
   await new Promise(r => srv.once('listening', r));
@@ -226,4 +226,23 @@ test('generarCumpleanosHoy: persona cuyo cumple es otro dia no genera nada', () 
   assert.equal(creados, 0);
   const notif = db.prepare("SELECT COUNT(*) AS n FROM notificacion WHERE tipo = 'cumple'").get().n;
   assert.equal(notif, 0);
+});
+
+// --- Fix: throttle de generarCumpleanosHoyThrottled (mismo patron que recordatorios) ---
+
+test('generarCumpleanosHoyThrottled: la 2a llamada seguida para la misma iglesia no reejecuta', () => {
+  const { mm, dd } = hoyMD();
+  db.prepare('UPDATE persona SET cumple = ? WHERE id = ?').run(`1990-${mm}-${dd}`, SEM.miembro1.id);
+
+  const creados1 = generarCumpleanosHoyThrottled(SEM.iglesiaId);
+  assert.ok(creados1 > 0, 'la 1a corrida genera notificaciones');
+
+  // Cumpleaños de otra persona, mismo dia: si NO estuviera throttleado, generaria mas notifs.
+  db.prepare('UPDATE persona SET cumple = ? WHERE id = ?').run(`1985-${mm}-${dd}`, SEM.miembro2.id);
+  const antes = db.prepare("SELECT COUNT(*) AS n FROM notificacion WHERE tipo = 'cumple'").get().n;
+  const creados2 = generarCumpleanosHoyThrottled(SEM.iglesiaId);
+  const despues = db.prepare("SELECT COUNT(*) AS n FROM notificacion WHERE tipo = 'cumple'").get().n;
+
+  assert.equal(creados2, 0, 'la 2a llamada dentro de la ventana de throttle no recalcula');
+  assert.equal(despues, antes, 'no se crearon notificaciones nuevas en la 2a corrida');
 });

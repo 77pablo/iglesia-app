@@ -194,6 +194,11 @@ r.post('/eliminar', (req, res) => {
          AND persona_id IN (SELECT id FROM persona WHERE iglesia_id = ?)`
     ).run(patronNombre, patronNombre, iid);
 
+    // Dispositivo/dispositivos ya no deben seguir "suscritos" a esta persona
+    // anonimizada: borra sus suscripciones push (VAPID) y tokens legacy.
+    db.prepare('DELETE FROM push_sub WHERE persona_id = ?').run(pid);
+    db.prepare('DELETE FROM dispositivo_push WHERE persona_id = ?').run(pid);
+
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
