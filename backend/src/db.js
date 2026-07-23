@@ -506,6 +506,20 @@ CREATE TABLE IF NOT EXISTS contacto_publico (
   mensaje     TEXT,
   creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- CONSENTIMIENTO LEGAL (Terminos + Privacidad), append-only: cada accion
+--  (otorgado/revocado) es una fila nueva -> historial trazable + revocable.
+CREATE TABLE IF NOT EXISTS consentimiento (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  iglesia_id  INTEGER NOT NULL,
+  persona_id  INTEGER NOT NULL,
+  tipo        TEXT NOT NULL DEFAULT 'general',
+  version     TEXT NOT NULL,
+  accion      TEXT NOT NULL,
+  fecha       TEXT NOT NULL,
+  ip          TEXT,
+  user_agent  TEXT
+);
 `);
 
 // --- Migracion aditiva: columnas nuevas en tablas existentes ---
@@ -587,6 +601,7 @@ db.exec(`
   -- adicionales por iglesia_id o persona_id solos.
   -- contacto_publico(iglesia_id): el pastor revisa los mensajes de su iglesia.
   CREATE INDEX IF NOT EXISTS idx_contactopublico_iglesia ON contacto_publico(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_consentimiento_persona ON consentimiento(persona_id, tipo, id);
 `);
 
 // --- Auto-reparación: el himnario (material permanente) SIEMPRE disponible ---
