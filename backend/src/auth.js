@@ -136,6 +136,16 @@ export function authMiddleware(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Falta el token' });
   try {
     const payload = jwt.verify(token, SECRET);
+    // El JWT dura 30 dias: si la persona fue desactivada o "eliminada" (activo=0,
+    // ver cuenta.js /eliminar) o su iglesia fue desactivada (ver superadmin.js),
+    // el token sigue siendo criptograficamente valido pero el acceso debe
+    // revocarse de inmediato, no esperar a que expire.
+    const p = db.prepare('SELECT activo, iglesia_id, rol_global FROM persona WHERE id = ?').get(payload.persona_id);
+    if (!p || p.activo !== 1) return res.status(401).json({ error: 'Cuenta desactivada' });
+    if (p.iglesia_id != null) {
+      const iglesia = db.prepare('SELECT activa FROM iglesia WHERE id = ?').get(p.iglesia_id);
+      if (!iglesia || iglesia.activa !== 1) return res.status(401).json({ error: 'Iglesia desactivada' });
+    }
     req.user = payload;            // { persona_id, iglesia_id }
     next();
   } catch {
