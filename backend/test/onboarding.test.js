@@ -75,7 +75,7 @@ test('POST /api/registro: el codigo es case-insensitive (se normaliza a MAYUSCUL
 test('POST /api/registro: codigo de iglesia invalido -> 400', async () => {
   const res = await fetch(base + '/api/registro', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codigo: 'NOEXISTE', nombre: 'X', usuario: 'x1', password: '123456' })
+    body: JSON.stringify({ codigo: 'NOEXISTE', nombre: 'X', usuario: 'x1', password: '123456', acepto: true })
   });
   assert.equal(res.status, 400);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM persona WHERE usuario='x1'").get().n, 0);
@@ -93,7 +93,7 @@ test('POST /api/registro: usuario duplicado dentro de la misma iglesia -> 409', 
 test('POST /api/registro: password muy corta -> 400', async () => {
   const res = await fetch(base + '/api/registro', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codigo: 'TEST', nombre: 'X', usuario: 'x2', password: '123' })
+    body: JSON.stringify({ codigo: 'TEST', nombre: 'X', usuario: 'x2', password: '123', acepto: true })
   });
   assert.equal(res.status, 400);
 });
