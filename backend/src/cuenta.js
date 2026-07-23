@@ -51,44 +51,49 @@ const passwordSchema = z.object({
 // login (credenciales), y 5 intentos/15min es razonable para pedir un codigo
 // o para probarlo, sin estorbar a un usuario real que se equivoca una vez.
 r.post('/recuperar', limiterLogin, validar(recuperarSchema), async (req, res) => {
-  const email = req.body.email.toLowerCase();
-  if (!mailActivo) return res.status(503).json({ error: 'El servidor aún no tiene configurado el envío de correo.' });
+  try {
+    const email = req.body.email.toLowerCase();
+    if (!mailActivo) return res.status(503).json({ error: 'El servidor aún no tiene configurado el envío de correo.' });
 
-  // 'email' no es UNIQUE en el esquema (ver db.js): puede haber mas de una
-  // cuenta activa con el mismo correo (incluso en iglesias distintas). Si
-  // adivinaramos "la primera creada" resetariamos la cuenta equivocada
-  // (ver auditoria backend.md #5). En vez de eso: si hay colision, NO se
-  // envia codigo (se aborta de forma segura) y se deja registro para que
-  // un administrador corrija los correos duplicados. La respuesta al
-  // cliente es identica a la de "correo no encontrado" (no revela nada).
-  const candidatas = db.prepare('SELECT id, nombre FROM persona WHERE lower(email) = ? AND activo = 1 ORDER BY id').all(email);
-  if (candidatas.length > 1) {
-    console.warn(`[cuenta] recuperar: ${candidatas.length} cuentas activas comparten el mismo correo; se aborta el envio de codigo para evitar resetear la cuenta equivocada`);
-    return res.json({ ok: true, mensaje: 'Si el correo está registrado, te enviamos un código.' });
-  }
-  const persona = candidatas[0];
-  if (persona) {
-    const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-    // Invalida codigos anteriores y guarda el nuevo (expira en 15 min).
-    db.prepare('DELETE FROM reset_codigo WHERE persona_id = ?').run(persona.id);
-    db.prepare("INSERT INTO reset_codigo (persona_id, codigo, expira) VALUES (?,?, datetime('now','+15 minutes'))")
-      .run(persona.id, codigo);
-    try {
-      await enviarCorreo(
-        email,
-        'Código para recuperar tu contraseña',
-        `Hola ${persona.nombre}:\n\nTu código para restablecer la contraseña es: ${codigo}\n\nVence en 15 minutos. Si no fuiste tú, ignora este correo.`,
-        `<p>Hola <b>${persona.nombre}</b>:</p><p>Tu código para restablecer la contraseña es:</p>
-         <p style="font-size:26px;font-weight:bold;letter-spacing:4px">${codigo}</p>
-         <p>Vence en 15 minutos. Si no fuiste tú, ignora este correo.</p>`
-      );
-    } catch (e) {
-      console.error('[cuenta] no se pudo enviar correo:', e.message);
-      return res.status(502).json({ error: 'No se pudo enviar el correo. Inténtalo más tarde.' });
+    // 'email' no es UNIQUE en el esquema (ver db.js): puede haber mas de una
+    // cuenta activa con el mismo correo (incluso en iglesias distintas). Si
+    // adivinaramos "la primera creada" resetariamos la cuenta equivocada
+    // (ver auditoria backend.md #5). En vez de eso: si hay colision, NO se
+    // envia codigo (se aborta de forma segura) y se deja registro para que
+    // un administrador corrija los correos duplicados. La respuesta al
+    // cliente es identica a la de "correo no encontrado" (no revela nada).
+    const candidatas = db.prepare('SELECT id, nombre FROM persona WHERE lower(email) = ? AND activo = 1 ORDER BY id').all(email);
+    if (candidatas.length > 1) {
+      console.warn(`[cuenta] recuperar: ${candidatas.length} cuentas activas comparten el mismo correo; se aborta el envio de codigo para evitar resetear la cuenta equivocada`);
+      return res.json({ ok: true, mensaje: 'Si el correo está registrado, te enviamos un código.' });
     }
+    const persona = candidatas[0];
+    if (persona) {
+      const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+      // Invalida codigos anteriores y guarda el nuevo (expira en 15 min).
+      db.prepare('DELETE FROM reset_codigo WHERE persona_id = ?').run(persona.id);
+      db.prepare("INSERT INTO reset_codigo (persona_id, codigo, expira) VALUES (?,?, datetime('now','+15 minutes'))")
+        .run(persona.id, codigo);
+      try {
+        await enviarCorreo(
+          email,
+          'Código para recuperar tu contraseña',
+          `Hola ${persona.nombre}:\n\nTu código para restablecer la contraseña es: ${codigo}\n\nVence en 15 minutos. Si no fuiste tú, ignora este correo.`,
+          `<p>Hola <b>${persona.nombre}</b>:</p><p>Tu código para restablecer la contraseña es:</p>
+           <p style="font-size:26px;font-weight:bold;letter-spacing:4px">${codigo}</p>
+           <p>Vence en 15 minutos. Si no fuiste tú, ignora este correo.</p>`
+        );
+      } catch (e) {
+        console.error('[cuenta] no se pudo enviar correo:', e.message);
+        return res.status(502).json({ error: 'No se pudo enviar el correo. Inténtalo más tarde.' });
+      }
+    }
+    // Respuesta uniforme exista o no el correo.
+    res.json({ ok: true, mensaje: 'Si el correo está registrado, te enviamos un código.' });
+  } catch (e) {
+    console.error('[cuenta] error en /recuperar:', e);
+    if (!res.headersSent) res.status(500).json({ error: 'Error al procesar la solicitud' });
   }
-  // Respuesta uniforme exista o no el correo.
-  res.json({ ok: true, mensaje: 'Si el correo está registrado, te enviamos un código.' });
 });
 
 // Paso 2: confirma el codigo + nueva contrasena.

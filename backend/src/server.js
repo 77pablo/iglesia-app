@@ -43,6 +43,13 @@ import registroRouter from './registro.js';
 import superadminRouter from './superadmin.js';
 import consentimientoRouter, { tieneConsentimientoVigente } from './consentimiento.js';
 
+// --- Red de seguridad global: un rechazo/excepcion no atrapada NO debe tumbar
+// el proceso (que serviria a TODAS las iglesias). Express 4 no captura los
+// rechazos de promesas dentro de handlers async por si solo, asi que esto es
+// la ultima linea de defensa si algun handler async se escapara sin try/catch.
+process.on('unhandledRejection', (err) => { console.error('[unhandledRejection]', err); });
+process.on('uncaughtException', (err) => { console.error('[uncaughtException]', err); });
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 // Render (y la mayoría de PaaS) sirve la app detrás de un proxy inverso. Sin
