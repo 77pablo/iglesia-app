@@ -62,6 +62,20 @@ async function uploadArchivo(file){
   if(!r.ok) throw new Error(d.error||'No se pudo subir el archivo');
   return d.url;
 }
+// Deshabilita el botón que disparó la acción mientras `fn` está en curso, para que
+// un doble clic (o Enter repetido) durante el POST/PATCH no dispare una segunda petición.
+// Uso: dentro de una función invocada por onclick="fn()" sin referencia al botón,
+// llama conBoton(botonActual(), async()=>{ ... }) al inicio.
+function botonActual(){
+  try{ return (typeof event!=='undefined' && event && event.target && event.target.closest) ? event.target.closest('button') : (document.activeElement && document.activeElement.tagName==='BUTTON' ? document.activeElement : null); }
+  catch{ return null; }
+}
+async function conBoton(btn, fn){
+  if(btn && btn.disabled) return;
+  if(btn) btn.disabled=true;
+  try{ return await fn(); }
+  finally{ if(btn) btn.disabled=false; }
+}
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?{m:p[1],d:p[2]}:null; }
 function chipFecha(f){ const x=parseFecha(f); if(!x) return `<div class="mini-date"><b>—</b><span></span></div>`; return `<div class="mini-date"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
@@ -178,14 +192,16 @@ async function confirmarRegistro(){
   const body={codigo,nombre,usuario,password,acepto:true};
   if(email) body.email=email;
   if(telefono) body.telefono=telefono;
-  try{
-    const r=await fetch(API+'/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const data=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(data.error||'No se pudo crear la cuenta. Revisa el código de tu iglesia.');
-    localStorage.setItem('token',data.token);
-    cerrarRegistro();
-    cargarApp();
-  }catch(e){ m.textContent=(e&&e.message)||'No se pudo conectar con el servidor'; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      const r=await fetch(API+'/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(data.error||'No se pudo crear la cuenta. Revisa el código de tu iglesia.');
+      localStorage.setItem('token',data.token);
+      cerrarRegistro();
+      cargarApp();
+    }catch(e){ m.textContent=(e&&e.message)||'No se pudo conectar con el servidor'; }
+  });
 }
 
 // ============================================================
@@ -577,6 +593,14 @@ const CAL_DOW=['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM'];
 // (de izquierda a derecha: día, luego mes, luego año), sin depender del idioma
 // del navegador. Pinta con fechaSelectHTML(prefijo, valor, opts) y lee el valor
 // 'YYYY-MM-DD' con fechaSelectValor(prefijo). opts: {opcional, desde, hasta}.
+// Nº de días reales de un mes/año (mes en 1..12). Si no hay mes elegido aún, usa 31
+// (no hay nada que acotar); si no hay año elegido, usa el año actual (basta para saber
+// si febrero tiene 28 o 29 en la inmensa mayoría de los casos de uso reales).
+function _diasEnMes(anio, mes){
+  if(!mes) return 31;
+  const y = anio || new Date().getFullYear();
+  return new Date(y, mes, 0).getDate();
+}
 function fechaSelectHTML(prefijo, valor, opts){
   const o=opts||{};
   const hoy=new Date();
@@ -584,18 +608,36 @@ function fechaSelectHTML(prefijo, valor, opts){
   // Sin valor: si es opcional queda "en blanco"; si no, por defecto hoy.
   const yDef=p[0] || (o.opcional?undefined:hoy.getFullYear());
   const mDef=p[1] || (o.opcional?undefined:hoy.getMonth()+1);
-  const dDef=p[2] || (o.opcional?undefined:hoy.getDate());
+  let dDef=p[2] || (o.opcional?undefined:hoy.getDate());
   const blanco=!p.length && o.opcional;
   const aDesde=o.desde!=null?o.desde:hoy.getFullYear()-2;
   const aHasta=o.hasta!=null?o.hasta:hoy.getFullYear()+3;
   const ph=(t)=> o.opcional ? `<option value="" ${blanco?'selected':''}>${t}</option>` : '';
-  const diaOpts=ph('Día')+Array.from({length:31},(_,i)=>i+1).map(d=>`<option ${d===dDef?'selected':''}>${d}</option>`).join('');
+  const maxDias=_diasEnMes(yDef, mDef);
+  if(dDef && dDef>maxDias) dDef=maxDias;
+  const diaOpts=ph('Día')+Array.from({length:maxDias},(_,i)=>i+1).map(d=>`<option ${d===dDef?'selected':''}>${d}</option>`).join('');
   const mesOpts=ph('Mes')+MESES_LARGO.map((nm,i)=>`<option value="${i+1}" ${(i+1)===mDef?'selected':''}>${nm}</option>`).join('');
   let anioOpts=ph('Año'); for(let a=aDesde;a<=aHasta;a++) anioOpts+=`<option ${a===yDef?'selected':''}>${a}</option>`;
   return `<span class="fecha-select" style="display:inline-flex;gap:8px;flex-wrap:wrap">
-    <select id="${prefijo}-dia" title="Día" style="max-width:90px">${diaOpts}</select>
-    <select id="${prefijo}-mes" title="Mes" style="max-width:140px">${mesOpts}</select>
-    <select id="${prefijo}-anio" title="Año" style="max-width:110px">${anioOpts}</select></span>`;
+    <select id="${prefijo}-dia" title="Día" data-opcional="${o.opcional?'1':''}" style="max-width:90px">${diaOpts}</select>
+    <select id="${prefijo}-mes" title="Mes" style="max-width:140px" onchange="fechaSelectAjustarDias('${prefijo}')">${mesOpts}</select>
+    <select id="${prefijo}-anio" title="Año" style="max-width:110px" onchange="fechaSelectAjustarDias('${prefijo}')">${anioOpts}</select></span>`;
+}
+// Recalcula las opciones del <select> de día según el mes/año elegidos, para que
+// nunca se pueda dejar seleccionado (ni el backend guardar) un día que no existe en
+// ese mes (ej. "30 de febrero"). Si el día elegido ya no es válido, lo ajusta al
+// último día real de ese mes.
+function fechaSelectAjustarDias(prefijo){
+  const d=$(prefijo+'-dia'), m=$(prefijo+'-mes'), a=$(prefijo+'-anio');
+  if(!d||!m||!a) return;
+  const mes=m.value?Number(m.value):null;
+  const anio=a.value?Number(a.value):null;
+  const maxDias=_diasEnMes(anio, mes);
+  const opcional=d.dataset.opcional==='1';
+  const actual=d.value?Number(d.value):null;
+  const dSel = (actual && actual>maxDias) ? maxDias : actual;
+  const ph = opcional ? `<option value="" ${dSel?'':'selected'}>Día</option>` : '';
+  d.innerHTML = ph + Array.from({length:maxDias},(_,i)=>i+1).map(x=>`<option ${x===dSel?'selected':''}>${x}</option>`).join('');
 }
 function fechaSelectValor(prefijo){
   const d=$(prefijo+'-dia'), m=$(prefijo+'-mes'), a=$(prefijo+'-anio');
@@ -763,14 +805,16 @@ async function guardarEvento(){
     hora_inicio:$('ev-ini').value,hora_fin:$('ev-fin').value,lugar:$('ev-lugar').value.trim()};
   const e=$('ev-error'); e.textContent='';
   if(!body.titulo){ e.textContent='Pon al menos el título'; return; }
-  try{
-    if(window._editEvId){ await api('/eventos/'+window._editEvId,{method:'PATCH',body:JSON.stringify(body)}); toast('Evento actualizado'); }
-    else {
-      const r=await api('/eventos',{method:'POST',body:JSON.stringify(body)});
-      toast(r.estado==='pendiente' ? '📨 Enviado · pendiente de aprobación del pastor' : '✅ Evento creado y aprobado');
-    }
-    window._editEvId=null; $('form-zona').innerHTML=''; cargarEventos();
-  } catch(ex){ e.textContent=ex.message; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      if(window._editEvId){ await api('/eventos/'+window._editEvId,{method:'PATCH',body:JSON.stringify(body)}); toast('Evento actualizado'); }
+      else {
+        const r=await api('/eventos',{method:'POST',body:JSON.stringify(body)});
+        toast(r.estado==='pendiente' ? '📨 Enviado · pendiente de aprobación del pastor' : '✅ Evento creado y aprobado');
+      }
+      window._editEvId=null; $('form-zona').innerHTML=''; cargarEventos();
+    } catch(ex){ e.textContent=ex.message; }
+  });
 }
 
 // ============================================================
@@ -836,15 +880,17 @@ async function guardarAnuncio(){
   const body={titulo:$('an-titulo').value.trim(),texto:$('an-texto').value.trim(),urgente:$('an-urgente').checked};
   const e=$('an-error'); e.textContent='';
   if(!body.titulo){ e.textContent='Pon un título'; return; }
-  try{
-    if(window._editAnId){ await api('/anuncios/'+window._editAnId,{method:'PATCH',body:JSON.stringify(body)}); toast('Anuncio actualizado'); }
-    else {
-      body.segmento=leerSegmento();
-      const r=await api('/anuncios',{method:'POST',body:JSON.stringify(body)}); actualizarCampana();
-      toast('📢 Publicado · '+(r.enviadas||0)+' avisados');
-    }
-    window._editAnId=null; $('form-zona').innerHTML=''; cargarAnuncios();
-  } catch(ex){ e.textContent=ex.message; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      if(window._editAnId){ await api('/anuncios/'+window._editAnId,{method:'PATCH',body:JSON.stringify(body)}); toast('Anuncio actualizado'); }
+      else {
+        body.segmento=leerSegmento();
+        const r=await api('/anuncios',{method:'POST',body:JSON.stringify(body)}); actualizarCampana();
+        toast('📢 Publicado · '+(r.enviadas||0)+' avisados');
+      }
+      window._editAnId=null; $('form-zona').innerHTML=''; cargarAnuncios();
+    } catch(ex){ e.textContent=ex.message; }
+  });
 }
 
 // ============================================================
@@ -1340,7 +1386,11 @@ async function vistaMusica(){
     $('set-ev').onchange=()=>{ cargarSetlist($('set-ev').value); cargarPlan($('set-ev').value); };
     if(ev.length){ cargarSetlist(ev[0].id); cargarPlan(ev[0].id); }
     else $('plan').innerHTML='<p class="muted small">Crea un evento para planificar el equipo y el ensayo.</p>';
-  }catch{}
+  }catch{
+    const retry='<a href="javascript:vistaMusica()" class="link" style="display:inline;padding:0">Reintentar</a>';
+    const set=$('setlist'); if(set){ set.className='error small'; set.innerHTML='No se pudo cargar · '+retry; }
+    const plan=$('plan'); if(plan){ plan.className='error small'; plan.innerHTML='No se pudo cargar · '+retry; }
+  }
 }
 function _claveCanciones(){ return 'canciones_'+(ME.iglesia?ME.iglesia.id:0); }
 async function cargarCanciones(){
@@ -1716,7 +1766,8 @@ async function cargarCasos(){
 }
 async function toggleFormCaso(){
   const z=$('form-caso'); if(z.innerHTML){ z.innerHTML=''; return; }
-  const personas=await api('/personas');
+  let personas;
+  try{ personas=await api('/personas'); }catch(e){ toast(e.message||'No se pudo cargar la lista de personas'); return; }
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>Nuevo caso</h3>
     <label>Persona</label><select id="caso-persona">${personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select>
     <label>Motivo</label><select id="caso-motivo">
@@ -1816,21 +1867,25 @@ function filaMov(m){
     <b style="color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
 }
 async function cargarMasMovimientos(){
-  _movOffset+=50;
-  try{
-    const resp=await api('/tesoreria/movimientos?offset='+_movOffset);
-    const items=Array.isArray(resp)?resp:(resp.items||[]);
-    const hayMas=Array.isArray(resp)?false:!!resp.hayMas;
-    $('mov-list').insertAdjacentHTML('beforeend', items.map(filaMov).join(''));
-    if(!hayMas){ const b=$('mov-mas'); if(b) b.remove(); }
-  }catch(e){ toast(e.message); }
+  const btn=$('mov-mas');
+  await conBoton(btn, async()=>{
+    const offsetSiguiente=_movOffset+50;
+    try{
+      const resp=await api('/tesoreria/movimientos?offset='+offsetSiguiente);
+      const items=Array.isArray(resp)?resp:(resp.items||[]);
+      const hayMas=Array.isArray(resp)?false:!!resp.hayMas;
+      _movOffset=offsetSiguiente;
+      $('mov-list').insertAdjacentHTML('beforeend', items.map(filaMov).join(''));
+      if(!hayMas){ const b=$('mov-mas'); if(b) b.remove(); }
+    }catch(e){ toast(e.message); }
+  });
 }
 function formMov(tipo){
   const z=$('mov-form');
   const cats=tipo==='ingreso'?['ofrenda','diezmo','donacion','otro']:['servicios','eventos','ayuda','otro'];
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${tipo==='ingreso'?'Nuevo ingreso':'Nuevo gasto'}</h3>
     <label>Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c}">${cap(c)}</option>`).join('')}</select>
-    <label>Monto</label><input id="mv-monto" type="number" placeholder="0" />
+    <label>Monto</label><input id="mv-monto" type="number" min="0.01" step="0.01" placeholder="0" />
     <label>Fecha ${tipo==='ingreso'?'del ingreso':'del gasto'}</label><div>${fechaSelectHTML('mv','')}</div>
     <label>${tipo==='ingreso'?'Descripción / origen':'¿En qué se gastó?'}</label>
     <input id="mv-desc" placeholder="${tipo==='ingreso'?'Ej. Ofrenda dominical':'Ej. Compra de materiales para el evento'}" />
@@ -1841,14 +1896,16 @@ function formMov(tipo){
 }
 async function guardarMov(tipo){
   const monto=$('mv-monto').value;
-  if(!monto){ $('mv-error').textContent='Pon un monto'; return; }
-  try{
-    let comprobante_url='';
-    const f=$('mv-file').files[0];
-    if(f){ toast('Subiendo comprobante…'); comprobante_url=await uploadArchivo(f); }
-    const body={tipo,categoria:$('mv-cat').value,monto,descripcion:$('mv-desc').value.trim(),fecha:fechaSelectValor('mv'),comprobante_url};
-    await api('/tesoreria/movimientos',{method:'POST',body:JSON.stringify(body)}); toast('💰 Registrado'); vistaTesoreria();
-  }catch(e){ $('mv-error').textContent=e.message; }
+  if(!(Number(monto)>0)){ $('mv-error').textContent='Monto inválido'; toast('Monto inválido'); return; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      let comprobante_url='';
+      const f=$('mv-file').files[0];
+      if(f){ toast('Subiendo comprobante…'); comprobante_url=await uploadArchivo(f); }
+      const body={tipo,categoria:$('mv-cat').value,monto,descripcion:$('mv-desc').value.trim(),fecha:fechaSelectValor('mv'),comprobante_url};
+      await api('/tesoreria/movimientos',{method:'POST',body:JSON.stringify(body)}); toast('💰 Registrado'); vistaTesoreria();
+    }catch(e){ $('mv-error').textContent=e.message; }
+  });
 }
 
 // ============================================================
@@ -1896,12 +1953,15 @@ async function vistaClase(id,nombre){
   cargarMaterial(); cargarNinos();
 }
 async function cargarMaterial(){
-  try{ const m=await api('/ninos/clase/'+_claseActual+'/material'); const c=$('material');
+  const c=$('material');
+  try{ const m=await api('/ninos/clase/'+_claseActual+'/material');
     c.className=m.length?'list':'muted';
     c.innerHTML=m.length? m.map(x=>`<div class="item-card"><b>${escHtml(x.titulo)}</b>${x.fecha?' <span class="muted small">· '+fechaTxt(x.fecha)+'</span>':''}
       ${x.versiculo?`<div class="muted small">📖 ${escHtml(x.versiculo)}</div>`:''}
       ${x.material_url?`<div class="muted small">📎 <a href="${escHtml(safeUrl(x.material_url))}" target="_blank">Ver documento</a></div>`:''}</div>`).join('') : '<p class="small">Sin lecciones.</p>';
-  }catch{}
+  }catch{
+    if(c){ c.className='muted'; c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarMaterial()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; }
+  }
 }
 function formMaterial(){ const z=$('form-material'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="form-panel">
@@ -1922,13 +1982,20 @@ async function guardarMaterial(){
   }catch(e){ toast(e.message); }
 }
 async function cargarNinos(){
-  try{ const n=await api('/ninos/clase/'+_claseActual+'/ninos'); window._ninos=n; const c=$('ninos-lista');
+  const c=$('ninos-lista');
+  try{ const n=await api('/ninos/clase/'+_claseActual+'/ninos'); window._ninos=n;
     c.className=n.length?'list':'muted';
     c.innerHTML=n.length? n.map(x=>`<div class="item-card"><b>${escHtml(x.nombre)}</b>${x.edad?' <span class="muted small">'+escHtml(String(x.edad))+' años</span>':''}
       ${x.alergias?` <span class="estado-chip estado-rechazado">⚠️ ${escHtml(x.alergias)}</span>`:''}
       <div class="muted small">${x.familia?'Familia '+escHtml(x.familia):''}</div></div>`).join('') : '<p class="small">Sin niños.</p>';
     renderAsistNinos();
-  }catch{}
+  }catch{
+    if(c){ c.className='muted'; c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarNinos()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; }
+    // Un fallo aquí no debe dejar "Asistencia" colgada en "Cargando…"
+    window._ninos=[];
+    const asist=$('asist-ninos');
+    if(asist){ asist.className='muted'; asist.innerHTML='<p class="small">No se pudo cargar la lista de niños.</p>'; }
+  }
 }
 function formNino(){ const z=$('form-nino'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="form-panel">
@@ -2576,8 +2643,10 @@ async function adminCrearUsuario(){
   const body={nombre:$('au-nombre').value.trim(),usuario:$('au-usuario').value.trim(),password:$('au-pass').value,email:$('au-email').value.trim()};
   if(!body.nombre||!body.usuario){ $('au-err').textContent='Pon nombre y usuario'; return; }
   if((body.password||'').length<8){ $('au-err').textContent='La contraseña debe tener al menos 8 caracteres'; return; }
-  try{ await api('/admin/usuarios',{method:'POST',body:JSON.stringify(body)}); toast('✅ Usuario creado'); vistaAdmin(); }
-  catch(e){ $('au-err').textContent=e.message; }
+  await conBoton(botonActual(), async()=>{
+    try{ await api('/admin/usuarios',{method:'POST',body:JSON.stringify(body)}); toast('✅ Usuario creado'); vistaAdmin(); }
+    catch(e){ $('au-err').textContent=e.message; }
+  });
 }
 
 // --- Asignar rol (agregado rápido, con accesos visibles) ---
@@ -2777,21 +2846,23 @@ async function saCrearIglesia(){
   if(!body.nombre_iglesia){ err.textContent='Escribe el nombre de la iglesia'; return; }
   if(!body.pastor_nombre||!body.pastor_usuario||!body.pastor_email){ err.textContent='Completa nombre, usuario y correo del pastor'; return; }
   if((body.pastor_password||'').length<8){ err.textContent='La contraseña temporal debe tener al menos 8 caracteres'; return; }
-  try{
-    const r=await api('/superadmin/iglesias',{method:'POST',body:JSON.stringify(body)});
-    toast('✅ Iglesia creada');
-    const igCodigo=(r.iglesia&&(r.iglesia.codigo_unico||r.iglesia.codigo))||codigo||'';
-    const pastorUsuario=(r.pastor&&r.pastor.usuario)||body.pastor_usuario;
-    $('sa-resultado').innerHTML=`
-      <div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
-        <p class="muted small" style="margin-bottom:6px">Código de la iglesia — compártelo con tu comunidad:</p>
-        <div style="font-size:1.8rem;font-weight:800;letter-spacing:.08em;color:var(--primary)">${escHtml(igCodigo)}</div>
-        <button class="btn small-btn" style="margin-top:10px" onclick="saCopiar('${escHtml(igCodigo)}')">📋 Copiar código</button>
-        <p class="muted small" style="margin-top:10px">Pastor creado: <b>${escHtml(pastorUsuario)}</b></p>
-      </div>`;
-    ['sa-nombre-ig','sa-codigo','sa-pastor-nombre','sa-pastor-usuario','sa-pastor-email','sa-pastor-pass'].forEach(id=>{ const i=$(id); if(i) i.value=''; });
-    saCargarLista();
-  }catch(e){ err.textContent=(e&&e.message)||'No se pudo crear la iglesia'; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      const r=await api('/superadmin/iglesias',{method:'POST',body:JSON.stringify(body)});
+      toast('✅ Iglesia creada');
+      const igCodigo=(r.iglesia&&(r.iglesia.codigo_unico||r.iglesia.codigo))||codigo||'';
+      const pastorUsuario=(r.pastor&&r.pastor.usuario)||body.pastor_usuario;
+      $('sa-resultado').innerHTML=`
+        <div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
+          <p class="muted small" style="margin-bottom:6px">Código de la iglesia — compártelo con tu comunidad:</p>
+          <div style="font-size:1.8rem;font-weight:800;letter-spacing:.08em;color:var(--primary)">${escHtml(igCodigo)}</div>
+          <button class="btn small-btn" style="margin-top:10px" onclick="saCopiar('${escHtml(igCodigo)}')">📋 Copiar código</button>
+          <p class="muted small" style="margin-top:10px">Pastor creado: <b>${escHtml(pastorUsuario)}</b></p>
+        </div>`;
+      ['sa-nombre-ig','sa-codigo','sa-pastor-nombre','sa-pastor-usuario','sa-pastor-email','sa-pastor-pass'].forEach(id=>{ const i=$(id); if(i) i.value=''; });
+      saCargarLista();
+    }catch(e){ err.textContent=(e&&e.message)||'No se pudo crear la iglesia'; }
+  });
 }
 function saCopiar(codigo){
   if(!codigo) return;
@@ -3144,6 +3215,7 @@ const Chat = {
     this.convActual=id;
     let data;
     try{ data=await api('/mensajes/conversacion/'+id); }catch(e){ return toast(e.message); }
+    if(this.convActual!==id) return; // el usuario abrió otra conversación mientras cargaba esta
     const mensajes=data.mensajes||[];
     const conv=data.conversacion||{};
     const hilo=$('chatHilo'); if(!hilo) return;
