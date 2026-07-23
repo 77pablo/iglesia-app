@@ -4,7 +4,9 @@
 //  nueva -> historial trazable + revocable. La vigencia = la ultima
 //  fila de la persona es 'otorgado' Y su version == la vigente.
 // ============================================================
+import { Router } from 'express';
 import db from './db.js';
+import { authMiddleware } from './auth.js';
 
 export const CONSENT_VERSION = '2026-07-23';
 
@@ -26,3 +28,24 @@ export function registrarConsentimiento(personaId, iglesiaId, accion, req) {
     req ? String(req.get?.('user-agent') || '') : null
   );
 }
+
+const r = Router();
+r.use(authMiddleware);
+
+r.get('/estado', (req, res) => {
+  const fila = db.prepare(
+    "SELECT version, fecha FROM consentimiento WHERE persona_id = ? AND tipo = 'general' AND accion = 'otorgado' ORDER BY id DESC LIMIT 1"
+  ).get(req.user.persona_id);
+  res.json({
+    vigente: tieneConsentimientoVigente(req.user.persona_id),
+    version: CONSENT_VERSION,
+    fecha: fila ? fila.fecha : null
+  });
+});
+
+r.post('/aceptar', (req, res) => {
+  registrarConsentimiento(req.user.persona_id, req.user.iglesia_id, 'otorgado', req);
+  res.json({ ok: true });
+});
+
+export default r;

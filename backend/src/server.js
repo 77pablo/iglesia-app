@@ -41,6 +41,7 @@ import directorioRouter, { generarCumpleanosHoy } from './directorio.js';
 import publicoRouter from './publico.js';
 import registroRouter from './registro.js';
 import superadminRouter from './superadmin.js';
+import consentimientoRouter, { tieneConsentimientoVigente } from './consentimiento.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -205,7 +206,8 @@ app.get('/api/me', authMiddleware, (req, res) => {
     persona: perfilPublico(persona),
     iglesia,
     roles: getRoles(persona.id),
-    modulos: modulosVisibles(persona.id)   // lo que la app le muestra
+    modulos: modulosVisibles(persona.id),   // lo que la app le muestra
+    consentimiento_pendiente: !tieneConsentimientoVigente(persona.id)
   });
 });
 
@@ -267,6 +269,7 @@ app.use('/api/obispo', obispoRouter);
 app.use('/api/superadmin', limiterSensible, superadminRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/cuenta', cuentaRouter);
+app.use('/api/consentimiento', consentimientoRouter);
 // Endpoint sensible: 10 req/IP cada 15 min (crear/editar usuarios y roles).
 app.use('/api/admin', limiterSensible, adminRouter);
 // Chat: limitador propio holgado (limiterChat), fuera del limite general.
