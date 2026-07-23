@@ -64,6 +64,22 @@ test('un segundo pastor SI puede eliminarse (no es el unico)', async () => {
   assert.equal(res.status, 200);
 });
 
+test('eliminar tambien limpia el nombre en aprobacion_log y en notificaciones de cumple ajenas', async () => {
+  // el nombre de miembro1 quedo incrustado en un log de aprobacion y en una notif de cumple del pastor
+  db.prepare("INSERT INTO aprobacion_log (iglesia_id, evento_titulo, accion, actor_id, actor_nombre) VALUES (?,?,?,?,?)")
+    .run(SEM.iglesiaId, 'Retiro', 'aprobado', SEM.miembro1.id, SEM.miembro1.nombre);
+  db.prepare("INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)")
+    .run(SEM.pastor.id, 'cumple', '🎂 Hoy cumple ' + SEM.miembro1.nombre, '¡Felicita a ' + SEM.miembro1.nombre + '!');
+
+  const res = await fetch(base + '/api/cuenta/eliminar', { method: 'POST', headers: H(SEM.miembro1) });
+  assert.equal(res.status, 200);
+
+  const log = db.prepare('SELECT actor_nombre FROM aprobacion_log WHERE actor_id = ?').get(SEM.miembro1.id);
+  assert.equal(log.actor_nombre, 'Usuario eliminado');
+  const cumple = db.prepare("SELECT COUNT(*) AS n FROM notificacion WHERE tipo='cumple' AND titulo LIKE ?").get('%' + SEM.miembro1.nombre + '%').n;
+  assert.equal(cumple, 0, 'las notificaciones de cumple que lo nombran se borraron');
+});
+
 test('GET /api/cuenta/mis-datos: no filtra datos de otra persona', async () => {
   const telefonoAjeno = '+56999999999';
   db.prepare('UPDATE persona SET telefono = ? WHERE id = ?').run(telefonoAjeno, SEM.miembro2.id);

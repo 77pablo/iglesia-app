@@ -179,6 +179,16 @@ r.post('/eliminar', (req, res) => {
          activo = 0, password_hash = ? WHERE id = ?`
     ).run('eliminado_' + pid, claveMuerta, pid);
     registrarConsentimiento(pid, iid, 'revocado', req);
+
+    // Derecho al olvido: limpiar el nombre en copias denormalizadas visibles para otros.
+    db.prepare('UPDATE aprobacion_log SET actor_nombre = ? WHERE actor_id = ?')
+      .run('Usuario eliminado', pid);
+    const patronNombre = '%' + yo.nombre + '%';
+    db.prepare(
+      `DELETE FROM notificacion WHERE tipo = 'cumple' AND (titulo LIKE ? OR texto LIKE ?)
+         AND persona_id IN (SELECT id FROM persona WHERE iglesia_id = ?)`
+    ).run(patronNombre, patronNombre, iid);
+
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
