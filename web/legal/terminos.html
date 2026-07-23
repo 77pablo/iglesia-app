@@ -468,6 +468,7 @@ Aplicación o el tratamiento de datos personales, el Usuario puede contactarse a
 <li><strong>Domicilio:</strong> [DIRECCIÓN, Temuco, Chile]</li>
 <li><strong>Correo de contacto:</strong> [CORREO DE CONTACTO — PENDIENTE]</li>
 </ul>
+<p id="legal-contacto" style="display:none">Contacto para ejercer tus derechos: <a id="legal-contacto-mail" href="#"></a></p>
 <hr />
 <p><em>Este documento debe leerse en conjunto con la </em><em>Política de Privacidad</em><em> y, cuando corresponda,
 con los </em><em>Consentimientos</em><em> específicos de la Aplicación. Recuerde: este es un </em><em>borrador de
@@ -478,5 +479,14 @@ antes de su publicación o entrada en vigencia.</em></p>
       <a href="privacidad.html">Privacidad</a> · <b>Términos</b> · <a href="cookies.html">Cookies</a> · <a href="aviso-legal.html">Aviso legal</a> · <a href="consentimientos.html">Consentimientos</a>
     </nav>
   </div>
+  <script>
+    fetch('/api/legal/contacto').then(r=>r.json()).then(d=>{
+      if(d && d.email){
+        var a=document.getElementById('legal-contacto-mail');
+        a.textContent=d.email; a.href='mailto:'+d.email;
+        document.getElementById('legal-contacto').style.display='';
+      }
+    }).catch(function(){});
+  </script>
 </body>
 </html>

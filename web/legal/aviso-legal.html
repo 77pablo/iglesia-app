@@ -225,6 +225,7 @@ contactar al responsable a través de:</p>
 <li><strong>Correo electrónico:</strong> [CORREO DE CONTACTO — PENDIENTE]</li>
 <li><strong>Domicilio:</strong> [DIRECCIÓN, Temuco, Chile]</li>
 </ul>
+<p id="legal-contacto" style="display:none">Contacto para ejercer tus derechos: <a id="legal-contacto-mail" href="#"></a></p>
 <hr />
 <p><em>Este Aviso Legal debe leerse conjuntamente con los </em><em>Términos y Condiciones de Uso</em><em>, la
 </em><em>Política de Privacidad</em><em> y los </em><em>Consentimientos</em><em> de la Aplicación.</em></p>
@@ -233,5 +234,14 @@ contactar al responsable a través de:</p>
       <a href="privacidad.html">Privacidad</a> · <a href="terminos.html">Términos</a> · <a href="cookies.html">Cookies</a> · <b>Aviso legal</b> · <a href="consentimientos.html">Consentimientos</a>
     </nav>
   </div>
+  <script>
+    fetch('/api/legal/contacto').then(r=>r.json()).then(d=>{
+      if(d && d.email){
+        var a=document.getElementById('legal-contacto-mail');
+        a.textContent=d.email; a.href='mailto:'+d.email;
+        document.getElementById('legal-contacto').style.display='';
+      }
+    }).catch(function(){});
+  </script>
 </body>
 </html>

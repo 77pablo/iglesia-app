@@ -220,6 +220,7 @@ facilidad equivalente a la de haberlo otorgado. Para retirar uno o más consenti
 <li>Por correo, escribiendo a <strong>[CORREO DE CONTACTO — PENDIENTE]</strong>, indicando el consentimiento que
    se desea retirar y los datos de identificación del titular (o del apoderado/a, si corresponde).</li>
 </ol>
+<p id="legal-contacto" style="display:none">Contacto para ejercer tus derechos: <a id="legal-contacto-mail" href="#"></a></p>
 <p>El retiro de un consentimiento <strong>opcional</strong> (reconocimiento facial, fotografías, notificaciones) no
 afecta el acceso a la app ni la participación en las actividades de la iglesia, salvo por la función
 específica asociada a ese consentimiento (por ejemplo, al retirar el consentimiento facial, la app
@@ -259,5 +260,14 @@ ya registrados.</p>
       <a href="privacidad.html">Privacidad</a> · <a href="terminos.html">Términos</a> · <a href="cookies.html">Cookies</a> · <a href="aviso-legal.html">Aviso legal</a> · <b>Consentimientos</b>
     </nav>
   </div>
+  <script>
+    fetch('/api/legal/contacto').then(r=>r.json()).then(d=>{
+      if(d && d.email){
+        var a=document.getElementById('legal-contacto-mail');
+        a.textContent=d.email; a.href='mailto:'+d.email;
+        document.getElementById('legal-contacto').style.display='';
+      }
+    }).catch(function(){});
+  </script>
 </body>
 </html>

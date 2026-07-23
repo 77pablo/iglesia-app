@@ -860,11 +860,21 @@ personales en esta Aplicación, puedes contactarnos a través de:</p>
 <li><strong>Domicilio:</strong> [DIRECCIÓN, Temuco, Chile]</li>
 <li><strong>Correo de contacto:</strong> [CORREO DE CONTACTO — PENDIENTE]</li>
 </ul>
+<p id="legal-contacto" style="display:none">Contacto para ejercer tus derechos: <a id="legal-contacto-mail" href="#"></a></p>
 <p><em>Documento sujeto a revisión legal previa a su publicación. Última actualización: [FECHA].</em></p>
     </article>
     <nav class="legal-footnav">
       <b>Privacidad</b> · <a href="terminos.html">Términos</a> · <a href="cookies.html">Cookies</a> · <a href="aviso-legal.html">Aviso legal</a> · <a href="consentimientos.html">Consentimientos</a>
     </nav>
   </div>
+  <script>
+    fetch('/api/legal/contacto').then(r=>r.json()).then(d=>{
+      if(d && d.email){
+        var a=document.getElementById('legal-contacto-mail');
+        a.textContent=d.email; a.href='mailto:'+d.email;
+        document.getElementById('legal-contacto').style.display='';
+      }
+    }).catch(function(){});
+  </script>
 </body>
 </html>

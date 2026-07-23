@@ -251,10 +251,20 @@ Publicaremos la versión vigente con su fecha de actualización al inicio de est
 <h2>10. Contacto</h2>
 <p>Si tienes dudas sobre esta política, sobre qué se guarda en tu navegador, o quieres solicitar ayuda
 para eliminar esta información, escríbenos a: <strong>[CORREO DE CONTACTO — PENDIENTE]</strong>.</p>
+<p id="legal-contacto" style="display:none">Contacto para ejercer tus derechos: <a id="legal-contacto-mail" href="#"></a></p>
     </article>
     <nav class="legal-footnav">
       <a href="privacidad.html">Privacidad</a> · <a href="terminos.html">Términos</a> · <b>Cookies</b> · <a href="aviso-legal.html">Aviso legal</a> · <a href="consentimientos.html">Consentimientos</a>
     </nav>
   </div>
+  <script>
+    fetch('/api/legal/contacto').then(r=>r.json()).then(d=>{
+      if(d && d.email){
+        var a=document.getElementById('legal-contacto-mail');
+        a.textContent=d.email; a.href='mailto:'+d.email;
+        document.getElementById('legal-contacto').style.display='';
+      }
+    }).catch(function(){});
+  </script>
 </body>
 </html>

@@ -166,6 +166,11 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, mensaje: 'Backend de la iglesia funcionando', hora: new Date().toISOString() });
 });
 
+// --- Correo de contacto legal (derechos ARCO), configurable por env ---
+app.get('/api/legal/contacto', (_req, res) => {
+  res.json({ email: process.env.LEGAL_CONTACT_EMAIL || null });
+});
+
 // --- LOGIN EN 3 PASOS (1A.3) ---
 // body: { iglesia, usuario, password }
 // Rate limit: 5 intentos/IP cada 15 min (limiterLogin, express-rate-limit).

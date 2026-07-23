@@ -12,7 +12,7 @@ Se corrió una auditoría honesta con 4 agentes (seguridad, fiabilidad, funciona
 2. **XSS almacenado** (campos sin escapar en innerHTML) → ✅ ARREGLADO. `escHtml()`/`safeUrl()` en ~40 campos.
 3. **Pérdida de datos en persistencia** (restore que traga errores, rclone sync destructivo, degradación silenciosa) → ❌ PENDIENTE. Arreglo real = disco de pago Render (~US$7/mes) o endurecer scripts.
 4. **Recuperación de contraseña muerta** (SMTP sin config; pastor no puede resetear clave de miembros) → ❌ PENDIENTE.
-5. **Legal sin implementar** (docs marcados "borrador", sin responsable/ARCO, sin checkboxes de consentimiento: general, parental, biométrico) → ❌ PENDIENTE (necesita abogado + 3 checkboxes).
+5. **Legal sin implementar** (docs marcados "borrador", sin responsable/ARCO, sin checkboxes de consentimiento: general, parental, biométrico) → 🟡 **PARCIALMENTE CERRADO** (rama `feat/consentimiento-legal-arco`, ver nota abajo). Falta: abogado revise `web/legal/*` y el dueño defina `LEGAL_CONTACT_EMAIL`.
 
 También hecho esta sesión: **login del super-admin SIN iglesia** (enlace "Soy administrador del sistema"), `trust proxy` (rate-limit ya no es colectivo), mínimo de contraseña unificado a 8, y **pulido de interfaz** (touch targets 44px, emojis→SVG, utilidad `.form-panel`).
 
@@ -20,6 +20,13 @@ También hecho esta sesión: **login del super-admin SIN iglesia** (enlace "Soy 
 - **Verificar en smoke el arreglo del super-admin de sistema** (`iglesia_id=NULL`): BD vacía → se crea → login sin iglesia → `/me` → crear primera iglesia. **Quedó SIN probar** (interrumpido). Commit `3b5beae`.
 - **Pasada visual del frontend**: el agente escapó ~40 campos y tocó iconos sin poder abrir navegador. Revisar que no haya `&lt;` literales ni dropdowns rotos.
 - **Push a `main`** para desplegar (8 commits locales por delante de origin, desde `e4d3d5f` hasta `3b5beae`). Solo tras las dos verificaciones de arriba.
+
+### 🟡 Bloqueante legal #5 — parcialmente cerrado (rama `feat/consentimiento-legal-arco`, sin desplegar)
+- ✅ **IMPLEMENTADO:** consentimiento general (checkbox al registrarse + puerta para cuentas existentes vía `/me`) y ejercicio de derechos **ARCO autoservicio** (ver/editar/eliminar mis datos desde la cuenta).
+- ✅ **IMPLEMENTADO:** correo de contacto legal (ARCO) configurable por variable de entorno `LEGAL_CONTACT_EMAIL` — endpoint público `GET /api/legal/contacto`, inyectado en las 5 páginas de `web/legal/` (se muestra solo si la variable está definida).
+- ❌ **PENDIENTE del dueño:**
+  1. Definir `LEGAL_CONTACT_EMAIL` en Render (y en `backend/.env` local) con el correo real de contacto ARCO.
+  2. Completar con un **abogado** todos los placeholders `[…]` restantes de `web/legal/*.html` (razón social, RUT, domicilio, ciudad, fecha) antes de considerar esos documentos vigentes/vinculantes.
 
 ### 👉 ACCIÓN DEL DUEÑO EN RENDER (imprescindible tras desplegar)
 - Definir **`SUPERADMIN_PASSWORD`** (contraseña fuerte) en Render → Environment. Al primer arranque, rota automáticamente la vieja `1234` del super-admin de producción. Sin esta variable, la `1234` actual sigue vigente.
