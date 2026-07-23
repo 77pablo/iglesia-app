@@ -3037,9 +3037,37 @@ function vistaAjustes(){
       <a href="/legal/cookies.html" target="_blank" rel="noopener">Cookies</a> ·
       <a href="/legal/aviso-legal.html" target="_blank" rel="noopener">Aviso legal</a> ·
       <a href="/legal/consentimientos.html" target="_blank" rel="noopener">Consentimientos</a>
-    </p>`;
+    </p>
+    <div class="card" style="max-width:560px;margin-top:16px">
+      <h2 style="font-size:1.3rem;margin-bottom:4px">🔐 Mis datos y privacidad</h2>
+      <p class="muted small" style="margin-bottom:14px">Ejerce tus derechos sobre tus datos personales.</p>
+      <button class="btn ghost small-btn" onclick="descargarMisDatos()">⬇️ Descargar mis datos</button>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>
+      <p class="muted small" style="margin:0 0 8px">Retirar tu consentimiento elimina tu cuenta: se borran tus datos personales (nombre, correo, teléfono, foto, cumpleaños) y no podrás volver a entrar. Esta acción no se puede deshacer.</p>
+      <button class="btn ghost small-btn" style="color:var(--danger,#c0392b)" onclick="eliminarMiCuenta()">Retirar consentimiento y eliminar mi cuenta</button>
+    </div>`;
   renderPushAjuste();
   cargarTelefonoCuenta();
+}
+
+async function descargarMisDatos(){
+  try{
+    const data=await api('/cuenta/mis-datos');
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='mis-datos.json'; a.click();
+    URL.revokeObjectURL(url);
+    toast('⬇️ Datos descargados');
+  }catch(e){ toast((e&&e.message)||'No se pudo descargar'); }
+}
+async function eliminarMiCuenta(){
+  const conf=prompt('Esto eliminará tu cuenta y anonimizará tus datos. Escribe ELIMINAR para confirmar:');
+  if(conf!=='ELIMINAR') return;
+  try{
+    await api('/cuenta/eliminar',{method:'POST'});
+    toast('Tu cuenta fue eliminada');
+    setTimeout(()=>salir(),800);
+  }catch(e){ toast((e&&e.message)||'No se pudo eliminar la cuenta'); }
 }
 
 // ============================================================
