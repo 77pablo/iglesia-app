@@ -82,9 +82,18 @@ r.post('/evento/:id', validar(guardarAsistenciaSchema), (req, res) => {
   );
   const ids = idsRecibidos.filter(pid => validos.has(pid));
 
-  db.prepare('DELETE FROM asistencia WHERE evento_id = ?').run(ev.id);
-  const stmt = db.prepare("INSERT INTO asistencia (evento_id, persona_id, metodo) VALUES (?,?, 'lista')");
-  for (const pid of ids) stmt.run(ev.id, pid);
+  // DELETE + INSERTs en una sola transaccion: si el proceso muere a mitad
+  // del loop, no debe quedar el evento sin ninguna asistencia registrada.
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM asistencia WHERE evento_id = ?').run(ev.id);
+    const stmt = db.prepare("INSERT INTO asistencia (evento_id, persona_id, metodo) VALUES (?,?, 'lista')");
+    for (const pid of ids) stmt.run(ev.id, pid);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo guardar la asistencia' });
+  }
 
   auditar(iglesia_id, persona_id, 'registrar_asistencia', 'asistencia', ev.titulo + ': ' + ids.length);
   res.json({ ok: true, total: ids.length });

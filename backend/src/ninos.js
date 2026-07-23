@@ -103,9 +103,17 @@ r.post('/asistencia', soloEncargado, validar(asistenciaNinoSchema), (req, res) =
     db.prepare('SELECT id FROM nino WHERE clase_id = ?').all(clase_id).map(n => n.id)
   );
   const presentesValidos = (presentes || []).filter(p => ninosValidos.has(p.nino_id));
-  db.prepare('DELETE FROM asistencia_nino WHERE clase_id = ? AND fecha = ?').run(clase_id, fecha);
-  const st = db.prepare('INSERT INTO asistencia_nino (clase_id, nino_id, fecha, retiro_por) VALUES (?,?,?,?)');
-  for (const p of presentesValidos) st.run(clase_id, p.nino_id, fecha, p.retiro_por || null);
+  // DELETE + INSERTs en una sola transaccion (mismo motivo que asistencia.js).
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM asistencia_nino WHERE clase_id = ? AND fecha = ?').run(clase_id, fecha);
+    const st = db.prepare('INSERT INTO asistencia_nino (clase_id, nino_id, fecha, retiro_por) VALUES (?,?,?,?)');
+    for (const p of presentesValidos) st.run(clase_id, p.nino_id, fecha, p.retiro_por || null);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo guardar la asistencia' });
+  }
   auditar(req.user.iglesia_id, req.user.persona_id, 'asistencia_ninos', 'ninos', 'clase ' + clase_id);
   res.json({ ok: true, total: presentesValidos.length });
 });

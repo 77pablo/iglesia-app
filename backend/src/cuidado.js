@@ -57,8 +57,16 @@ r.post('/:id/contacto', validar(contactoSchema), (req, res) => {
   const caso = db.prepare('SELECT id FROM caso_cuidado WHERE id = ? AND iglesia_id = ?').get(req.params.id, req.user.iglesia_id);
   if (!caso) return res.status(404).json({ error: 'Caso no encontrado' });
   const { tipo, nota } = req.body;
-  db.prepare('INSERT INTO contacto_cuidado (caso_id, tipo, nota) VALUES (?,?,?)').run(caso.id, tipo || 'nota', nota || '');
-  db.prepare("UPDATE caso_cuidado SET estado = 'seguimiento' WHERE id = ? AND estado = 'abierto'").run(caso.id);
+  // INSERT del contacto + UPDATE de estado en una sola transaccion.
+  db.exec('BEGIN');
+  try {
+    db.prepare('INSERT INTO contacto_cuidado (caso_id, tipo, nota) VALUES (?,?,?)').run(caso.id, tipo || 'nota', nota || '');
+    db.prepare("UPDATE caso_cuidado SET estado = 'seguimiento' WHERE id = ? AND estado = 'abierto'").run(caso.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo registrar el contacto' });
+  }
   auditar(req.user.iglesia_id, req.user.persona_id, 'contacto_cuidado', 'cuidado', 'caso ' + caso.id);
   res.json({ ok: true });
 });
