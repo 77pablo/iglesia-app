@@ -210,6 +210,7 @@ async function confirmarCambioObligatorio(){
     if(ME && ME.persona) ME.persona.debe_cambiar_pass=0;
     $('forzar-pass').classList.add('hidden');
     toast('🔒 Contraseña actualizada');
+    if(ME && ME.consentimiento_pendiente) return mostrarConsentimiento();
     abrirApp();
   }catch(e){ err.textContent=(e&&e.message)||'No se pudo cambiar la contraseña'; }
 }
