@@ -79,6 +79,9 @@ r.get('/tesoreria', (req, res) => {
 // dada de alta cerca de medianoche en Chile (UTC-3/-4) puede quedar
 // registrada ya en el dia/mes siguiente en UTC. 'localtime' corrige esto
 // al agrupar por el mes calendario que corresponde en hora local.
+function contarActivos(iglesiaId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM persona WHERE iglesia_id = ? AND activo = 1').get(iglesiaId).n;
+}
 function crecimientoMensual(iglesiaId) {
   return db.prepare(
     `SELECT strftime('%Y-%m', creada_en, 'localtime') AS mes, COUNT(*) AS altas
@@ -89,8 +92,7 @@ function crecimientoMensual(iglesiaId) {
 }
 r.get('/crecimiento', (req, res) => {
   const ig = req.user.iglesia_id;
-  const totalActivos = db.prepare('SELECT COUNT(*) AS n FROM persona WHERE iglesia_id = ? AND activo = 1').get(ig).n;
-  res.json({ mensual: crecimientoMensual(ig), totalActivos });
+  res.json({ mensual: crecimientoMensual(ig), totalActivos: contarActivos(ig) });
 });
 
 // --- Exportar a CSV (con BOM, para que Excel respete los acentos) ---
@@ -118,7 +120,7 @@ r.get('/export.csv', (req, res) => {
     for (const f of tesoreriaMensual(ig)) filas.push([f.mes, f.ingresos, f.gastos, f.saldo]);
   } else if (tipo === 'crecimiento') {
     nombre = 'reporte-crecimiento.csv';
-    const totalActivos = db.prepare('SELECT COUNT(*) AS n FROM persona WHERE iglesia_id = ? AND activo = 1').get(ig).n;
+    const totalActivos = contarActivos(ig);
     filas = [['Mes', 'Altas']];
     for (const f of crecimientoMensual(ig)) filas.push([f.mes, f.altas]);
     filas.push([]);

@@ -11,13 +11,6 @@ import { validar } from './seguridad.js';
 const r = Router();
 r.use(authMiddleware);
 
-// Crea una notificacion in-app para cada miembro de la iglesia.
-// (En produccion, aqui ademas se enviaria el push real via FCM a sus dispositivos.)
-// Se mantiene por compatibilidad; internamente usa la segmentacion (Fase 4.1).
-export function notificarIglesia(iglesiaId, tipo, titulo, texto) {
-  notificarSegmento(iglesiaId, { tipo: 'todos' }, tipo, titulo, texto);
-}
-
 // --- Listar anuncios de la iglesia ---
 r.get('/', (req, res) => {
   const anuncios = db.prepare(

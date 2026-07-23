@@ -4,13 +4,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware, esPastor, esObispo, auditar } from './auth.js';
+import { authMiddleware, esPastor, puedeVerComoPastor, auditar } from './auth.js';
 import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
 r.use((req, res, next) => {
-  if (!esPastor(req.user.persona_id) && !esObispo(req.user.persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
+  if (!puedeVerComoPastor(req.user.persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
   next();
 });
 // El obispo SOLO observa (lectura): crear/editar casos es exclusivo del pastor.

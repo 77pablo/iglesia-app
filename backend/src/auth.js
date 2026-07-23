@@ -180,6 +180,10 @@ export function esObispo(personaId) {
   const p = db.prepare('SELECT rol_global FROM persona WHERE id = ?').get(personaId);
   return !!(p && (p.rol_global === 'obispo' || p.rol_global === 'super_admin'));
 }
+// ¿Puede ver este modulo "como pastor"? (el pastor gestiona; el obispo solo observa)
+export function puedeVerComoPastor(personaId) {
+  return esPastor(personaId) || esObispo(personaId);
+}
 
 // --- Helpers de permisos (para eventos y servicio) ---
 export function esPastor(personaId) {
@@ -210,18 +214,22 @@ export function esEncargadoGrupo(personaId, grupoId) {
   ).get(personaId, grupoId);
   return !!row;
 }
+// --- Factorías internas: helpers de rol de grupo (misma consulta, distinto rol) ---
+// ¿Tiene la persona ESTE rol en algun grupo (pertenencia)? Sin atajo de pastor.
+const tieneRolEnGrupo = (rol) => (personaId) => {
+  const row = db.prepare('SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = ?').get(personaId, rol);
+  return !!row;
+};
+// ¿Tiene ESTE rol en algun grupo, o es pastor (atajo)?
+const rolOPastor = (rol) => {
+  const tieneRol = tieneRolEnGrupo(rol);
+  return (personaId) => esPastor(personaId) || tieneRol(personaId);
+};
+
 // ¿Es tesorero? (o pastor)
-export function esTesoreroOPastor(personaId) {
-  if (esPastor(personaId)) return true;
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'tesorero'").get(personaId);
-  return !!row;
-}
+export const esTesoreroOPastor = rolOPastor('tesorero');
 // ¿Es lider de Escuela Dominical? (o pastor)
-export function esLiderEdOPastor(personaId) {
-  if (esPastor(personaId)) return true;
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'lider_ed'").get(personaId);
-  return !!row;
-}
+export const esLiderEdOPastor = rolOPastor('lider_ed');
 // ¿Es predicador? (el pastor siempre; o quien tenga el rol 'predicador' vigente hoy)
 export function esPredicador(personaId) {
   if (esPastor(personaId)) return true;
@@ -235,26 +243,11 @@ export function esDelMinisterioMusica(personaId) {
   const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol IN ('musico','lider_musica')").get(personaId);
   return !!row;
 }
-// ¿Es lider de musica? (o pastor)
-export function esLiderMusica(personaId) {
-  if (esPastor(personaId)) return true;
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'lider_musica'").get(personaId);
-  return !!row;
-}
 // --- Variantes ESTRICTAS: el encargado real, SIN atajo de pastor ---
 // (El pastor VE estos módulos pero NO los edita; solo el encargado edita.)
-export function esLiderMusicaEstricto(personaId) {
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'lider_musica'").get(personaId);
-  return !!row;
-}
-export function esLiderEdEstricto(personaId) {
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'lider_ed'").get(personaId);
-  return !!row;
-}
-export function esTesoreroEstricto(personaId) {
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'tesorero'").get(personaId);
-  return !!row;
-}
+export const esLiderMusicaEstricto = tieneRolEnGrupo('lider_musica');
+export const esLiderEdEstricto = tieneRolEnGrupo('lider_ed');
+export const esTesoreroEstricto = tieneRolEnGrupo('tesorero');
 // ¿Es lider o pastor? (puede publicar anuncios, gestionar servicio...)
 export function esLiderOAdmin(personaId) {
   if (esPastor(personaId)) return true;
