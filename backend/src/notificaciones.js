@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware, esLiderOAdmin } from './auth.js';
+import { authMiddleware, esLiderOAdmin, puedeSegmentar } from './auth.js';
 import { enviarPush } from './push.js';
 import { validar } from './seguridad.js';
 
@@ -108,6 +108,10 @@ r.post('/segmentada', validar(segmentadaSchema), (req, res) => {
   if (!esLiderOAdmin(persona_id))
     return res.status(403).json({ error: 'No tienes permiso para enviar avisos' });
   const { titulo, texto, segmento } = req.body;
+  // Un lider solo puede segmentar dentro de SU grupo; a toda la iglesia o
+  // por rol es exclusivo del pastor.
+  if (!puedeSegmentar(persona_id, segmento))
+    return res.status(403).json({ error: 'No tienes permiso para enviar avisos con ese alcance' });
   const n = notificarSegmento(iglesia_id, segmento, 'aviso', '🔔 ' + titulo, texto || '');
   res.json({ ok: true, enviadas: n, destino: etiquetaSegmento(iglesia_id, segmento) });
 });

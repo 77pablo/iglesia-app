@@ -270,6 +270,19 @@ export function verificarToken(token) {
   catch { return null; }
 }
 
+// ¿Puede ACTOR difundir un aviso/anuncio a este SEGMENTO? (anuncios.js, notificaciones.js)
+//  - segmento 'grupo': solo el encargado de ESE grupo (o el pastor).
+//  - segmento 'todos' / 'rol': difunde a toda la iglesia o a un rol entero;
+//    eso es alcance de iglesia completa, exclusivo del pastor (un lider
+//    solo debe poder segmentar a su propio grupo).
+export function puedeSegmentar(personaId, segmento) {
+  const seg = segmento && segmento.tipo ? segmento : { tipo: 'todos' };
+  if (seg.tipo === 'grupo') {
+    return esEncargadoGrupo(personaId, Number(seg.grupo_id)) || esPastor(personaId);
+  }
+  return esPastor(personaId);
+}
+
 // --- Puede ACTOR iniciar un chat 1:1 con DESTINO? (misma iglesia) ---
 //  lider/pastor -> con cualquiera; feligres -> a su liderazgo o a quien comparte grupo.
 export function puedeIniciarChatCon(actorId, destinoId) {

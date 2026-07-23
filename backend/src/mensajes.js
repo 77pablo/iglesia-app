@@ -239,11 +239,15 @@ r.post('/custom', (req, res) => {
   const ids = [...new Set((Array.isArray(participantes) ? participantes : []).map(Number).filter(Boolean))]
     .filter(id => id !== req.user.persona_id);
   if (!ids.length) return res.status(400).json({ error: 'Elige al menos un participante' });
-  // todos deben ser de la misma iglesia
-  const validos = db.prepare(
+  // todos deben ser de la misma iglesia y estar activos
+  const deLaIglesia = db.prepare(
     `SELECT id FROM persona WHERE iglesia_id = ? AND activo = 1 AND id IN (${ids.map(() => '?').join(',')})`
   ).all(req.user.iglesia_id, ...ids).map(x => x.id);
-  if (!validos.length) return res.status(400).json({ error: 'Participantes invalidos' });
+  // ademas, cada uno debe cumplir la regla de contacto (misma que /directo):
+  // un feligres no puede meter en un chat "a medida" a cualquiera de su
+  // iglesia, solo a quien ya podria escribirle 1:1.
+  const validos = deLaIglesia.filter(id => puedeIniciarChatCon(req.user.persona_id, id));
+  if (!validos.length) return res.status(400).json({ error: 'No puedes iniciar un chat con esos participantes' });
 
   const info = db.prepare("INSERT INTO conversacion (iglesia_id, tipo, titulo, creado_por) VALUES (?, 'custom', ?, ?)")
     .run(req.user.iglesia_id, t, req.user.persona_id);

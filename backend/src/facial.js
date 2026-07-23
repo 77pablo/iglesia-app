@@ -92,7 +92,9 @@ const reconocerSchema = z.object({
   image: z.string().min(1, 'falta la imagen')
 });
 r.post('/reconocer', validar(reconocerSchema), async (req, res) => {
-  const { iglesia_id } = req.user;
+  const { persona_id, iglesia_id } = req.user;
+  if (!esLiderOAdmin(persona_id))
+    return res.status(403).json({ error: 'No tienes permiso para usar el reconocimiento facial' });
   const { image } = req.body;
 
   try {
@@ -136,6 +138,8 @@ r.post('/reconocer', validar(reconocerSchema), async (req, res) => {
 
 // --- LISTA de personas con biometria inscrita ---
 r.get('/inscritos', (req, res) => {
+  if (!esLiderOAdmin(req.user.persona_id))
+    return res.status(403).json({ error: 'No tienes permiso para ver los inscritos' });
   const filas = db.prepare(
     `SELECT p.id, p.nombre, COUNT(b.id) AS muestras, MAX(b.creado_en) AS ultima
        FROM biometria_persona b JOIN persona p ON p.id = b.persona_id
