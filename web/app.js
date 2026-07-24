@@ -152,20 +152,20 @@ function abrirRegistro(){
       <button class="cal-navbtn" onclick="cerrarRegistro()" aria-label="Cerrar">✕</button></div>
     <div style="padding:16px">
       <p class="muted small" style="margin:0 0 12px">Pide el <b>código de tu iglesia</b> a tu pastor o líder, y crea tu cuenta.</p>
-      <label>Código de tu iglesia</label>
+      <label for="reg-codigo">Código de tu iglesia</label>
       <input id="reg-codigo" placeholder="Ej. MONTESION" autocapitalize="characters" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
-      <label style="margin-top:8px">Tu nombre completo</label>
+      <label for="reg-nombre" style="margin-top:8px">Tu nombre completo</label>
       <input id="reg-nombre" placeholder="Nombre y apellido" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
-      <label style="margin-top:8px">Elige un usuario</label>
+      <label for="reg-usuario" style="margin-top:8px">Elige un usuario</label>
       <input id="reg-usuario" placeholder="Usuario (para entrar)" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
       <label style="margin-top:8px">Elige una contraseña</label>
       <div class="row" style="gap:8px">
         <input id="reg-pass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
         <button class="btn ghost small-btn" type="button" style="max-width:52px" onclick="toggleVerPass('reg-pass',this)" title="Ver/ocultar">👁️</button>
       </div>
-      <label style="margin-top:8px">Correo <span class="muted">(opcional)</span></label>
+      <label for="reg-email" style="margin-top:8px">Correo <span class="muted">(opcional)</span></label>
       <input id="reg-email" type="email" placeholder="tucorreo@ejemplo.com" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
-      <label style="margin-top:8px">Teléfono <span class="muted">(opcional)</span></label>
+      <label for="reg-telefono" style="margin-top:8px">Teléfono <span class="muted">(opcional)</span></label>
       <input id="reg-telefono" placeholder="+56 9 ..." onkeydown="if(event.key==='Enter')confirmarRegistro()" />
       <label class="check" style="margin-top:12px;align-items:flex-start"><input type="checkbox" id="reg-acepto" style="margin-top:3px"/>
         <span>He leído y acepto los <a href="/legal/terminos.html" target="_blank" rel="noopener">Términos</a> y la <a href="/legal/privacidad.html" target="_blank" rel="noopener">Política de Privacidad</a>.</span></label>
@@ -786,13 +786,13 @@ function toggleFormEvento(ev){
   const titulo = ev ? 'Editar evento' : (esPastorUI ? 'Nuevo evento' : 'Pedir fecha');
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:4px">${titulo}</h3>
     ${(!ev && !esPastorUI)?'<p class="muted small" style="margin-bottom:8px">Tu solicitud se enviará al pastor para aprobación.</p>':''}
-    <label>Grupo</label><select id="ev-grupo">${opts}</select>
-    <label>Nombre del evento</label><input id="ev-titulo" value="${ev?v(ev.titulo):''}" placeholder="Ej. Noche de Jóvenes" />
+    <label for="ev-grupo">Grupo</label><select id="ev-grupo">${opts}</select>
+    <label for="ev-titulo">Nombre del evento</label><input id="ev-titulo" value="${ev?v(ev.titulo):''}" placeholder="Ej. Noche de Jóvenes" />
     <label>Fecha</label>
     <div>${fechaSelectHTML('ev', fBase)}</div>
-    <div class="row" style="margin-top:10px"><div style="flex:1"><label>Hora inicio</label><input id="ev-ini" type="time" value="${ev&&ev.hora_inicio?ev.hora_inicio:''}" /></div>
-      <div style="flex:1"><label>Hora fin</label><input id="ev-fin" type="time" value="${ev&&ev.hora_fin?ev.hora_fin:''}" /></div></div>
-    <label>Lugar</label><input id="ev-lugar" value="${ev?v(ev.lugar):''}" placeholder="Ej. Salón principal" />
+    <div class="row" style="margin-top:10px"><div style="flex:1"><label for="ev-ini">Hora inicio</label><input id="ev-ini" type="time" value="${ev&&ev.hora_inicio?ev.hora_inicio:''}" /></div>
+      <div style="flex:1"><label for="ev-fin">Hora fin</label><input id="ev-fin" type="time" value="${ev&&ev.hora_fin?ev.hora_fin:''}" /></div></div>
+    <label for="ev-lugar">Lugar</label><input id="ev-lugar" value="${ev?v(ev.lugar):''}" placeholder="Ej. Salón principal" />
     <p id="ev-error" class="error"></p>
     <button class="btn" style="margin-top:14px" onclick="guardarEvento()">${ev?'Guardar cambios':(esPastorUI?'Crear evento':'📩 Enviar al pastor')}</button></div>`;
 }
@@ -853,13 +853,13 @@ async function toggleFormAnuncio(a){
       const s=await api('/notificaciones/segmentos'); window._segmentos=s;
       const grupos=s.grupos.map(g=>`<option value="grupo:${g.id}">👥 ${escHtml(g.nombre)}</option>`).join('');
       const roles=s.roles.map(rl=>`<option value="rol:${rl}">🏷️ ${ROL_LABEL[rl]||rl}</option>`).join('');
-      segHtml=`<label>Dirigir a (segmento)</label>
+      segHtml=`<label for="an-segmento">Dirigir a (segmento)</label>
         <select id="an-segmento"><option value="todos">📣 Toda la iglesia</option>${grupos}${roles}</select>`;
     }catch{ segHtml=''; }
   }
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${a?'Editar anuncio':'Nuevo anuncio'}</h3>
-    <label>Título</label><input id="an-titulo" value="${a?v(a.titulo):''}" placeholder="Título" />
-    <label>Mensaje</label><textarea id="an-texto" rows="3" placeholder="Mensaje (opcional)">${escHtml(a&&a.texto?a.texto:'')}</textarea>
+    <label for="an-titulo">Título</label><input id="an-titulo" value="${a?v(a.titulo):''}" placeholder="Título" />
+    <label for="an-texto">Mensaje</label><textarea id="an-texto" rows="3" placeholder="Mensaje (opcional)">${escHtml(a&&a.texto?a.texto:'')}</textarea>
     ${segHtml}
     <label class="check"><input type="checkbox" id="an-urgente" ${a&&a.urgente?'checked':''}/> 🔴 Marcar como urgente</label>
     <p id="an-error" class="error"></p>
@@ -957,9 +957,9 @@ async function vistaServicio(){
     const ps=personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
     $('sv').innerHTML=`<div class="card" style="max-width:480px">
       <h3 style="margin-bottom:4px">Asignar un servicio</h3>
-      <label>Evento</label><select id="sv-ev">${ev}</select>
-      <label>Persona</label><select id="sv-persona">${ps}</select>
-      <label>Servicio</label><select id="sv-tipo">
+      <label for="sv-ev">Evento</label><select id="sv-ev">${ev}</select>
+      <label for="sv-persona">Persona</label><select id="sv-persona">${ps}</select>
+      <label for="sv-tipo">Servicio</label><select id="sv-tipo">
         <option value="predicar">🎤 Predicar</option><option value="ofrenda">💰 Ofrenda</option>
         <option value="devocional">🙏 Devocional</option><option value="musica">🎵 Música</option>
         <option value="aseo">🧹 Aseo</option></select>
@@ -1190,10 +1190,10 @@ async function togglePortalInfo(){
   try{
     const info=await api('/publico/info');
     zona.innerHTML=`
-      <label>Horarios de culto</label><textarea id="pi-horarios" placeholder="Ej: Domingos 10:00 y 18:00">${escHtml(info.horarios||'')}</textarea>
-      <label>Dirección</label><input id="pi-direccion" value="${escHtml(info.direccion||'')}" placeholder="Calle, número, ciudad" />
-      <label>Teléfono de contacto</label><input id="pi-telefono" value="${escHtml(info.telefono||'')}" placeholder="+56 9 ..." />
-      <label>Sobre nosotros</label><textarea id="pi-descripcion" placeholder="Una breve bienvenida para tus visitantes">${escHtml(info.descripcion||'')}</textarea>
+      <label for="pi-horarios">Horarios de culto</label><textarea id="pi-horarios" placeholder="Ej: Domingos 10:00 y 18:00">${escHtml(info.horarios||'')}</textarea>
+      <label for="pi-direccion">Dirección</label><input id="pi-direccion" value="${escHtml(info.direccion||'')}" placeholder="Calle, número, ciudad" />
+      <label for="pi-telefono">Teléfono de contacto</label><input id="pi-telefono" value="${escHtml(info.telefono||'')}" placeholder="+56 9 ..." />
+      <label for="pi-descripcion">Sobre nosotros</label><textarea id="pi-descripcion" placeholder="Una breve bienvenida para tus visitantes">${escHtml(info.descripcion||'')}</textarea>
       <button class="btn" style="margin-top:12px" onclick="guardarPortalInfo()">Guardar</button>`;
   }catch(e){ zona.innerHTML='<p class="error">'+e.message+'</p>'; }
 }
@@ -1365,7 +1365,7 @@ async function vistaMusica(){
       <input id="buscar-cancion" placeholder="Buscar alabanza…" oninput="filtrarCanciones(this.value)" style="margin-bottom:12px"/>
       <div id="lista-canciones" class="muted">Cargando…</div></div>
     <div class="card"><h3 style="font-size:16px;margin-bottom:10px">Orden del servicio</h3>
-      <label>Evento</label><select id="set-ev"></select>
+      <label for="set-ev">Evento</label><select id="set-ev"></select>
       <div id="setlist" style="margin-top:14px" class="muted">…</div>
       <h3 style="font-size:16px;margin:20px 0 10px">🎸 Equipo y ensayo</h3>
       <div id="plan" class="muted">…</div></div>
@@ -1415,7 +1415,7 @@ function renderCanciones(q){
   const puede=esLiderMusicaUI();
   cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1;cursor:pointer" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
     <span class="estado-chip">${escHtml(c.tono||'—')}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></div>
-    ${puede?`<button class="link" style="color:var(--red)" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
+    ${puede?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar canción" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
 }
 function borrarCancion(id){ modalConfirm('¿Eliminar esta canción del cancionero?', async()=>{
   try{ await api('/musica/canciones/'+id,{method:'DELETE'}); cargarCanciones(); toast('Canción eliminada'); }catch(e){ toast(e.message); } }); }
@@ -1425,7 +1425,7 @@ function toggleFormCancion(){
     <div class="row"><input id="cn-titulo" placeholder="Título de la canción" />
       <input id="cn-tono" placeholder="Tono (ej. SOL, G)" style="max-width:130px" /></div>
     <input id="cn-autor" placeholder="Autor (opcional)" style="margin-top:10px" />
-    <label style="margin-top:10px">Acordes / letra (opcional)</label>
+    <label for="cn-letra" style="margin-top:10px">Acordes / letra (opcional)</label>
     <textarea id="cn-letra" rows="8" style="width:100%;font-family:monospace;white-space:pre" placeholder="Pega aquí los acordes y la letra. Ej.:&#10;SOL        RE&#10;Cuán grande es Él&#10;Las líneas con acordes se transponen solas."></textarea>
     <p id="cn-error" class="error"></p>
     <button class="btn small-btn" style="margin-top:10px" onclick="guardarCancion()">Guardar</button></div>`;
@@ -1546,7 +1546,7 @@ async function cargarMaterialMusica(){
         : `<div class="muted small">📎 <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">Ver / descargar</a>${m.creado_en?' · '+fechaTxt(m.creado_en.slice(0,10)):''}</div>`;
       return `<div class="item-card flex">
       <div style="flex:1">${titulo}${permanente?' <span class="estado-chip">📌 Fijo</span>':''}${sub}</div>
-      ${puedeBorrar?`<button class="link" style="color:var(--red)" onclick="borrarMaterialMus(${m.id})">🗑️</button>`:''}</div>`;
+      ${puedeBorrar?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar material" onclick="borrarMaterialMus(${m.id})">🗑️</button>`:''}</div>`;
     }).join('');
   }catch{ $('material-mus').innerHTML='<p class="error">Error al cargar el material.</p>'; }
 }
@@ -1554,7 +1554,7 @@ function toggleFormMaterialMus(){
   const z=$('form-material-mus'); if(z.innerHTML){ z.innerHTML=''; return; }
   z.innerHTML=`<div class="form-panel">
     <input id="mm-titulo" placeholder="Título (ej. Acordes Cuán Grande es Él)"/>
-    <label style="margin-top:10px">📎 Archivo (PDF, Word, imagen…)</label>
+    <label for="mm-file" style="margin-top:10px">📎 Archivo (PDF, Word, imagen…)</label>
     <input id="mm-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"/>
     <button class="btn small-btn" style="margin-top:12px" onclick="guardarMaterialMus()">Subir</button></div>`;
 }
@@ -1655,8 +1655,8 @@ function renderHimno(){
     </div>
     <div class="transbar">
       <span class="muted small">Tono:</span> <b style="color:var(--primary)">${escHtml(tonoAhora)||'—'}</b>
-      <button class="cal-navbtn" onclick="himnarioTrans(-1)" title="Bajar ½ tono">−</button>
-      <button class="cal-navbtn" onclick="himnarioTrans(1)" title="Subir ½ tono">+</button>
+      <button class="cal-navbtn" onclick="himnarioTrans(-1)" title="Bajar ½ tono" aria-label="Bajar medio tono">−</button>
+      <button class="cal-navbtn" onclick="himnarioTrans(1)" title="Subir ½ tono" aria-label="Subir medio tono">+</button>
       ${_hmTrans!==0?`<button class="btn ghost small-btn" onclick="himnarioReset()">Original (${escHtml(tonoBase)})</button>`:''}
       <span class="muted small">${_hmTrans>0?'+'+_hmTrans:_hmTrans} semitono(s)</span>
     </div>
@@ -1683,7 +1683,7 @@ function abrirVisorCancion(id, trans){
   ov.innerHTML=`<div class="hmodal" onclick="event.stopPropagation()">
     <div class="hmodal-head">
       <b style="flex:1;font-size:16px">🎵 ${escHtml(c.titulo)}</b>
-      ${puede?`<button class="cal-navbtn" onclick="editarLetraCancion(${c.id})" title="Editar acordes">✏️</button>`:''}
+      ${puede?`<button class="cal-navbtn" onclick="editarLetraCancion(${c.id})" title="Editar acordes" aria-label="Editar acordes">✏️</button>`:''}
       <button class="cal-navbtn" onclick="cerrarVisorCancion()" aria-label="Cerrar" style="margin-left:8px">✕</button>
     </div>
     <div class="hmodal-body"><div class="hmodal-ver" id="vc-ver" style="width:100%">…</div></div></div>`;
@@ -1710,8 +1710,8 @@ function renderVisorCancion(){
   const tonoAhora=tonoBase?_transAcorde(tonoBase,_vcTrans):'';
   v.innerHTML=`<div class="transbar">
       <span class="muted small">${c.autor?escHtml(c.autor)+' · ':''}Tono:</span> <b style="color:var(--primary)">${escHtml(tonoAhora)||'—'}</b>
-      <button class="cal-navbtn" onclick="visorCancionTrans(-1)" title="Bajar ½ tono">−</button>
-      <button class="cal-navbtn" onclick="visorCancionTrans(1)" title="Subir ½ tono">+</button>
+      <button class="cal-navbtn" onclick="visorCancionTrans(-1)" title="Bajar ½ tono" aria-label="Bajar medio tono">−</button>
+      <button class="cal-navbtn" onclick="visorCancionTrans(1)" title="Subir ½ tono" aria-label="Subir medio tono">+</button>
       ${_vcTrans!==0?`<button class="btn ghost small-btn" onclick="visorCancionReset()">Original${tonoBase?' ('+escHtml(tonoBase)+')':''}</button>`:''}
       <span class="muted small">${_vcTrans>0?'+'+_vcTrans:_vcTrans} semitono(s)</span>
     </div>
@@ -1720,9 +1720,9 @@ function renderVisorCancion(){
 function editarLetraCancion(id){
   const c=(window._canciones||[]).find(x=>x.id===id); if(!c) return;
   const v=$('vc-ver'); if(!v) return;
-  v.innerHTML=`<label>Tono base</label>
+  v.innerHTML=`<label for="vc-tono">Tono base</label>
     <input id="vc-tono" value="${(c.tono||'').replace(/"/g,'&quot;')}" placeholder="ej. SOL, G" style="max-width:140px"/>
-    <label style="margin-top:10px">Acordes / letra</label>
+    <label for="vc-letra" style="margin-top:10px">Acordes / letra</label>
     <textarea id="vc-letra" rows="14" style="width:100%;font-family:monospace;white-space:pre">${escHtml(c.letra||'')}</textarea>
     <div class="row" style="margin-top:10px">
       <button class="btn small-btn" onclick="guardarLetraCancion(${id})">Guardar</button>
@@ -1769,8 +1769,8 @@ async function toggleFormCaso(){
   let personas;
   try{ personas=await api('/personas'); }catch(e){ toast(e.message||'No se pudo cargar la lista de personas'); return; }
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>Nuevo caso</h3>
-    <label>Persona</label><select id="caso-persona">${personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select>
-    <label>Motivo</label><select id="caso-motivo">
+    <label for="caso-persona">Persona</label><select id="caso-persona">${personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select>
+    <label for="caso-motivo">Motivo</label><select id="caso-motivo">
       <option value="enfermo">🤒 Enfermo</option><option value="ausente">📉 Ausente</option>
       <option value="nuevo">🌱 Nuevo</option><option value="crisis">🆘 En crisis</option>
       <option value="duelo">🕊️ Duelo</option><option value="otro">❔ Otro</option></select>
@@ -1794,7 +1794,7 @@ async function verCaso(id){
       <div class="list" style="margin-top:8px">${d.contactos.length? d.contactos.map(x=>`<div class="item-card">
         <b>${CT_LABEL[x.tipo]||escHtml(x.tipo)}</b> <span class="muted small">${(x.fecha||'').slice(0,10)}</span>
         ${x.nota?`<div class="muted small">${escHtml(x.nota)}</div>`:''}</div>`).join('') : '<p class="muted small">Sin contactos aún.</p>'}</div>
-      <label>Registrar contacto</label>
+      <label for="ct-tipo">Registrar contacto</label>
       <select id="ct-tipo"><option value="llamada">📞 Llamada</option><option value="visita">🏠 Visita</option>
         <option value="mensaje">💬 Mensaje</option><option value="oracion">🙏 Oración</option></select>
       <textarea id="ct-nota" placeholder="Nota (opcional)" style="margin-top:10px"></textarea>
@@ -1884,12 +1884,12 @@ function formMov(tipo){
   const z=$('mov-form');
   const cats=tipo==='ingreso'?['ofrenda','diezmo','donacion','otro']:['servicios','eventos','ayuda','otro'];
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${tipo==='ingreso'?'Nuevo ingreso':'Nuevo gasto'}</h3>
-    <label>Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c}">${cap(c)}</option>`).join('')}</select>
-    <label>Monto</label><input id="mv-monto" type="number" min="0.01" step="0.01" placeholder="0" />
+    <label for="mv-cat">Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c}">${cap(c)}</option>`).join('')}</select>
+    <label for="mv-monto">Monto</label><input id="mv-monto" type="number" min="0.01" step="0.01" placeholder="0" />
     <label>Fecha ${tipo==='ingreso'?'del ingreso':'del gasto'}</label><div>${fechaSelectHTML('mv','')}</div>
-    <label>${tipo==='ingreso'?'Descripción / origen':'¿En qué se gastó?'}</label>
+    <label for="mv-desc">${tipo==='ingreso'?'Descripción / origen':'¿En qué se gastó?'}</label>
     <input id="mv-desc" placeholder="${tipo==='ingreso'?'Ej. Ofrenda dominical':'Ej. Compra de materiales para el evento'}" />
-    <label>📎 Comprobante / voucher (foto o archivo)</label>
+    <label for="mv-file">📎 Comprobante / voucher (foto o archivo)</label>
     <input id="mv-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt" />
     <p id="mv-error" class="error"></p>
     <button class="btn" style="margin-top:12px" onclick="guardarMov('${tipo}')">Guardar</button></div>`;
@@ -1931,8 +1931,8 @@ async function cargarClases(){
 }
 function formClase(){ const z=$('form-clase'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>Nueva clase</h3>
-    <label>Nombre</label><input id="cl-nombre" placeholder="Ej. Primarios"/>
-    <label>Edades</label><input id="cl-edad" placeholder="Ej. 6-8 años"/>
+    <label for="cl-nombre">Nombre</label><input id="cl-nombre" placeholder="Ej. Primarios"/>
+    <label for="cl-edad">Edades</label><input id="cl-edad" placeholder="Ej. 6-8 años"/>
     <button class="btn" style="margin-top:12px" onclick="guardarClase()">Crear</button></div>`; }
 async function guardarClase(){
   try{ await api('/ninos/clases',{method:'POST',body:JSON.stringify({nombre:$('cl-nombre').value.trim(),edad:$('cl-edad').value.trim()})});
@@ -1967,7 +1967,7 @@ function formMaterial(){ const z=$('form-material'); if(z.innerHTML){z.innerHTML
   z.innerHTML=`<div class="form-panel">
     <input id="m-titulo" placeholder="Título de la lección"/>
     <div class="row" style="margin-top:10px;align-items:center">${fechaSelectHTML('m','',{opcional:true})}<input id="m-vers" placeholder="Versículo"/></div>
-    <label style="margin-top:10px">📎 Subir documento (PDF, imagen, Word…)</label>
+    <label for="m-file" style="margin-top:10px">📎 Subir documento (PDF, imagen, Word…)</label>
     <input id="m-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"/>
     <button class="btn small-btn" style="margin-top:12px" onclick="guardarMaterial()">Guardar</button></div>`; }
 async function guardarMaterial(){
@@ -2091,7 +2091,7 @@ async function cargarAvisosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/avisos'); const c=$('mg-avisos'); const lider=window._grupoLider;
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin avisos todavía.</p>'; return; }
     c.className='list';
-    c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${escHtml(a.texto||'')}</div></div>${lider?`<button class="link" style="color:var(--red)" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${escHtml(a.texto||'')}</div></div>${lider?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar aviso" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
   }catch{ $('mg-avisos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formAvisoGrupo(){ const z=$('mg-aviso-form'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2113,7 +2113,7 @@ async function cargarRecursosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/recursos'); const c=$('mg-recursos'); const lider=window._grupoLider;
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin recursos todavía.</p>'; return; }
     c.className='list';
-    c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${escHtml(safeUrl(rc.url))}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link" style="color:var(--red)" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${escHtml(safeUrl(rc.url))}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar recurso" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
   }catch{ $('mg-recursos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formRecursoGrupo(){ const z=$('mg-rec-form'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2193,7 +2193,7 @@ async function cargarTareasGrupo(){
   catch{ cont.className='muted'; cont.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarTareasGrupo()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; return; }
   if(!list.length){ cont.className='muted'; cont.innerHTML='<p class="small">Sin tareas asignadas.</p>'; return; }
   cont.className='list';
-  cont.innerHTML=list.map(t=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(t.titulo)}</b> <span class="muted small">→ ${escHtml(t.nombre)}</span>${t.detalle?`<div class="muted small">${escHtml(t.detalle)}</div>`:''} <span class="estado-chip ${t.estado==='hecho'?'estado-aceptado':'estado-pendiente'}">${t.estado==='hecho'?'✅ Hecho':'⏳ Pendiente'}</span></div><button class="link" style="color:var(--red)" onclick="borrarTareaGrupo(${t.id})">🗑️</button></div>`).join('');
+  cont.innerHTML=list.map(t=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(t.titulo)}</b> <span class="muted small">→ ${escHtml(t.nombre)}</span>${t.detalle?`<div class="muted small">${escHtml(t.detalle)}</div>`:''} <span class="estado-chip ${t.estado==='hecho'?'estado-aceptado':'estado-pendiente'}">${t.estado==='hecho'?'✅ Hecho':'⏳ Pendiente'}</span></div><button class="link icon-only" style="color:var(--red)" aria-label="Eliminar tarea" onclick="borrarTareaGrupo(${t.id})">🗑️</button></div>`).join('');
 }
 function borrarTareaGrupo(id){ modalConfirm('¿Eliminar esta tarea?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/tareas/'+id,{method:'DELETE'}); cargarTareasGrupo(); toast('Tarea eliminada'); }catch(e){ toast(e.message);} }); }
 
@@ -2227,11 +2227,11 @@ async function verPredica(id){
   const recs=(d.recursos||[]).map(r=>{
     const ic=r.tipo==='archivo'?'📎':r.tipo==='libro'?'📚':'🔗';
     const link=r.url?`<a href="${escHtml(safeUrl(r.url))}" target="_blank">${r.tipo==='archivo'?'Abrir / descargar':'Abrir'}</a>`:'';
-    return `<div class="item-card flex"><div style="flex:1"><b>${ic} ${escHtml(r.titulo)}</b> <span class="muted small">${link}</span></div>${edit?`<button class="link" style="color:var(--red)" onclick="borrarRecPredica(${r.id})">🗑️</button>`:''}</div>`;
+    return `<div class="item-card flex"><div style="flex:1"><b>${ic} ${escHtml(r.titulo)}</b> <span class="muted small">${link}</span></div>${edit?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar recurso" onclick="borrarRecPredica(${r.id})">🗑️</button>`:''}</div>`;
   }).join('');
   $('prd').className='';
   $('prd').innerHTML=`<div class="card">
-    <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link" style="color:var(--red)" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
+    <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link icon-only" style="color:var(--red)" aria-label="Eliminar predicación" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
     <div class="muted small" style="margin-top:4px">${d.fecha?'📅 '+fechaTxt(d.fecha):''}${d.predicador?' · 🎤 '+escHtml(d.predicador):''}</div>
     ${d.notas?`<div style="margin-top:14px;white-space:pre-wrap;line-height:1.5">${escHtml(d.notas)}</div>`:'<p class="muted small" style="margin-top:10px">Sin notas.</p>'}
   </div>
@@ -2244,10 +2244,10 @@ async function formPredica(id){
   const v=(x)=>x?String(x).replace(/"/g,'&quot;'):'';
   $('content').innerHTML=`<button class="link" onclick="${id?`verPredica(${id})`:'vistaPredica()'}">‹ Volver</button>
    <div class="card" style="margin-top:8px"><h2 style="font-size:18px">${id?'Editar prédica':'Nueva prédica'}</h2>
-    <label>Nombre de la prédica</label><input id="pp-titulo" value="${v(p.titulo)}" placeholder="Ej. El amor de Dios"/>
+    <label for="pp-titulo">Nombre de la prédica</label><input id="pp-titulo" value="${v(p.titulo)}" placeholder="Ej. El amor de Dios"/>
     <label>Fecha</label><div>${fechaSelectHTML('pp', p.fecha||'')}</div>
-    <label>Predicador</label><input id="pp-predicador" value="${v(p.predicador)}" placeholder="Quién predicó"/>
-    <label>Notas / bosquejo</label><textarea id="pp-notas" style="min-height:150px">${escHtml(p.notas||'')}</textarea>
+    <label for="pp-predicador">Predicador</label><input id="pp-predicador" value="${v(p.predicador)}" placeholder="Quién predicó"/>
+    <label for="pp-notas">Notas / bosquejo</label><textarea id="pp-notas" style="min-height:150px">${escHtml(p.notas||'')}</textarea>
     <p id="pp-error" class="error"></p>
     <button class="btn" style="margin-top:12px" onclick="guardarPredica(${id||0})">${id?'Guardar cambios':'Crear prédica'}</button></div>`;
 }
@@ -2364,7 +2364,7 @@ async function verIglesiaObispo(id, mes){
 function modalDetalle(titulo, html){
   let ov=$('det-ov'); if(!ov){ ov=document.createElement('div'); ov.id='det-ov'; ov.className='hmodal-ov'; document.body.appendChild(ov); }
   ov.innerHTML=`<div class="hmodal" onclick="event.stopPropagation()" style="max-width:600px">
-    <div class="hmodal-head"><b style="flex:1;font-size:16px">${titulo}</b><button class="cal-navbtn" onclick="cerrarDetalle()">✕</button></div>
+    <div class="hmodal-head"><b style="flex:1;font-size:16px">${titulo}</b><button class="cal-navbtn" onclick="cerrarDetalle()" aria-label="Cerrar">✕</button></div>
     <div style="padding:18px;overflow:auto">${html}</div></div>`;
   ov.onclick=cerrarDetalle;
 }
@@ -2463,13 +2463,13 @@ async function vistaPerfilDirectorio(){
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
       <div id="dp-foto-preview">${dirAvatar({nombre:ME.persona.nombre,foto_url:p.foto_url},64)}</div>
       <div style="flex:1">
-        <label style="margin:0">Foto de perfil</label>
+        <label for="dp-foto" style="margin:0">Foto de perfil</label>
         <input id="dp-foto" type="file" accept="image/*"/>
       </div>
     </div>
-    <label>Teléfono</label>
+    <label for="dp-tel">Teléfono</label>
     <input id="dp-tel" type="tel" value="${p.telefono?String(p.telefono).replace(/"/g,'&quot;'):''}" placeholder="Ej. +56 9 1234 5678"/>
-    <label style="margin-top:10px">Correo</label>
+    <label for="dp-email" style="margin-top:10px">Correo</label>
     <input id="dp-email" type="email" value="${p.email?String(p.email).replace(/"/g,'&quot;'):''}" placeholder="tucorreo@ejemplo.com"/>
     <label style="margin-top:10px">Fecha de cumpleaños</label>
     <div>${fechaSelectHTML('dp-cumple', p.cumple||'', {opcional:true, desde:new Date().getFullYear()-100, hasta:new Date().getFullYear()})}</div>
@@ -2713,15 +2713,15 @@ async function vistaSuperadmin(){
     <div class="card" style="max-width:640px;margin-bottom:20px">
       <h2 style="font-size:1.3rem;margin-bottom:4px">🛡️ Crear iglesia</h2>
       <p class="muted small" style="margin-bottom:14px">Crea una nueva iglesia junto a la cuenta de su pastor. El código que se genera se lo entregas a la iglesia para que sus feligreses puedan unirse.</p>
-      <label>Nombre de la iglesia</label>
+      <label for="sa-nombre-ig">Nombre de la iglesia</label>
       <input id="sa-nombre-ig" placeholder="Ej. Iglesia Monte Sion"/>
-      <label style="margin-top:8px">Código <span class="muted">(opcional — se genera solo si lo dejas vacío)</span></label>
+      <label for="sa-codigo" style="margin-top:8px">Código <span class="muted">(opcional — se genera solo si lo dejas vacío)</span></label>
       <input id="sa-codigo" placeholder="Ej. MONTESION"/>
-      <label style="margin-top:8px">Nombre del pastor</label>
+      <label for="sa-pastor-nombre" style="margin-top:8px">Nombre del pastor</label>
       <input id="sa-pastor-nombre" placeholder="Nombre y apellido"/>
-      <label style="margin-top:8px">Usuario del pastor</label>
+      <label for="sa-pastor-usuario" style="margin-top:8px">Usuario del pastor</label>
       <input id="sa-pastor-usuario" placeholder="Usuario para entrar"/>
-      <label style="margin-top:8px">Correo del pastor</label>
+      <label for="sa-pastor-email" style="margin-top:8px">Correo del pastor</label>
       <input id="sa-pastor-email" type="email" placeholder="correo@ejemplo.com"/>
       <label style="margin-top:8px">Contraseña temporal del pastor</label>
       <div class="row" style="gap:8px">
@@ -2772,9 +2772,9 @@ function saEditarIglesia(id){
   const root=$('modal-root');
   root.innerHTML=`<div class="modal-bg"><div class="modal">
     <h3>✏️ Editar iglesia</h3>
-    <label>Nombre</label>
+    <label for="sa-ed-nombre">Nombre</label>
     <input id="sa-ed-nombre" value="${escHtml(ig.nombre)}"/>
-    <label style="margin-top:8px">Código</label>
+    <label for="sa-ed-codigo" style="margin-top:8px">Código</label>
     <input id="sa-ed-codigo" value="${escHtml(ig.codigo_unico||'')}"/>
     <p id="sa-ed-error" class="error"></p>
     <div class="row" style="margin-top:14px">
@@ -2874,15 +2874,17 @@ function saCopiar(codigo){
 // ============================================================
 //  AJUSTES — apariencia (tema, color de acento, tamaño de texto)
 // ============================================================
+// Cada acento trae su propio tono de barra lateral (`side`) y su realce (`acc`),
+// para que al cambiarlo NO quede la app a medias con el azul fijo del CSS.
 const ACENTOS={
-  cielo:    {nombre:'Cielo',    p:'#1C61A6',p7:'#154E86',p6:'#1A5B9C',turq:'#F5A623'},  // paleta del logo
-  pino:     {nombre:'Pino',     p:'#0F5C57',p7:'#0B4745',p6:'#0E5450',turq:'#C19E55'},
-  azul:     {nombre:'Azul',     p:'#2563EB',p7:'#1D4ED8',p6:'#1E54D9',turq:'#0EA5E9'},
-  esmeralda:{nombre:'Esmeralda',p:'#059669',p7:'#047857',p6:'#059669',turq:'#10B981'},
-  violeta:  {nombre:'Violeta',  p:'#7C3AED',p7:'#6D28D9',p6:'#7C3AED',turq:'#A855F7'},
-  naranja:  {nombre:'Naranja',  p:'#EA580C',p7:'#C2410C',p6:'#EA580C',turq:'#F59E0B'},
-  rosa:     {nombre:'Rosa',     p:'#DB2777',p7:'#BE185D',p6:'#DB2777',turq:'#F472B6'},
-  grafito:  {nombre:'Grafito',  p:'#334155',p7:'#1E293B',p6:'#334155',turq:'#64748B'},
+  cielo:    {nombre:'Cielo',    p:'#1C61A6',p7:'#154E86',p6:'#1A5B9C',side:'#0F3355',acc:'#D98C1F'},  // paleta del logo
+  pino:     {nombre:'Pino',     p:'#0F5C57',p7:'#0B4745',p6:'#0E5450',side:'#08332F',acc:'#C19E55'},
+  azul:     {nombre:'Azul',     p:'#2563EB',p7:'#1D4ED8',p6:'#1E54D9',side:'#152A63',acc:'#F0A32C'},
+  esmeralda:{nombre:'Esmeralda',p:'#059669',p7:'#047857',p6:'#059669',side:'#06382B',acc:'#D6A840'},
+  violeta:  {nombre:'Violeta',  p:'#7C3AED',p7:'#6D28D9',p6:'#7C3AED',side:'#2E1A55',acc:'#E0A32E'},
+  naranja:  {nombre:'Naranja',  p:'#EA580C',p7:'#C2410C',p6:'#EA580C',side:'#4A2109',acc:'#FBBF24'},
+  rosa:     {nombre:'Rosa',     p:'#DB2777',p7:'#BE185D',p6:'#DB2777',side:'#4A1030',acc:'#E8B04B'},
+  grafito:  {nombre:'Grafito',  p:'#334155',p7:'#1E293B',p6:'#334155',side:'#16202B',acc:'#B07D2B'},
 };
 function ajustes(){ try{ return JSON.parse(localStorage.getItem('ajustes')||'{}'); }catch{ return {}; } }
 function aplicarAjustes(){
@@ -2891,8 +2893,12 @@ function aplicarAjustes(){
   root.style.setProperty('--primary',ac.p);
   root.style.setProperty('--primary-700',ac.p7);
   root.style.setProperty('--primary-600',ac.p6);
-  root.style.setProperty('--turq',ac.turq);
-  root.style.setProperty('--grad','linear-gradient(135deg,'+ac.p+' 0%,'+ac.turq+' 100%)');
+  root.style.setProperty('--sidebar',ac.side);
+  root.style.setProperty('--gold',ac.acc);
+  root.style.setProperty('--turq',ac.acc);
+  // Un solo color en dos tonos (igual que el CSS): el realce va aparte, no dentro del degradado.
+  root.style.setProperty('--grad','linear-gradient(135deg,'+ac.p+' 0%,'+ac.p7+' 100%)');
+  root.style.setProperty('--grad-hero','linear-gradient(120deg,'+ac.side+' 0%,'+ac.p7+' 62%,'+ac.p+' 100%)');
   root.style.fontSize=({sm:'15px',md:'16px',lg:'18px'}[a.texto]||'16px');
   const dark = a.tema==='dark' || (a.tema==='auto' && window.matchMedia && matchMedia('(prefers-color-scheme:dark)').matches);
   root.setAttribute('data-theme', dark?'dark':'light');
@@ -3017,13 +3023,13 @@ function abrirRecuperar(){
       <button class="cal-navbtn" onclick="cerrarRecuperar()" aria-label="Cerrar">✕</button></div>
     <div style="padding:16px">
       <div id="rec-paso1">
-        <label>Tu correo (Gmail)</label>
+        <label for="rec-email">Tu correo (Gmail)</label>
         <input id="rec-email" type="email" placeholder="tucorreo@gmail.com"/>
         <p class="muted small" style="margin:6px 0 0">Te enviaremos un código de 6 dígitos.</p>
         <button class="btn" style="width:100%;margin-top:10px" onclick="recEnviar()">Enviar código</button>
       </div>
       <div id="rec-paso2" class="hidden">
-        <label>Código (6 dígitos)</label>
+        <label for="rec-codigo">Código (6 dígitos)</label>
         <input id="rec-codigo" inputmode="numeric" maxlength="6" placeholder="000000"/>
         <label style="margin-top:8px">Nueva contraseña</label>
         <div class="row" style="gap:8px"><input id="rec-nueva" type="password" placeholder="Nueva contraseña"/>
@@ -3058,13 +3064,13 @@ async function recConfirmar(){
 function vistaAjustes(){
   const a=ajustes(), acSel=a.acento||'cielo', temaSel=a.tema||'light', txtSel=a.texto||'md';
   const emailActual=(ME.persona&&ME.persona.email)?String(ME.persona.email).replace(/"/g,'&quot;'):'';
-  const opt=(g,val,act,label)=>`<button class="ajuste-opt ${val===act?'sel':''}" onclick="setAjuste('${g}','${val}')">${label}</button>`;
+  const opt=(g,val,act,label)=>`<button class="ajuste-opt ${val===act?'sel':''}" aria-pressed="${val===act}" onclick="setAjuste('${g}','${val}')">${label}</button>`;
   $('content').innerHTML=`
     <div class="card" style="max-width:560px">
       <h2 style="font-size:1.3rem;margin-bottom:4px">🎨 Ajustes de apariencia</h2>
       <p class="muted small" style="margin-bottom:18px">Personaliza cómo se ve la app. Se guarda en este dispositivo.</p>
       <div class="ajuste-grupo"><label style="margin:0">Color de acento</label>
-        <div class="ajuste-opts">${Object.entries(ACENTOS).map(([k,v])=>`<div class="swatch ${k===acSel?'sel':''}" title="${v.nombre}" style="background:${v.p}" onclick="setAjuste('acento','${k}')"></div>`).join('')}</div></div>
+        <div class="ajuste-opts">${Object.entries(ACENTOS).map(([k,v])=>`<button type="button" class="swatch ${k===acSel?'sel':''}" title="${v.nombre}" aria-label="Color ${v.nombre}" aria-pressed="${k===acSel}" style="background:linear-gradient(135deg,${v.p} 0%,${v.p} 62%,${v.acc} 62%,${v.acc} 100%)" onclick="setAjuste('acento','${k}')"></button>`).join('')}</div></div>
       <div class="ajuste-grupo"><label style="margin:0">Tema</label>
         <div class="ajuste-opts">${opt('tema','light',temaSel,'☀️ Claro')}${opt('tema','dark',temaSel,'🌙 Oscuro')}${opt('tema','auto',temaSel,'🖥️ Automático')}</div></div>
       <div class="ajuste-grupo"><label style="margin:0">Tamaño del texto</label>
@@ -3094,7 +3100,7 @@ function vistaAjustes(){
       <label class="check" style="margin-top:8px"><input type="checkbox" id="cta-tel-mostrar"/> Mostrar mi teléfono en el directorio</label>
       <p class="muted small" style="margin:4px 0 0">Por defecto tu teléfono está <b>oculto</b>; actívalo si quieres que aparezca en tu tarjeta del directorio.</p>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>
-      <label>Cambiar contraseña</label>
+      <label for="cta-actual">Cambiar contraseña</label>
       <input id="cta-actual" type="password" placeholder="Contraseña actual" style="margin-bottom:8px"/>
       <div class="row" style="gap:8px">
         <input id="cta-nueva" type="password" placeholder="Nueva contraseña"/>
