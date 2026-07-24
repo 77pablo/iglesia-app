@@ -117,3 +117,45 @@ test('eliminarIglesiaCompleta: borra datos y archivos; null si no existe', async
 
   assert.equal(eliminarIglesiaCompleta(999999), null);
 });
+
+test('endpoint DELETE: gate, 404, borrado y auditoría a nivel sistema', async () => {
+  const { signToken } = await import('../src/auth.js');
+  const { app } = await import('../src/server.js');
+  const srv = app.listen(0);
+  await new Promise(r => srv.once('listening', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    db.exec('PRAGMA foreign_keys = ON');
+    // super-admin
+    const sa = db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, activo) VALUES (NULL,'sa_del','SA','x','super_admin',1)").run();
+    const saTok = signToken({ id: Number(sa.lastInsertRowid), iglesia_id: null });
+    // iglesia con un pastor (feligrés normal, para probar el gate 403)
+    const ig = db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Del','DEL')").run();
+    const iglesiaId = Number(ig.lastInsertRowid);
+    const pas = db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, es_pastor, activo) VALUES (?,?,?,?,1,1)").run(iglesiaId, 'p', 'P', 'x');
+    const pastorTok = signToken({ id: Number(pas.lastInsertRowid), iglesia_id: iglesiaId });
+
+    // 403: un pastor no puede
+    let res = await fetch(base + '/api/superadmin/iglesias/' + iglesiaId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + pastorTok } });
+    assert.equal(res.status, 403);
+
+    // 404: iglesia inexistente
+    res = await fetch(base + '/api/superadmin/iglesias/999999', { method: 'DELETE', headers: { Authorization: 'Bearer ' + saTok } });
+    assert.equal(res.status, 404);
+
+    // 200: super-admin elimina
+    res = await fetch(base + '/api/superadmin/iglesias/' + iglesiaId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + saTok } });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.eliminada.codigo, 'DEL');
+
+    // La iglesia ya no existe
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM iglesia WHERE id = ?').get(iglesiaId).n, 0);
+    // Auditoría a nivel sistema (iglesia_id = NULL) sobrevive
+    const log = db.prepare("SELECT * FROM auditoria WHERE accion = 'superadmin_eliminar_iglesia' AND iglesia_id IS NULL ORDER BY id DESC LIMIT 1").get();
+    assert.ok(log, 'no se registró la auditoría del borrado');
+  } finally {
+    await new Promise(r => srv.close(r));
+  }
+});

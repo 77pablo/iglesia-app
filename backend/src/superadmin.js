@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import db from './db.js';
 import { authMiddleware, hashPassword, auditar } from './auth.js';
 import { validar } from './seguridad.js';
+import { eliminarIglesiaCompleta } from './eliminarIglesia.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -53,7 +54,8 @@ r.get('/iglesias', (req, res) => {
   const iglesias = db.prepare(
     `SELECT i.id, i.nombre, i.codigo_unico, i.creada_en, i.activa,
         (SELECT nombre FROM persona WHERE iglesia_id = i.id AND es_pastor = 1 LIMIT 1) AS pastor,
-        (SELECT COUNT(*) FROM persona p WHERE p.iglesia_id = i.id AND p.activo = 1) AS miembros
+        (SELECT COUNT(*) FROM persona p WHERE p.iglesia_id = i.id AND p.activo = 1) AS miembros,
+        (SELECT COUNT(*) FROM evento e WHERE e.iglesia_id = i.id) AS eventos
        FROM iglesia i ORDER BY i.nombre`
   ).all();
   res.json(iglesias);
@@ -178,6 +180,25 @@ r.post('/iglesias/:id/reset-pastor', (req, res) => {
     pastor: { id: pastor.id, usuario: pastor.usuario, nombre: pastor.nombre },
     password_temporal: temporal
   });
+});
+
+// --- Elimina una iglesia POR COMPLETO (datos + archivos). Irreversible. ---
+r.delete('/iglesias/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id de iglesia no válido' });
+
+  const iglesia = db.prepare('SELECT id, nombre, codigo_unico FROM iglesia WHERE id = ?').get(id);
+  if (!iglesia) return res.status(404).json({ error: 'Iglesia no encontrada' });
+
+  try {
+    const r2 = eliminarIglesiaCompleta(id);
+    // Auditoría a nivel sistema (iglesia_id = NULL): sobrevive al borrado.
+    auditar(null, req.user.persona_id, 'superadmin_eliminar_iglesia', 'superadmin', `${iglesia.nombre} (${iglesia.codigo_unico})`);
+    res.json({ ok: true, eliminada: { nombre: iglesia.nombre, codigo: iglesia.codigo_unico }, archivos_borrados: r2.archivosBorrados });
+  } catch (e) {
+    console.error('[superadmin] eliminar iglesia falló:', e.message);
+    res.status(500).json({ error: 'No se pudo eliminar la iglesia (no se borró nada)' });
+  }
 });
 
 export default r;
