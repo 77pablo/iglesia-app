@@ -72,3 +72,48 @@ test('borra TODOS los datos de la iglesia y deja las demás intactas', () => {
   assert.equal(filasDirectas(db, B.iglesiaId), bAntes, 'se tocó la iglesia B');
   assert.equal(db.prepare('SELECT COUNT(*) n FROM mensaje WHERE conversacion_id = ?').get(B.convId).n, bMsgAntes);
 });
+
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+test('recolectarArchivos: solo /uploads/ de la iglesia', async () => {
+  const { recolectarArchivos } = await import('../src/eliminarIglesia.js');
+  db.exec('PRAGMA foreign_keys = ON');
+  const ig = db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Con Fotos','FOTOS')").run();
+  const iglesiaId = Number(ig.lastInsertRowid);
+  // foto subida (cuenta) + asset del sistema (NO cuenta) + externo (NO cuenta)
+  db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo, foto_url) VALUES (?,?,?,?,1,?)")
+    .run(iglesiaId, 'con_foto', 'Con Foto', 'x', '/uploads/foto1.jpg');
+  db.prepare("INSERT INTO material_musica (iglesia_id, titulo, archivo_url) VALUES (?, 'Himno', '/assets/himnario-nuevo.pdf')").run(iglesiaId);
+  db.prepare("INSERT INTO material_musica (iglesia_id, titulo, archivo_url) VALUES (?, 'Partitura', '/uploads/part.pdf')").run(iglesiaId);
+
+  const urls = recolectarArchivos(iglesiaId).sort();
+  assert.deepEqual(urls, ['/uploads/foto1.jpg', '/uploads/part.pdf']);
+});
+
+test('eliminarIglesiaCompleta: borra datos y archivos; null si no existe', async () => {
+  const { eliminarIglesiaCompleta } = await import('../src/eliminarIglesia.js');
+  // UPLOADS_DIR temporal con dos archivos reales
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'uploads-'));
+  process.env.UPLOADS_DIR = dir;
+  fs.writeFileSync(path.join(dir, 'foto1.jpg'), 'x');
+  fs.writeFileSync(path.join(dir, 'part.pdf'), 'x');
+
+  db.exec('PRAGMA foreign_keys = ON');
+  const ig = db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Borrar','BORRAR')").run();
+  const iglesiaId = Number(ig.lastInsertRowid);
+  db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo, foto_url) VALUES (?,?,?,?,1,?)")
+    .run(iglesiaId, 'x', 'X', 'x', '/uploads/foto1.jpg');
+  db.prepare("INSERT INTO material_musica (iglesia_id, titulo, archivo_url) VALUES (?, 'P', '/uploads/part.pdf')").run(iglesiaId);
+
+  const res = eliminarIglesiaCompleta(iglesiaId);
+  assert.equal(res.nombre, 'Borrar');
+  assert.equal(res.codigo, 'BORRAR');
+  assert.equal(res.archivosBorrados, 2);
+  assert.equal(fs.existsSync(path.join(dir, 'foto1.jpg')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'part.pdf')), false);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM iglesia WHERE id = ?').get(iglesiaId).n, 0);
+
+  assert.equal(eliminarIglesiaCompleta(999999), null);
+});
