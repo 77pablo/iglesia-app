@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS movimiento (
   categoria   TEXT,
   monto       REAL NOT NULL,
   descripcion TEXT,
-  fecha       TEXT NOT NULL DEFAULT (date('now')),
+  fecha       TEXT NOT NULL DEFAULT (date('now','localtime')),
   creado_por  INTEGER REFERENCES persona(id)
 );
 CREATE TABLE IF NOT EXISTS campania (
@@ -603,6 +603,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_contactopublico_iglesia ON contacto_publico(iglesia_id);
   CREATE INDEX IF NOT EXISTS idx_consentimiento_persona ON consentimiento(persona_id, tipo, id);
 `);
+
+// --- ASISTENCIA_NINO: evitar duplicados (misma clase+nino+fecha) ---
+// A diferencia de "asistencia" (que ya tiene UNIQUE(evento_id, persona_id)),
+// esta tabla no tenia restriccion unica: un doble guardado podia duplicar
+// filas. Antes de crear el indice unico, se eliminan duplicados ya
+// existentes en produccion (se conserva la fila de menor id).
+db.exec(`DELETE FROM asistencia_nino WHERE id NOT IN (SELECT MIN(id) FROM asistencia_nino GROUP BY clase_id, nino_id, fecha);`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_asist_nino_unica ON asistencia_nino(clase_id, nino_id, fecha);`);
 
 // --- Auto-reparación: el himnario (material permanente) SIEMPRE disponible ---
 // Si en alguna iglesia falta el registro del himnario, se reinserta al arrancar.

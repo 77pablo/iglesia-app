@@ -156,4 +156,15 @@ export function generarCumpleanosHoy(iglesiaId) {
   return creados;
 }
 
+// --- Throttle: no recalcular en CADA /api/me (mismo patron que recordatorios.js) ---
+// Solo se recalcula como maximo 1 vez por hora por iglesia (en memoria).
+const _ultimaGen = new Map();              // iglesia_id -> ms del ultimo calculo
+const GEN_CADA_MS = 60 * 60 * 1000;        // 1 hora
+export function generarCumpleanosHoyThrottled(iglesiaId) {
+  const ahora = Date.now();
+  if (ahora - (_ultimaGen.get(iglesiaId) || 0) < GEN_CADA_MS) return 0;  // ya se hizo hace poco
+  _ultimaGen.set(iglesiaId, ahora);
+  try { return generarCumpleanosHoy(iglesiaId); } catch { return 0; }
+}
+
 export default r;

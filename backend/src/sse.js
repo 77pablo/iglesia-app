@@ -7,10 +7,22 @@
 
 const conexiones = new Map();  // persona_id -> Set<res>
 
+// Tope de conexiones simultaneas por persona: evita agotar descriptores si
+// un cliente (o un abuso) abre el stream muchas veces sin cerrar el anterior.
+// Al llegar al tope, se cierra la conexion MAS ANTIGUA de esa persona (Set
+// conserva el orden de insercion) para dejar entrar a la nueva.
+const MAX_CONEXIONES_POR_PERSONA = 5;
+
 export function registrar(personaId, res) {
   const pid = Number(personaId);
   if (!conexiones.has(pid)) conexiones.set(pid, new Set());
-  conexiones.get(pid).add(res);
+  const set = conexiones.get(pid);
+  if (set.size >= MAX_CONEXIONES_POR_PERSONA) {
+    const masAntigua = set.values().next().value;
+    set.delete(masAntigua);
+    try { masAntigua.end(); } catch { /* ya estaba cerrada */ }
+  }
+  set.add(res);
   return function baja() {
     const set = conexiones.get(pid);
     if (!set) return;

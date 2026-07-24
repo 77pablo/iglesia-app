@@ -136,6 +136,16 @@ export function authMiddleware(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Falta el token' });
   try {
     const payload = jwt.verify(token, SECRET);
+    // El JWT dura 30 dias: si la persona fue desactivada o "eliminada" (activo=0,
+    // ver cuenta.js /eliminar) o su iglesia fue desactivada (ver superadmin.js),
+    // el token sigue siendo criptograficamente valido pero el acceso debe
+    // revocarse de inmediato, no esperar a que expire.
+    const p = db.prepare('SELECT activo, iglesia_id, rol_global FROM persona WHERE id = ?').get(payload.persona_id);
+    if (!p || p.activo !== 1) return res.status(401).json({ error: 'Cuenta desactivada' });
+    if (p.iglesia_id != null) {
+      const iglesia = db.prepare('SELECT activa FROM iglesia WHERE id = ?').get(p.iglesia_id);
+      if (!iglesia || iglesia.activa !== 1) return res.status(401).json({ error: 'Iglesia desactivada' });
+    }
     req.user = payload;            // { persona_id, iglesia_id }
     next();
   } catch {
@@ -170,6 +180,10 @@ export function esObispo(personaId) {
   const p = db.prepare('SELECT rol_global FROM persona WHERE id = ?').get(personaId);
   return !!(p && (p.rol_global === 'obispo' || p.rol_global === 'super_admin'));
 }
+// ¿Puede ver este modulo "como pastor"? (el pastor gestiona; el obispo solo observa)
+export function puedeVerComoPastor(personaId) {
+  return esPastor(personaId) || esObispo(personaId);
+}
 
 // --- Helpers de permisos (para eventos y servicio) ---
 export function esPastor(personaId) {
@@ -200,18 +214,22 @@ export function esEncargadoGrupo(personaId, grupoId) {
   ).get(personaId, grupoId);
   return !!row;
 }
+// --- Factorías internas: helpers de rol de grupo (misma consulta, distinto rol) ---
+// ¿Tiene la persona ESTE rol en algun grupo (pertenencia)? Sin atajo de pastor.
+const tieneRolEnGrupo = (rol) => (personaId) => {
+  const row = db.prepare('SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = ?').get(personaId, rol);
+  return !!row;
+};
+// ¿Tiene ESTE rol en algun grupo, o es pastor (atajo)?
+const rolOPastor = (rol) => {
+  const tieneRol = tieneRolEnGrupo(rol);
+  return (personaId) => esPastor(personaId) || tieneRol(personaId);
+};
+
 // ¿Es tesorero? (o pastor)
-export function esTesoreroOPastor(personaId) {
-  if (esPastor(personaId)) return true;
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'tesorero'").get(personaId);
-  return !!row;
-}
+export const esTesoreroOPastor = rolOPastor('tesorero');
 // ¿Es lider de Escuela Dominical? (o pastor)
-export function esLiderEdOPastor(personaId) {
-  if (esPastor(personaId)) return true;
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'lider_ed'").get(personaId);
-  return !!row;
-}
+export const esLiderEdOPastor = rolOPastor('lider_ed');
 // ¿Es predicador? (el pastor siempre; o quien tenga el rol 'predicador' vigente hoy)
 export function esPredicador(personaId) {
   if (esPastor(personaId)) return true;
@@ -225,26 +243,11 @@ export function esDelMinisterioMusica(personaId) {
   const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol IN ('musico','lider_musica')").get(personaId);
   return !!row;
 }
-// ¿Es lider de musica? (o pastor)
-export function esLiderMusica(personaId) {
-  if (esPastor(personaId)) return true;
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'lider_musica'").get(personaId);
-  return !!row;
-}
 // --- Variantes ESTRICTAS: el encargado real, SIN atajo de pastor ---
 // (El pastor VE estos módulos pero NO los edita; solo el encargado edita.)
-export function esLiderMusicaEstricto(personaId) {
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'lider_musica'").get(personaId);
-  return !!row;
-}
-export function esLiderEdEstricto(personaId) {
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'lider_ed'").get(personaId);
-  return !!row;
-}
-export function esTesoreroEstricto(personaId) {
-  const row = db.prepare("SELECT 1 FROM pertenencia WHERE persona_id = ? AND rol = 'tesorero'").get(personaId);
-  return !!row;
-}
+export const esLiderMusicaEstricto = tieneRolEnGrupo('lider_musica');
+export const esLiderEdEstricto = tieneRolEnGrupo('lider_ed');
+export const esTesoreroEstricto = tieneRolEnGrupo('tesorero');
 // ¿Es lider o pastor? (puede publicar anuncios, gestionar servicio...)
 export function esLiderOAdmin(personaId) {
   if (esPastor(personaId)) return true;
@@ -258,6 +261,19 @@ export function esLiderOAdmin(personaId) {
 export function verificarToken(token) {
   try { return jwt.verify(token, SECRET); }   // { persona_id, iglesia_id }
   catch { return null; }
+}
+
+// ¿Puede ACTOR difundir un aviso/anuncio a este SEGMENTO? (anuncios.js, notificaciones.js)
+//  - segmento 'grupo': solo el encargado de ESE grupo (o el pastor).
+//  - segmento 'todos' / 'rol': difunde a toda la iglesia o a un rol entero;
+//    eso es alcance de iglesia completa, exclusivo del pastor (un lider
+//    solo debe poder segmentar a su propio grupo).
+export function puedeSegmentar(personaId, segmento) {
+  const seg = segmento && segmento.tipo ? segmento : { tipo: 'todos' };
+  if (seg.tipo === 'grupo') {
+    return esEncargadoGrupo(personaId, Number(seg.grupo_id)) || esPastor(personaId);
+  }
+  return esPastor(personaId);
 }
 
 // --- Puede ACTOR iniciar un chat 1:1 con DESTINO? (misma iglesia) ---

@@ -50,15 +50,32 @@ r.get('/grupos-gestionables', (req, res) => {
 });
 
 // --- Crear evento ---
+// hora_inicio/hora_fin: exige HH:MM (o vacio/omitido) para que la
+// deteccion de choque (comparacion lexicografica de strings) sea correcta
+// ('9:00' > '10:00' con formato libre; '09:00' < '10:00' con HH:MM fijo).
+const horaSchema = z.string().trim().regex(/^\d{2}:\d{2}$/, 'hora invalida (usa HH:MM)').optional().or(z.literal(''));
 const crearEventoSchema = z.object({
   grupo_id: z.coerce.number().int().positive('falta el grupo'),
   titulo: z.string().trim().min(1, 'falta el titulo'),
   fecha: z.string().trim().min(1, 'falta la fecha'),
-  hora_inicio: z.string().trim().optional(),
-  hora_fin: z.string().trim().optional(),
+  hora_inicio: horaSchema,
+  hora_fin: horaSchema,
   lugar: z.string().trim().optional(),
   descripcion: z.string().trim().optional()
 });
+// Deteccion de choque: mismo dia + mismo lugar + horarios que se solapan.
+// excluirId: al editar un evento, no debe chocar consigo mismo.
+function detectarChoque(iglesiaId, fecha, lugar, hora_inicio, hora_fin, excluirId) {
+  if (!(lugar && hora_inicio && hora_fin)) return null;
+  return db.prepare(
+    `SELECT titulo FROM evento
+      WHERE iglesia_id = ? AND fecha = ? AND lugar = ? AND estado != 'rechazado'
+        AND hora_inicio IS NOT NULL AND hora_fin IS NOT NULL
+        AND NOT (? <= hora_inicio OR ? >= hora_fin)
+        AND id != ?`
+  ).get(iglesiaId, fecha, lugar, hora_fin, hora_inicio, excluirId || 0);
+}
+
 r.post('/', validar(crearEventoSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const { grupo_id, titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body;
@@ -66,17 +83,9 @@ r.post('/', validar(crearEventoSchema), (req, res) => {
   if (!esAdminDeGrupo(persona_id, Number(grupo_id)))
     return res.status(403).json({ error: 'No tienes permiso para crear eventos en ese grupo' });
 
-  // Deteccion de choque: mismo dia + mismo lugar + horarios que se solapan
-  if (lugar && hora_inicio && hora_fin) {
-    const choque = db.prepare(
-      `SELECT titulo FROM evento
-        WHERE iglesia_id = ? AND fecha = ? AND lugar = ? AND estado != 'rechazado'
-          AND hora_inicio IS NOT NULL AND hora_fin IS NOT NULL
-          AND NOT (? <= hora_inicio OR ? >= hora_fin)`
-    ).get(iglesia_id, fecha, lugar, hora_fin, hora_inicio);
-    if (choque)
-      return res.status(409).json({ error: `El lugar "${lugar}" ya esta ocupado a esa hora por "${choque.titulo}". Elige otro horario o lugar.` });
-  }
+  const choque = detectarChoque(iglesia_id, fecha, lugar, hora_inicio, hora_fin);
+  if (choque)
+    return res.status(409).json({ error: `El lugar "${lugar}" ya esta ocupado a esa hora por "${choque.titulo}". Elige otro horario o lugar.` });
 
   // Si lo crea el pastor -> aprobado directo. Si un lider -> pendiente de aprobacion.
   const estado = esPastor(persona_id) ? 'aprobado' : 'pendiente';
@@ -205,8 +214,8 @@ r.get('/historial/aprobaciones', (req, res) => {
 const editarEventoSchema = z.object({
   titulo: z.string().trim().optional(),
   fecha: z.string().trim().optional(),
-  hora_inicio: z.string().trim().optional(),
-  hora_fin: z.string().trim().optional(),
+  hora_inicio: horaSchema,
+  hora_fin: horaSchema,
   lugar: z.string().trim().optional(),
   descripcion: z.string().trim().optional()
 });
@@ -218,13 +227,25 @@ r.patch('/:id', validar(editarEventoSchema), (req, res) => {
   const { titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body;
   // PATCH parcial: un campo ausente (undefined) conserva el valor actual,
   // no lo borra (ver auditoria backend.md #3).
+  const fechaFinal = fecha ?? ev.fecha;
+  const horaInicioFinal = hora_inicio ?? ev.hora_inicio;
+  const horaFinFinal = hora_fin ?? ev.hora_fin;
+  const lugarFinal = lugar ?? ev.lugar;
+
+  // Re-validar choque de lugar/hora tambien al editar (la creacion ya lo
+  // hace; sin esto un PATCH podia mover un evento a un horario/lugar ya
+  // ocupado sin ser detectado). Se excluye el propio evento.
+  const choque = detectarChoque(iglesia_id, fechaFinal, lugarFinal, horaInicioFinal, horaFinFinal, ev.id);
+  if (choque)
+    return res.status(409).json({ error: `El lugar "${lugarFinal}" ya esta ocupado a esa hora por "${choque.titulo}". Elige otro horario o lugar.` });
+
   db.prepare('UPDATE evento SET titulo=?, fecha=?, hora_inicio=?, hora_fin=?, lugar=?, descripcion=? WHERE id=?')
     .run(
       titulo ?? ev.titulo,
-      fecha ?? ev.fecha,
-      hora_inicio ?? ev.hora_inicio,
-      hora_fin ?? ev.hora_fin,
-      lugar ?? ev.lugar,
+      fechaFinal,
+      horaInicioFinal,
+      horaFinFinal,
+      lugarFinal,
       descripcion ?? ev.descripcion,
       ev.id
     );
@@ -238,15 +259,25 @@ r.delete('/:id', (req, res) => {
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'No encontrado' });
   if (!puedeBorrar(persona_id, ev)) return res.status(403).json({ error: 'No tienes permiso' });
-  db.prepare('DELETE FROM asignacion WHERE evento_id=?').run(ev.id);
-  db.prepare('DELETE FROM asistencia WHERE evento_id=?').run(ev.id);
-  db.prepare('DELETE FROM setlist_item WHERE evento_id=?').run(ev.id);
-  db.prepare('DELETE FROM equipo_musica WHERE evento_id=?').run(ev.id);
-  db.prepare('DELETE FROM ensayo WHERE evento_id=?').run(ev.id);
-  // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
-  db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
-  limpiarSolicitud(ev);   // quita la notificación "Revisar y aprobar" si seguía activa
-  db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
+  // Borra 6 tablas hijas + evento en una sola transaccion: si algo falla a
+  // mitad de camino, no debe quedar el evento a medio borrar (huerfanos en
+  // unas tablas si o si no en otras). Patron identico al de cuenta.js /eliminar.
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM asignacion WHERE evento_id=?').run(ev.id);
+    db.prepare('DELETE FROM asistencia WHERE evento_id=?').run(ev.id);
+    db.prepare('DELETE FROM setlist_item WHERE evento_id=?').run(ev.id);
+    db.prepare('DELETE FROM equipo_musica WHERE evento_id=?').run(ev.id);
+    db.prepare('DELETE FROM ensayo WHERE evento_id=?').run(ev.id);
+    // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
+    db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
+    limpiarSolicitud(ev);   // quita la notificación "Revisar y aprobar" si seguía activa
+    db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo eliminar el evento' });
+  }
   auditar(iglesia_id, persona_id, 'eliminar_evento', 'calendario', ev.titulo);
   res.json({ ok: true });
 });

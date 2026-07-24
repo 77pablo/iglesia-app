@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware, esLiderOAdmin, auditar } from './auth.js';
+import { authMiddleware, esLiderOAdmin, esEncargadoGrupo, esPastor, auditar } from './auth.js';
 import { enviarPush } from './push.js';
 import { validar } from './seguridad.js';
 
@@ -37,6 +37,12 @@ r.post('/', validar(asignarSchema), (req, res) => {
 
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(evento_id, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
+
+  // Solo el encargado del grupo dueño del evento (o el pastor) puede asignar
+  // servicios en el; un lider de OTRO grupo no debe poder asignar aqui
+  // (esLiderOAdmin de arriba solo confirma que lidera ALGUN grupo).
+  if (!esEncargadoGrupo(persona_id, ev.grupo_id) && !esPastor(persona_id))
+    return res.status(403).json({ error: 'No eres el encargado de ese grupo' });
 
   // La persona asignada debe pertenecer a la misma iglesia (evita asignar a alguien de otra congregación).
   const destino = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1').get(aPersona, iglesia_id);

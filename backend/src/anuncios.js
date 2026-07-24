@@ -4,19 +4,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware, esLiderOAdmin, esPastor, auditar } from './auth.js';
+import { authMiddleware, esLiderOAdmin, esPastor, puedeSegmentar, auditar } from './auth.js';
 import { notificarSegmento, etiquetaSegmento } from './notificaciones.js';
 import { validar } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
-
-// Crea una notificacion in-app para cada miembro de la iglesia.
-// (En produccion, aqui ademas se enviaria el push real via FCM a sus dispositivos.)
-// Se mantiene por compatibilidad; internamente usa la segmentacion (Fase 4.1).
-export function notificarIglesia(iglesiaId, tipo, titulo, texto) {
-  notificarSegmento(iglesiaId, { tipo: 'todos' }, tipo, titulo, texto);
-}
 
 // --- Listar anuncios de la iglesia ---
 r.get('/', (req, res) => {
@@ -49,6 +42,10 @@ r.post('/', validar(publicarAnuncioSchema), (req, res) => {
 
   // Normaliza el segmento (por defecto, toda la iglesia)
   const seg = segmento && segmento.tipo ? segmento : { tipo: 'todos' };
+  // Un lider solo puede difundir dentro de SU grupo; difundir a toda la
+  // iglesia o por rol es exclusivo del pastor (alcance de iglesia completa).
+  if (!puedeSegmentar(persona_id, seg))
+    return res.status(403).json({ error: 'No tienes permiso para publicar con ese alcance' });
   const segGrupo = seg.tipo === 'grupo' ? (Number(seg.grupo_id) || null) : null;
   const segRol = seg.tipo === 'rol' ? (seg.rol || null) : null;
 

@@ -4,7 +4,7 @@
 // ============================================================
 import { Router } from 'express';
 import db from './db.js';
-import { authMiddleware, esPastor, esObispo, auditar } from './auth.js';
+import { authMiddleware, puedeVerComoPastor, auditar } from './auth.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -20,7 +20,7 @@ function miembrosDeGrupo(grupoId) {
 
 r.get('/', (req, res) => {
   const { persona_id, iglesia_id } = req.user;
-  if (!esPastor(persona_id) && !esObispo(persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
+  if (!puedeVerComoPastor(persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
 
   // Filtro opcional por grupo (debe ser un grupo de la iglesia)
   const grupos = db.prepare('SELECT id, nombre FROM grupo WHERE iglesia_id = ? ORDER BY nombre').all(iglesia_id);
@@ -72,7 +72,7 @@ function csvCell(v) {
 
 r.get('/export.csv', (req, res) => {
   const { persona_id, iglesia_id } = req.user;
-  if (!esPastor(persona_id) && !esObispo(persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
+  if (!puedeVerComoPastor(persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
 
   const grupos = db.prepare('SELECT id FROM grupo WHERE iglesia_id = ?').all(iglesia_id);
   const grupoId = grupos.some(g => g.id === Number(req.query.grupo_id)) ? Number(req.query.grupo_id) : null;

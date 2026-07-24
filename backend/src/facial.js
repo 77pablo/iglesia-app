@@ -59,17 +59,17 @@ const inscribirSchema = z.object({
   image: z.string().min(1, 'falta la imagen')
 });
 r.post('/inscribir', validar(inscribirSchema), async (req, res) => {
-  const { persona_id, iglesia_id } = req.user;
-  const { persona_id: target, image } = req.body;
-  if (!esLiderOAdmin(persona_id))
-    return res.status(403).json({ error: 'No tienes permiso para inscribir rostros' });
-
-  // La persona debe pertenecer a la misma iglesia.
-  const persona = db.prepare('SELECT id, nombre FROM persona WHERE id = ? AND iglesia_id = ?')
-    .get(target, iglesia_id);
-  if (!persona) return res.status(404).json({ error: 'Persona no encontrada en tu iglesia' });
-
   try {
+    const { persona_id, iglesia_id } = req.user;
+    const { persona_id: target, image } = req.body;
+    if (!esLiderOAdmin(persona_id))
+      return res.status(403).json({ error: 'No tienes permiso para inscribir rostros' });
+
+    // La persona debe pertenecer a la misma iglesia.
+    const persona = db.prepare('SELECT id, nombre FROM persona WHERE id = ? AND iglesia_id = ?')
+      .get(target, iglesia_id);
+    if (!persona) return res.status(404).json({ error: 'Persona no encontrada en tu iglesia' });
+
     const data = await pedirEmbedding(image);
     if (!data.ok) return res.status(400).json({ error: data.error || 'Error en el servicio facial' });
     if (!data.faces || !data.embedding)
@@ -92,7 +92,9 @@ const reconocerSchema = z.object({
   image: z.string().min(1, 'falta la imagen')
 });
 r.post('/reconocer', validar(reconocerSchema), async (req, res) => {
-  const { iglesia_id } = req.user;
+  const { persona_id, iglesia_id } = req.user;
+  if (!esLiderOAdmin(persona_id))
+    return res.status(403).json({ error: 'No tienes permiso para usar el reconocimiento facial' });
   const { image } = req.body;
 
   try {
@@ -136,6 +138,8 @@ r.post('/reconocer', validar(reconocerSchema), async (req, res) => {
 
 // --- LISTA de personas con biometria inscrita ---
 r.get('/inscritos', (req, res) => {
+  if (!esLiderOAdmin(req.user.persona_id))
+    return res.status(403).json({ error: 'No tienes permiso para ver los inscritos' });
   const filas = db.prepare(
     `SELECT p.id, p.nombre, COUNT(b.id) AS muestras, MAX(b.creado_en) AS ultima
        FROM biometria_persona b JOIN persona p ON p.id = b.persona_id

@@ -62,6 +62,20 @@ async function uploadArchivo(file){
   if(!r.ok) throw new Error(d.error||'No se pudo subir el archivo');
   return d.url;
 }
+// Deshabilita el botón que disparó la acción mientras `fn` está en curso, para que
+// un doble clic (o Enter repetido) durante el POST/PATCH no dispare una segunda petición.
+// Uso: dentro de una función invocada por onclick="fn()" sin referencia al botón,
+// llama conBoton(botonActual(), async()=>{ ... }) al inicio.
+function botonActual(){
+  try{ return (typeof event!=='undefined' && event && event.target && event.target.closest) ? event.target.closest('button') : (document.activeElement && document.activeElement.tagName==='BUTTON' ? document.activeElement : null); }
+  catch{ return null; }
+}
+async function conBoton(btn, fn){
+  if(btn && btn.disabled) return;
+  if(btn) btn.disabled=true;
+  try{ return await fn(); }
+  finally{ if(btn) btn.disabled=false; }
+}
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?{m:p[1],d:p[2]}:null; }
 function chipFecha(f){ const x=parseFecha(f); if(!x) return `<div class="mini-date"><b>—</b><span></span></div>`; return `<div class="mini-date"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
@@ -138,20 +152,20 @@ function abrirRegistro(){
       <button class="cal-navbtn" onclick="cerrarRegistro()" aria-label="Cerrar">✕</button></div>
     <div style="padding:16px">
       <p class="muted small" style="margin:0 0 12px">Pide el <b>código de tu iglesia</b> a tu pastor o líder, y crea tu cuenta.</p>
-      <label>Código de tu iglesia</label>
+      <label for="reg-codigo">Código de tu iglesia</label>
       <input id="reg-codigo" placeholder="Ej. MONTESION" autocapitalize="characters" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
-      <label style="margin-top:8px">Tu nombre completo</label>
+      <label for="reg-nombre" style="margin-top:8px">Tu nombre completo</label>
       <input id="reg-nombre" placeholder="Nombre y apellido" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
-      <label style="margin-top:8px">Elige un usuario</label>
+      <label for="reg-usuario" style="margin-top:8px">Elige un usuario</label>
       <input id="reg-usuario" placeholder="Usuario (para entrar)" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
       <label style="margin-top:8px">Elige una contraseña</label>
       <div class="row" style="gap:8px">
         <input id="reg-pass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
         <button class="btn ghost small-btn" type="button" style="max-width:52px" onclick="toggleVerPass('reg-pass',this)" title="Ver/ocultar">👁️</button>
       </div>
-      <label style="margin-top:8px">Correo <span class="muted">(opcional)</span></label>
+      <label for="reg-email" style="margin-top:8px">Correo <span class="muted">(opcional)</span></label>
       <input id="reg-email" type="email" placeholder="tucorreo@ejemplo.com" onkeydown="if(event.key==='Enter')confirmarRegistro()" />
-      <label style="margin-top:8px">Teléfono <span class="muted">(opcional)</span></label>
+      <label for="reg-telefono" style="margin-top:8px">Teléfono <span class="muted">(opcional)</span></label>
       <input id="reg-telefono" placeholder="+56 9 ..." onkeydown="if(event.key==='Enter')confirmarRegistro()" />
       <label class="check" style="margin-top:12px;align-items:flex-start"><input type="checkbox" id="reg-acepto" style="margin-top:3px"/>
         <span>He leído y acepto los <a href="/legal/terminos.html" target="_blank" rel="noopener">Términos</a> y la <a href="/legal/privacidad.html" target="_blank" rel="noopener">Política de Privacidad</a>.</span></label>
@@ -178,14 +192,16 @@ async function confirmarRegistro(){
   const body={codigo,nombre,usuario,password,acepto:true};
   if(email) body.email=email;
   if(telefono) body.telefono=telefono;
-  try{
-    const r=await fetch(API+'/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const data=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(data.error||'No se pudo crear la cuenta. Revisa el código de tu iglesia.');
-    localStorage.setItem('token',data.token);
-    cerrarRegistro();
-    cargarApp();
-  }catch(e){ m.textContent=(e&&e.message)||'No se pudo conectar con el servidor'; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      const r=await fetch(API+'/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(data.error||'No se pudo crear la cuenta. Revisa el código de tu iglesia.');
+      localStorage.setItem('token',data.token);
+      cerrarRegistro();
+      cargarApp();
+    }catch(e){ m.textContent=(e&&e.message)||'No se pudo conectar con el servidor'; }
+  });
 }
 
 // ============================================================
@@ -577,6 +593,14 @@ const CAL_DOW=['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM'];
 // (de izquierda a derecha: día, luego mes, luego año), sin depender del idioma
 // del navegador. Pinta con fechaSelectHTML(prefijo, valor, opts) y lee el valor
 // 'YYYY-MM-DD' con fechaSelectValor(prefijo). opts: {opcional, desde, hasta}.
+// Nº de días reales de un mes/año (mes en 1..12). Si no hay mes elegido aún, usa 31
+// (no hay nada que acotar); si no hay año elegido, usa el año actual (basta para saber
+// si febrero tiene 28 o 29 en la inmensa mayoría de los casos de uso reales).
+function _diasEnMes(anio, mes){
+  if(!mes) return 31;
+  const y = anio || new Date().getFullYear();
+  return new Date(y, mes, 0).getDate();
+}
 function fechaSelectHTML(prefijo, valor, opts){
   const o=opts||{};
   const hoy=new Date();
@@ -584,18 +608,36 @@ function fechaSelectHTML(prefijo, valor, opts){
   // Sin valor: si es opcional queda "en blanco"; si no, por defecto hoy.
   const yDef=p[0] || (o.opcional?undefined:hoy.getFullYear());
   const mDef=p[1] || (o.opcional?undefined:hoy.getMonth()+1);
-  const dDef=p[2] || (o.opcional?undefined:hoy.getDate());
+  let dDef=p[2] || (o.opcional?undefined:hoy.getDate());
   const blanco=!p.length && o.opcional;
   const aDesde=o.desde!=null?o.desde:hoy.getFullYear()-2;
   const aHasta=o.hasta!=null?o.hasta:hoy.getFullYear()+3;
   const ph=(t)=> o.opcional ? `<option value="" ${blanco?'selected':''}>${t}</option>` : '';
-  const diaOpts=ph('Día')+Array.from({length:31},(_,i)=>i+1).map(d=>`<option ${d===dDef?'selected':''}>${d}</option>`).join('');
+  const maxDias=_diasEnMes(yDef, mDef);
+  if(dDef && dDef>maxDias) dDef=maxDias;
+  const diaOpts=ph('Día')+Array.from({length:maxDias},(_,i)=>i+1).map(d=>`<option ${d===dDef?'selected':''}>${d}</option>`).join('');
   const mesOpts=ph('Mes')+MESES_LARGO.map((nm,i)=>`<option value="${i+1}" ${(i+1)===mDef?'selected':''}>${nm}</option>`).join('');
   let anioOpts=ph('Año'); for(let a=aDesde;a<=aHasta;a++) anioOpts+=`<option ${a===yDef?'selected':''}>${a}</option>`;
   return `<span class="fecha-select" style="display:inline-flex;gap:8px;flex-wrap:wrap">
-    <select id="${prefijo}-dia" title="Día" style="max-width:90px">${diaOpts}</select>
-    <select id="${prefijo}-mes" title="Mes" style="max-width:140px">${mesOpts}</select>
-    <select id="${prefijo}-anio" title="Año" style="max-width:110px">${anioOpts}</select></span>`;
+    <select id="${prefijo}-dia" title="Día" data-opcional="${o.opcional?'1':''}" style="max-width:90px">${diaOpts}</select>
+    <select id="${prefijo}-mes" title="Mes" style="max-width:140px" onchange="fechaSelectAjustarDias('${prefijo}')">${mesOpts}</select>
+    <select id="${prefijo}-anio" title="Año" style="max-width:110px" onchange="fechaSelectAjustarDias('${prefijo}')">${anioOpts}</select></span>`;
+}
+// Recalcula las opciones del <select> de día según el mes/año elegidos, para que
+// nunca se pueda dejar seleccionado (ni el backend guardar) un día que no existe en
+// ese mes (ej. "30 de febrero"). Si el día elegido ya no es válido, lo ajusta al
+// último día real de ese mes.
+function fechaSelectAjustarDias(prefijo){
+  const d=$(prefijo+'-dia'), m=$(prefijo+'-mes'), a=$(prefijo+'-anio');
+  if(!d||!m||!a) return;
+  const mes=m.value?Number(m.value):null;
+  const anio=a.value?Number(a.value):null;
+  const maxDias=_diasEnMes(anio, mes);
+  const opcional=d.dataset.opcional==='1';
+  const actual=d.value?Number(d.value):null;
+  const dSel = (actual && actual>maxDias) ? maxDias : actual;
+  const ph = opcional ? `<option value="" ${dSel?'':'selected'}>Día</option>` : '';
+  d.innerHTML = ph + Array.from({length:maxDias},(_,i)=>i+1).map(x=>`<option ${x===dSel?'selected':''}>${x}</option>`).join('');
 }
 function fechaSelectValor(prefijo){
   const d=$(prefijo+'-dia'), m=$(prefijo+'-mes'), a=$(prefijo+'-anio');
@@ -744,13 +786,13 @@ function toggleFormEvento(ev){
   const titulo = ev ? 'Editar evento' : (esPastorUI ? 'Nuevo evento' : 'Pedir fecha');
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:4px">${titulo}</h3>
     ${(!ev && !esPastorUI)?'<p class="muted small" style="margin-bottom:8px">Tu solicitud se enviará al pastor para aprobación.</p>':''}
-    <label>Grupo</label><select id="ev-grupo">${opts}</select>
-    <label>Nombre del evento</label><input id="ev-titulo" value="${ev?v(ev.titulo):''}" placeholder="Ej. Noche de Jóvenes" />
+    <label for="ev-grupo">Grupo</label><select id="ev-grupo">${opts}</select>
+    <label for="ev-titulo">Nombre del evento</label><input id="ev-titulo" value="${ev?v(ev.titulo):''}" placeholder="Ej. Noche de Jóvenes" />
     <label>Fecha</label>
     <div>${fechaSelectHTML('ev', fBase)}</div>
-    <div class="row" style="margin-top:10px"><div style="flex:1"><label>Hora inicio</label><input id="ev-ini" type="time" value="${ev&&ev.hora_inicio?ev.hora_inicio:''}" /></div>
-      <div style="flex:1"><label>Hora fin</label><input id="ev-fin" type="time" value="${ev&&ev.hora_fin?ev.hora_fin:''}" /></div></div>
-    <label>Lugar</label><input id="ev-lugar" value="${ev?v(ev.lugar):''}" placeholder="Ej. Salón principal" />
+    <div class="row" style="margin-top:10px"><div style="flex:1"><label for="ev-ini">Hora inicio</label><input id="ev-ini" type="time" value="${ev&&ev.hora_inicio?ev.hora_inicio:''}" /></div>
+      <div style="flex:1"><label for="ev-fin">Hora fin</label><input id="ev-fin" type="time" value="${ev&&ev.hora_fin?ev.hora_fin:''}" /></div></div>
+    <label for="ev-lugar">Lugar</label><input id="ev-lugar" value="${ev?v(ev.lugar):''}" placeholder="Ej. Salón principal" />
     <p id="ev-error" class="error"></p>
     <button class="btn" style="margin-top:14px" onclick="guardarEvento()">${ev?'Guardar cambios':(esPastorUI?'Crear evento':'📩 Enviar al pastor')}</button></div>`;
 }
@@ -763,14 +805,16 @@ async function guardarEvento(){
     hora_inicio:$('ev-ini').value,hora_fin:$('ev-fin').value,lugar:$('ev-lugar').value.trim()};
   const e=$('ev-error'); e.textContent='';
   if(!body.titulo){ e.textContent='Pon al menos el título'; return; }
-  try{
-    if(window._editEvId){ await api('/eventos/'+window._editEvId,{method:'PATCH',body:JSON.stringify(body)}); toast('Evento actualizado'); }
-    else {
-      const r=await api('/eventos',{method:'POST',body:JSON.stringify(body)});
-      toast(r.estado==='pendiente' ? '📨 Enviado · pendiente de aprobación del pastor' : '✅ Evento creado y aprobado');
-    }
-    window._editEvId=null; $('form-zona').innerHTML=''; cargarEventos();
-  } catch(ex){ e.textContent=ex.message; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      if(window._editEvId){ await api('/eventos/'+window._editEvId,{method:'PATCH',body:JSON.stringify(body)}); toast('Evento actualizado'); }
+      else {
+        const r=await api('/eventos',{method:'POST',body:JSON.stringify(body)});
+        toast(r.estado==='pendiente' ? '📨 Enviado · pendiente de aprobación del pastor' : '✅ Evento creado y aprobado');
+      }
+      window._editEvId=null; $('form-zona').innerHTML=''; cargarEventos();
+    } catch(ex){ e.textContent=ex.message; }
+  });
 }
 
 // ============================================================
@@ -809,13 +853,13 @@ async function toggleFormAnuncio(a){
       const s=await api('/notificaciones/segmentos'); window._segmentos=s;
       const grupos=s.grupos.map(g=>`<option value="grupo:${g.id}">👥 ${escHtml(g.nombre)}</option>`).join('');
       const roles=s.roles.map(rl=>`<option value="rol:${rl}">🏷️ ${ROL_LABEL[rl]||rl}</option>`).join('');
-      segHtml=`<label>Dirigir a (segmento)</label>
+      segHtml=`<label for="an-segmento">Dirigir a (segmento)</label>
         <select id="an-segmento"><option value="todos">📣 Toda la iglesia</option>${grupos}${roles}</select>`;
     }catch{ segHtml=''; }
   }
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${a?'Editar anuncio':'Nuevo anuncio'}</h3>
-    <label>Título</label><input id="an-titulo" value="${a?v(a.titulo):''}" placeholder="Título" />
-    <label>Mensaje</label><textarea id="an-texto" rows="3" placeholder="Mensaje (opcional)">${escHtml(a&&a.texto?a.texto:'')}</textarea>
+    <label for="an-titulo">Título</label><input id="an-titulo" value="${a?v(a.titulo):''}" placeholder="Título" />
+    <label for="an-texto">Mensaje</label><textarea id="an-texto" rows="3" placeholder="Mensaje (opcional)">${escHtml(a&&a.texto?a.texto:'')}</textarea>
     ${segHtml}
     <label class="check"><input type="checkbox" id="an-urgente" ${a&&a.urgente?'checked':''}/> 🔴 Marcar como urgente</label>
     <p id="an-error" class="error"></p>
@@ -836,15 +880,17 @@ async function guardarAnuncio(){
   const body={titulo:$('an-titulo').value.trim(),texto:$('an-texto').value.trim(),urgente:$('an-urgente').checked};
   const e=$('an-error'); e.textContent='';
   if(!body.titulo){ e.textContent='Pon un título'; return; }
-  try{
-    if(window._editAnId){ await api('/anuncios/'+window._editAnId,{method:'PATCH',body:JSON.stringify(body)}); toast('Anuncio actualizado'); }
-    else {
-      body.segmento=leerSegmento();
-      const r=await api('/anuncios',{method:'POST',body:JSON.stringify(body)}); actualizarCampana();
-      toast('📢 Publicado · '+(r.enviadas||0)+' avisados');
-    }
-    window._editAnId=null; $('form-zona').innerHTML=''; cargarAnuncios();
-  } catch(ex){ e.textContent=ex.message; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      if(window._editAnId){ await api('/anuncios/'+window._editAnId,{method:'PATCH',body:JSON.stringify(body)}); toast('Anuncio actualizado'); }
+      else {
+        body.segmento=leerSegmento();
+        const r=await api('/anuncios',{method:'POST',body:JSON.stringify(body)}); actualizarCampana();
+        toast('📢 Publicado · '+(r.enviadas||0)+' avisados');
+      }
+      window._editAnId=null; $('form-zona').innerHTML=''; cargarAnuncios();
+    } catch(ex){ e.textContent=ex.message; }
+  });
 }
 
 // ============================================================
@@ -911,9 +957,9 @@ async function vistaServicio(){
     const ps=personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
     $('sv').innerHTML=`<div class="card" style="max-width:480px">
       <h3 style="margin-bottom:4px">Asignar un servicio</h3>
-      <label>Evento</label><select id="sv-ev">${ev}</select>
-      <label>Persona</label><select id="sv-persona">${ps}</select>
-      <label>Servicio</label><select id="sv-tipo">
+      <label for="sv-ev">Evento</label><select id="sv-ev">${ev}</select>
+      <label for="sv-persona">Persona</label><select id="sv-persona">${ps}</select>
+      <label for="sv-tipo">Servicio</label><select id="sv-tipo">
         <option value="predicar">🎤 Predicar</option><option value="ofrenda">💰 Ofrenda</option>
         <option value="devocional">🙏 Devocional</option><option value="musica">🎵 Música</option>
         <option value="aseo">🧹 Aseo</option></select>
@@ -979,7 +1025,7 @@ async function vistaAsistencia(){
     $('lista').className='list';
     $('lista').innerHTML=ev.map(e=>`<div class="item-card flex" style="cursor:pointer" onclick="hojaAsistencia(${e.id})">
       ${fechaChip(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
-      <div class="muted small">${e.grupo||''}</div></div><span class="muted" style="font-size:20px">›</span></div>`).join('');
+      <div class="muted small">${escHtml(e.grupo||'')}</div></div><span class="muted" style="font-size:20px">›</span></div>`).join('');
   }catch{ $('lista').innerHTML='<p class="error">Error.</p>'; }
 }
 
@@ -1070,7 +1116,7 @@ async function cargarHistorialAprob(){
       <div class="list" style="margin-top:8px">${h.slice(0,30).map(x=>`<div class="item-card flex">
         <div style="flex:1"><b>${escHtml(x.evento_titulo||'')}</b>
           ${x.accion==='aprobado'?'<span class="estado-chip estado-aceptado">Aprobado</span>':'<span class="estado-chip estado-rechazado">Rechazado</span>'}
-          <div class="muted small">${x.grupo?escHtml(x.grupo)+' · ':''}${x.fecha_evento||''}${x.motivo?' · '+escHtml(x.motivo):''}</div></div>
+          <div class="muted small">${x.grupo?escHtml(x.grupo)+' · ':''}${escHtml(x.fecha_evento||'')}${x.motivo?' · '+escHtml(x.motivo):''}</div></div>
         <span class="muted small">${(x.creado_en||'').slice(0,10)}</span></div>`).join('')}</div></div>`;
   }catch{
     z.innerHTML='<p class="error small" style="margin-top:16px">No se pudo cargar el historial de aprobaciones · <a href="javascript:cargarHistorialAprob()" class="link" style="display:inline;padding:0">Reintentar</a></p>';
@@ -1144,10 +1190,10 @@ async function togglePortalInfo(){
   try{
     const info=await api('/publico/info');
     zona.innerHTML=`
-      <label>Horarios de culto</label><textarea id="pi-horarios" placeholder="Ej: Domingos 10:00 y 18:00">${escHtml(info.horarios||'')}</textarea>
-      <label>Dirección</label><input id="pi-direccion" value="${escHtml(info.direccion||'')}" placeholder="Calle, número, ciudad" />
-      <label>Teléfono de contacto</label><input id="pi-telefono" value="${escHtml(info.telefono||'')}" placeholder="+56 9 ..." />
-      <label>Sobre nosotros</label><textarea id="pi-descripcion" placeholder="Una breve bienvenida para tus visitantes">${escHtml(info.descripcion||'')}</textarea>
+      <label for="pi-horarios">Horarios de culto</label><textarea id="pi-horarios" placeholder="Ej: Domingos 10:00 y 18:00">${escHtml(info.horarios||'')}</textarea>
+      <label for="pi-direccion">Dirección</label><input id="pi-direccion" value="${escHtml(info.direccion||'')}" placeholder="Calle, número, ciudad" />
+      <label for="pi-telefono">Teléfono de contacto</label><input id="pi-telefono" value="${escHtml(info.telefono||'')}" placeholder="+56 9 ..." />
+      <label for="pi-descripcion">Sobre nosotros</label><textarea id="pi-descripcion" placeholder="Una breve bienvenida para tus visitantes">${escHtml(info.descripcion||'')}</textarea>
       <button class="btn" style="margin-top:12px" onclick="guardarPortalInfo()">Guardar</button>`;
   }catch(e){ zona.innerHTML='<p class="error">'+e.message+'</p>'; }
 }
@@ -1248,13 +1294,13 @@ async function vistaReportes(){
     const altasMesActual=(crec.mensual.find(m=>m.mes===mesActual)||{altas:0}).altas;
 
     $('rep').innerHTML=`
-      <div class="head-row no-print" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+      <div class="btn-fila no-print" style="margin-bottom:18px">
         <button class="btn ghost small-btn" onclick="exportarReporte('asistencia')">📥 Asistencia CSV</button>
         <button class="btn ghost small-btn" onclick="exportarReporte('tesoreria')">📥 Tesorería CSV</button>
         <button class="btn ghost small-btn" onclick="exportarReporte('crecimiento')">📥 Crecimiento CSV</button>
-        <button class="btn ghost small-btn" onclick="window.print()">🖨️ Imprimir</button>
+        <button class="btn ghost small-btn" style="margin-left:auto" onclick="window.print()">🖨️ Imprimir</button>
       </div>
-      <div class="widgets" style="margin-bottom:18px">
+      <div class="widgets cifras" style="margin-bottom:18px">
         <div class="widget"><div class="widget-head">✅ Asistencia último mes</div><div class="stat-num">${ultimaAsis?ultimaAsis.total:'—'}</div></div>
         <div class="widget"><div class="widget-head">💰 Saldo total</div><div class="stat-num">${money(teso.saldoTotal)}</div></div>
         <div class="widget"><div class="widget-head">👥 Miembros activos</div><div class="stat-num">${crec.totalActivos}</div></div>
@@ -1319,9 +1365,9 @@ async function vistaMusica(){
       <input id="buscar-cancion" placeholder="Buscar alabanza…" oninput="filtrarCanciones(this.value)" style="margin-bottom:12px"/>
       <div id="lista-canciones" class="muted">Cargando…</div></div>
     <div class="card"><h3 style="font-size:16px;margin-bottom:10px">Orden del servicio</h3>
-      <label>Evento</label><select id="set-ev"></select>
+      <label for="set-ev">Evento</label><select id="set-ev"></select>
       <div id="setlist" style="margin-top:14px" class="muted">…</div>
-      <h3 style="font-size:16px;margin:20px 0 10px">🎸 Equipo y ensayo</h3>
+      <h3 style="font-size:16px;margin:28px 0 16px">🎸 Equipo y ensayo</h3>
       <div id="plan" class="muted">…</div></div>
     <div class="card" style="margin-top:16px">
       <div class="head-row"><h3 style="font-size:16px">📎 Material / Partituras</h3><span id="add-material-zona"></span></div>
@@ -1340,7 +1386,11 @@ async function vistaMusica(){
     $('set-ev').onchange=()=>{ cargarSetlist($('set-ev').value); cargarPlan($('set-ev').value); };
     if(ev.length){ cargarSetlist(ev[0].id); cargarPlan(ev[0].id); }
     else $('plan').innerHTML='<p class="muted small">Crea un evento para planificar el equipo y el ensayo.</p>';
-  }catch{}
+  }catch{
+    const retry='<a href="javascript:vistaMusica()" class="link" style="display:inline;padding:0">Reintentar</a>';
+    const set=$('setlist'); if(set){ set.className='error small'; set.innerHTML='No se pudo cargar · '+retry; }
+    const plan=$('plan'); if(plan){ plan.className='error small'; plan.innerHTML='No se pudo cargar · '+retry; }
+  }
 }
 function _claveCanciones(){ return 'canciones_'+(ME.iglesia?ME.iglesia.id:0); }
 async function cargarCanciones(){
@@ -1360,12 +1410,12 @@ function renderCanciones(q){
   const term=(q||'').toLowerCase().trim();
   const todas=window._canciones||[];
   const lista=todas.filter(c=> !term || (c.titulo||'').toLowerCase().includes(term) || (c.autor||'').toLowerCase().includes(term));
-  if(!lista.length){ cont.className='muted'; cont.innerHTML='<p class="small">'+(todas.length?'Sin resultados para “'+(q||'')+'”.':'Aún no hay canciones.')+'</p>'; return; }
+  if(!lista.length){ cont.className='muted'; cont.innerHTML='<p class="small">'+(todas.length?'Sin resultados para “'+escHtml(q||'')+'”.':'Aún no hay canciones.')+'</p>'; return; }
   cont.className='list';
   const puede=esLiderMusicaUI();
   cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1;cursor:pointer" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
     <span class="estado-chip">${escHtml(c.tono||'—')}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></div>
-    ${puede?`<button class="link" style="color:var(--red)" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
+    ${puede?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar canción" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
 }
 function borrarCancion(id){ modalConfirm('¿Eliminar esta canción del cancionero?', async()=>{
   try{ await api('/musica/canciones/'+id,{method:'DELETE'}); cargarCanciones(); toast('Canción eliminada'); }catch(e){ toast(e.message); } }); }
@@ -1375,7 +1425,7 @@ function toggleFormCancion(){
     <div class="row"><input id="cn-titulo" placeholder="Título de la canción" />
       <input id="cn-tono" placeholder="Tono (ej. SOL, G)" style="max-width:130px" /></div>
     <input id="cn-autor" placeholder="Autor (opcional)" style="margin-top:10px" />
-    <label style="margin-top:10px">Acordes / letra (opcional)</label>
+    <label for="cn-letra" style="margin-top:10px">Acordes / letra (opcional)</label>
     <textarea id="cn-letra" rows="8" style="width:100%;font-family:monospace;white-space:pre" placeholder="Pega aquí los acordes y la letra. Ej.:&#10;SOL        RE&#10;Cuán grande es Él&#10;Las líneas con acordes se transponen solas."></textarea>
     <p id="cn-error" class="error"></p>
     <button class="btn small-btn" style="margin-top:10px" onclick="guardarCancion()">Guardar</button></div>`;
@@ -1456,8 +1506,8 @@ async function cargarPlan(eventoId){
         <button class="btn ghost small-btn" onclick="avisarEquipo()">📣 Avisar al equipo</button></div>`;
     }
     $('plan').className='';
-    $('plan').innerHTML=`<div style="margin-bottom:14px"><div class="widget-head" style="font-size:14px">🗓️ Ensayo</div>${ensayoHtml}</div>
-      <div class="widget-head" style="font-size:14px">🎸 Equipo (${numPersonas})</div>${equipoHtml}${addHtml}`;
+    $('plan').innerHTML=`<div class="sub-bloque"><div class="sub-titulo">🗓️ Ensayo</div>${ensayoHtml}</div>
+      <div class="sub-bloque"><div class="sub-titulo">🎸 Equipo (${numPersonas})</div>${equipoHtml}${addHtml}</div>`;
   }catch{ $('plan').innerHTML='<p class="error">No se pudo cargar el plan.</p>'; }
 }
 async function guardarEnsayo(){
@@ -1496,7 +1546,7 @@ async function cargarMaterialMusica(){
         : `<div class="muted small">📎 <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">Ver / descargar</a>${m.creado_en?' · '+fechaTxt(m.creado_en.slice(0,10)):''}</div>`;
       return `<div class="item-card flex">
       <div style="flex:1">${titulo}${permanente?' <span class="estado-chip">📌 Fijo</span>':''}${sub}</div>
-      ${puedeBorrar?`<button class="link" style="color:var(--red)" onclick="borrarMaterialMus(${m.id})">🗑️</button>`:''}</div>`;
+      ${puedeBorrar?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar material" onclick="borrarMaterialMus(${m.id})">🗑️</button>`:''}</div>`;
     }).join('');
   }catch{ $('material-mus').innerHTML='<p class="error">Error al cargar el material.</p>'; }
 }
@@ -1504,7 +1554,7 @@ function toggleFormMaterialMus(){
   const z=$('form-material-mus'); if(z.innerHTML){ z.innerHTML=''; return; }
   z.innerHTML=`<div class="form-panel">
     <input id="mm-titulo" placeholder="Título (ej. Acordes Cuán Grande es Él)"/>
-    <label style="margin-top:10px">📎 Archivo (PDF, Word, imagen…)</label>
+    <label for="mm-file" style="margin-top:10px">📎 Archivo (PDF, Word, imagen…)</label>
     <input id="mm-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"/>
     <button class="btn small-btn" style="margin-top:12px" onclick="guardarMaterialMus()">Subir</button></div>`;
 }
@@ -1542,12 +1592,12 @@ function _transAcorde(tok,n){ const p=tok.split('/'); let o=_transRaiz(p[0],n); 
 const _ACORDE=/^(SOL#|SOLb|DO#|RE#|FA#|LA#|REb|MIb|FAb|LAb|SIb|DOb|DO|RE|MI|FA|SOL|LA|SI|[A-G])(#|b)?(m|maj7|maj|min|sus2|sus4|sus|add9|dim|aug|°|\+|6|7|9|11|13|2|4|5|m7|m9|m6)*(\/(SOL#|SOLb|DO#|RE#|FA#|LA#|REb|MIb|SIb|LAb|DO|RE|MI|FA|SOL|LA|SI|[A-G])(#|b)?)?$/;
 function _esAcorde(t){ return _ACORDE.test(t); }
 function _esLineaAcordes(l){ const t=l.trim().split(/\s+/).filter(Boolean); if(!t.length)return false; const a=t.filter(_esAcorde).length; return a>=1 && a/t.length>=0.6; }
-function _esc(s){ return escHtml(s); }   /* alias: una sola fuente de verdad para escapar */
+/* _esc: alias eliminado — usar escHtml directamente (una sola fuente de verdad) */
 // Devuelve HTML: líneas de acordes con los acordes resaltados y transpuestos.
 function _renderAcordes(contenido,n){
   return contenido.split('\n').map(l=>{
-    if(_esLineaAcordes(l)) return l.replace(/\S+/g, t=> _esAcorde(t)? `<span class="ac">${_esc(_transAcorde(t,n))}</span>` : _esc(t));
-    return _esc(l);
+    if(_esLineaAcordes(l)) return l.replace(/\S+/g, t=> _esAcorde(t)? `<span class="ac">${escHtml(_transAcorde(t,n))}</span>` : escHtml(t));
+    return escHtml(l);
   }).join('\n');
 }
 
@@ -1586,7 +1636,7 @@ function himnarioBuscar(q){
   const cont=$('hm-lista'); if(!cont) return;
   if(!lista.length){ cont.innerHTML='<p class="muted small">Sin resultados.</p>'; return; }
   cont.innerHTML=lista.slice(0,300).map(h=>`<div class="hmodal-song ${_hmSel&&_hmSel.n===h.n?'sel':''}" onclick="himnarioSel(${h.n})">
-    <b>#${h.n}</b> ${_esc(h.titulo)} <span class="muted small">(${_esc(h.tono||'')})</span></div>`).join('')
+    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span></div>`).join('')
     + (lista.length>300?`<p class="muted small" style="padding:8px">Mostrando 300 de ${lista.length}. Afina la búsqueda.</p>`:'');
 }
 function himnarioSel(n){
@@ -1601,13 +1651,13 @@ function renderHimno(){
   const tonoBase=_hmSel.tono||'';
   const tonoAhora=_transAcorde(tonoBase, _hmTrans);
   v.innerHTML=`<div class="transbar">
-      <h3 style="flex:1;font-size:17px;margin:0">#${_hmSel.n} ${_esc(_hmSel.titulo)}</h3>
+      <h3 style="flex:1;font-size:17px;margin:0">#${_hmSel.n} ${escHtml(_hmSel.titulo)}</h3>
     </div>
     <div class="transbar">
-      <span class="muted small">Tono:</span> <b style="color:var(--primary)">${_esc(tonoAhora)||'—'}</b>
-      <button class="cal-navbtn" onclick="himnarioTrans(-1)" title="Bajar ½ tono">−</button>
-      <button class="cal-navbtn" onclick="himnarioTrans(1)" title="Subir ½ tono">+</button>
-      ${_hmTrans!==0?`<button class="btn ghost small-btn" onclick="himnarioReset()">Original (${_esc(tonoBase)})</button>`:''}
+      <span class="muted small">Tono:</span> <b style="color:var(--primary)">${escHtml(tonoAhora)||'—'}</b>
+      <button class="cal-navbtn" onclick="himnarioTrans(-1)" title="Bajar ½ tono" aria-label="Bajar medio tono">−</button>
+      <button class="cal-navbtn" onclick="himnarioTrans(1)" title="Subir ½ tono" aria-label="Subir medio tono">+</button>
+      ${_hmTrans!==0?`<button class="btn ghost small-btn" onclick="himnarioReset()">Original (${escHtml(tonoBase)})</button>`:''}
       <span class="muted small">${_hmTrans>0?'+'+_hmTrans:_hmTrans} semitono(s)</span>
     </div>
     <div class="acordes">${_renderAcordes(_hmSel.contenido||'', _hmTrans)}</div>`;
@@ -1632,8 +1682,8 @@ function abrirVisorCancion(id, trans){
   const puede=esLiderMusicaUI();
   ov.innerHTML=`<div class="hmodal" onclick="event.stopPropagation()">
     <div class="hmodal-head">
-      <b style="flex:1;font-size:16px">🎵 ${_esc(c.titulo)}</b>
-      ${puede?`<button class="cal-navbtn" onclick="editarLetraCancion(${c.id})" title="Editar acordes">✏️</button>`:''}
+      <b style="flex:1;font-size:16px">🎵 ${escHtml(c.titulo)}</b>
+      ${puede?`<button class="cal-navbtn" onclick="editarLetraCancion(${c.id})" title="Editar acordes" aria-label="Editar acordes">✏️</button>`:''}
       <button class="cal-navbtn" onclick="cerrarVisorCancion()" aria-label="Cerrar" style="margin-left:8px">✕</button>
     </div>
     <div class="hmodal-body"><div class="hmodal-ver" id="vc-ver" style="width:100%">…</div></div></div>`;
@@ -1659,10 +1709,10 @@ function renderVisorCancion(){
   const tonoBase=c.tono||'';
   const tonoAhora=tonoBase?_transAcorde(tonoBase,_vcTrans):'';
   v.innerHTML=`<div class="transbar">
-      <span class="muted small">${c.autor?_esc(c.autor)+' · ':''}Tono:</span> <b style="color:var(--primary)">${_esc(tonoAhora)||'—'}</b>
-      <button class="cal-navbtn" onclick="visorCancionTrans(-1)" title="Bajar ½ tono">−</button>
-      <button class="cal-navbtn" onclick="visorCancionTrans(1)" title="Subir ½ tono">+</button>
-      ${_vcTrans!==0?`<button class="btn ghost small-btn" onclick="visorCancionReset()">Original${tonoBase?' ('+_esc(tonoBase)+')':''}</button>`:''}
+      <span class="muted small">${c.autor?escHtml(c.autor)+' · ':''}Tono:</span> <b style="color:var(--primary)">${escHtml(tonoAhora)||'—'}</b>
+      <button class="cal-navbtn" onclick="visorCancionTrans(-1)" title="Bajar ½ tono" aria-label="Bajar medio tono">−</button>
+      <button class="cal-navbtn" onclick="visorCancionTrans(1)" title="Subir ½ tono" aria-label="Subir medio tono">+</button>
+      ${_vcTrans!==0?`<button class="btn ghost small-btn" onclick="visorCancionReset()">Original${tonoBase?' ('+escHtml(tonoBase)+')':''}</button>`:''}
       <span class="muted small">${_vcTrans>0?'+'+_vcTrans:_vcTrans} semitono(s)</span>
     </div>
     <div class="acordes">${_renderAcordes(c.letra||'', _vcTrans)}</div>`;
@@ -1670,10 +1720,10 @@ function renderVisorCancion(){
 function editarLetraCancion(id){
   const c=(window._canciones||[]).find(x=>x.id===id); if(!c) return;
   const v=$('vc-ver'); if(!v) return;
-  v.innerHTML=`<label>Tono base</label>
+  v.innerHTML=`<label for="vc-tono">Tono base</label>
     <input id="vc-tono" value="${(c.tono||'').replace(/"/g,'&quot;')}" placeholder="ej. SOL, G" style="max-width:140px"/>
-    <label style="margin-top:10px">Acordes / letra</label>
-    <textarea id="vc-letra" rows="14" style="width:100%;font-family:monospace;white-space:pre">${_esc(c.letra||'')}</textarea>
+    <label for="vc-letra" style="margin-top:10px">Acordes / letra</label>
+    <textarea id="vc-letra" rows="14" style="width:100%;font-family:monospace;white-space:pre">${escHtml(c.letra||'')}</textarea>
     <div class="row" style="margin-top:10px">
       <button class="btn small-btn" onclick="guardarLetraCancion(${id})">Guardar</button>
       <button class="btn ghost small-btn" onclick="renderVisorCancion()">Cancelar</button></div>`;
@@ -1716,10 +1766,11 @@ async function cargarCasos(){
 }
 async function toggleFormCaso(){
   const z=$('form-caso'); if(z.innerHTML){ z.innerHTML=''; return; }
-  const personas=await api('/personas');
+  let personas;
+  try{ personas=await api('/personas'); }catch(e){ toast(e.message||'No se pudo cargar la lista de personas'); return; }
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>Nuevo caso</h3>
-    <label>Persona</label><select id="caso-persona">${personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select>
-    <label>Motivo</label><select id="caso-motivo">
+    <label for="caso-persona">Persona</label><select id="caso-persona">${personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select>
+    <label for="caso-motivo">Motivo</label><select id="caso-motivo">
       <option value="enfermo">🤒 Enfermo</option><option value="ausente">📉 Ausente</option>
       <option value="nuevo">🌱 Nuevo</option><option value="crisis">🆘 En crisis</option>
       <option value="duelo">🕊️ Duelo</option><option value="otro">❔ Otro</option></select>
@@ -1743,7 +1794,7 @@ async function verCaso(id){
       <div class="list" style="margin-top:8px">${d.contactos.length? d.contactos.map(x=>`<div class="item-card">
         <b>${CT_LABEL[x.tipo]||escHtml(x.tipo)}</b> <span class="muted small">${(x.fecha||'').slice(0,10)}</span>
         ${x.nota?`<div class="muted small">${escHtml(x.nota)}</div>`:''}</div>`).join('') : '<p class="muted small">Sin contactos aún.</p>'}</div>
-      <label>Registrar contacto</label>
+      <label for="ct-tipo">Registrar contacto</label>
       <select id="ct-tipo"><option value="llamada">📞 Llamada</option><option value="visita">🏠 Visita</option>
         <option value="mensaje">💬 Mensaje</option><option value="oracion">🙏 Oración</option></select>
       <textarea id="ct-nota" placeholder="Nota (opcional)" style="margin-top:10px"></textarea>
@@ -1799,9 +1850,9 @@ async function vistaTesoreria(){
           : '<p class="muted small">Sin campañas.</p>'}
       </div>
       <div class="card" style="margin-bottom:18px"><div class="widget-head">🔓 Transparencia</div>
-        <p class="small" style="margin:6px 0">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
+        <p class="small" style="margin:6px 0 14px">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
         ${trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0;
-          return `<div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>${cap(g.categoria)}</span><span class="muted">${pct}% · ${money(g.monto)}</span></div>`;}).join('')}
+          return `<div class="dato-row"><span>${cap(g.categoria)}</span><span class="val">${pct}% · ${money(g.monto)}</span></div>`;}).join('')}
       </div>
       <div class="card"><div class="widget-head">Movimientos</div>
         <div class="list" id="mov-list" style="margin-top:8px">${movs.map(filaMov).join('')}</div>
@@ -1816,39 +1867,45 @@ function filaMov(m){
     <b style="color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
 }
 async function cargarMasMovimientos(){
-  _movOffset+=50;
-  try{
-    const resp=await api('/tesoreria/movimientos?offset='+_movOffset);
-    const items=Array.isArray(resp)?resp:(resp.items||[]);
-    const hayMas=Array.isArray(resp)?false:!!resp.hayMas;
-    $('mov-list').insertAdjacentHTML('beforeend', items.map(filaMov).join(''));
-    if(!hayMas){ const b=$('mov-mas'); if(b) b.remove(); }
-  }catch(e){ toast(e.message); }
+  const btn=$('mov-mas');
+  await conBoton(btn, async()=>{
+    const offsetSiguiente=_movOffset+50;
+    try{
+      const resp=await api('/tesoreria/movimientos?offset='+offsetSiguiente);
+      const items=Array.isArray(resp)?resp:(resp.items||[]);
+      const hayMas=Array.isArray(resp)?false:!!resp.hayMas;
+      _movOffset=offsetSiguiente;
+      $('mov-list').insertAdjacentHTML('beforeend', items.map(filaMov).join(''));
+      if(!hayMas){ const b=$('mov-mas'); if(b) b.remove(); }
+    }catch(e){ toast(e.message); }
+  });
 }
 function formMov(tipo){
   const z=$('mov-form');
   const cats=tipo==='ingreso'?['ofrenda','diezmo','donacion','otro']:['servicios','eventos','ayuda','otro'];
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${tipo==='ingreso'?'Nuevo ingreso':'Nuevo gasto'}</h3>
-    <label>Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c}">${cap(c)}</option>`).join('')}</select>
-    <label>Monto</label><input id="mv-monto" type="number" placeholder="0" />
+    <label for="mv-cat">Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c}">${cap(c)}</option>`).join('')}</select>
+    <label for="mv-monto">Monto</label><input id="mv-monto" type="number" min="0.01" step="0.01" placeholder="0" />
     <label>Fecha ${tipo==='ingreso'?'del ingreso':'del gasto'}</label><div>${fechaSelectHTML('mv','')}</div>
-    <label>${tipo==='ingreso'?'Descripción / origen':'¿En qué se gastó?'}</label>
+    <label for="mv-desc">${tipo==='ingreso'?'Descripción / origen':'¿En qué se gastó?'}</label>
     <input id="mv-desc" placeholder="${tipo==='ingreso'?'Ej. Ofrenda dominical':'Ej. Compra de materiales para el evento'}" />
-    <label>📎 Comprobante / voucher (foto o archivo)</label>
+    <label for="mv-file">📎 Comprobante / voucher (foto o archivo)</label>
     <input id="mv-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt" />
     <p id="mv-error" class="error"></p>
     <button class="btn" style="margin-top:12px" onclick="guardarMov('${tipo}')">Guardar</button></div>`;
 }
 async function guardarMov(tipo){
   const monto=$('mv-monto').value;
-  if(!monto){ $('mv-error').textContent='Pon un monto'; return; }
-  try{
-    let comprobante_url='';
-    const f=$('mv-file').files[0];
-    if(f){ toast('Subiendo comprobante…'); comprobante_url=await uploadArchivo(f); }
-    const body={tipo,categoria:$('mv-cat').value,monto,descripcion:$('mv-desc').value.trim(),fecha:fechaSelectValor('mv'),comprobante_url};
-    await api('/tesoreria/movimientos',{method:'POST',body:JSON.stringify(body)}); toast('💰 Registrado'); vistaTesoreria();
-  }catch(e){ $('mv-error').textContent=e.message; }
+  if(!(Number(monto)>0)){ $('mv-error').textContent='Monto inválido'; toast('Monto inválido'); return; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      let comprobante_url='';
+      const f=$('mv-file').files[0];
+      if(f){ toast('Subiendo comprobante…'); comprobante_url=await uploadArchivo(f); }
+      const body={tipo,categoria:$('mv-cat').value,monto,descripcion:$('mv-desc').value.trim(),fecha:fechaSelectValor('mv'),comprobante_url};
+      await api('/tesoreria/movimientos',{method:'POST',body:JSON.stringify(body)}); toast('💰 Registrado'); vistaTesoreria();
+    }catch(e){ $('mv-error').textContent=e.message; }
+  });
 }
 
 // ============================================================
@@ -1874,8 +1931,8 @@ async function cargarClases(){
 }
 function formClase(){ const z=$('form-clase'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>Nueva clase</h3>
-    <label>Nombre</label><input id="cl-nombre" placeholder="Ej. Primarios"/>
-    <label>Edades</label><input id="cl-edad" placeholder="Ej. 6-8 años"/>
+    <label for="cl-nombre">Nombre</label><input id="cl-nombre" placeholder="Ej. Primarios"/>
+    <label for="cl-edad">Edades</label><input id="cl-edad" placeholder="Ej. 6-8 años"/>
     <button class="btn" style="margin-top:12px" onclick="guardarClase()">Crear</button></div>`; }
 async function guardarClase(){
   try{ await api('/ninos/clases',{method:'POST',body:JSON.stringify({nombre:$('cl-nombre').value.trim(),edad:$('cl-edad').value.trim()})});
@@ -1896,18 +1953,21 @@ async function vistaClase(id,nombre){
   cargarMaterial(); cargarNinos();
 }
 async function cargarMaterial(){
-  try{ const m=await api('/ninos/clase/'+_claseActual+'/material'); const c=$('material');
+  const c=$('material');
+  try{ const m=await api('/ninos/clase/'+_claseActual+'/material');
     c.className=m.length?'list':'muted';
     c.innerHTML=m.length? m.map(x=>`<div class="item-card"><b>${escHtml(x.titulo)}</b>${x.fecha?' <span class="muted small">· '+fechaTxt(x.fecha)+'</span>':''}
       ${x.versiculo?`<div class="muted small">📖 ${escHtml(x.versiculo)}</div>`:''}
       ${x.material_url?`<div class="muted small">📎 <a href="${escHtml(safeUrl(x.material_url))}" target="_blank">Ver documento</a></div>`:''}</div>`).join('') : '<p class="small">Sin lecciones.</p>';
-  }catch{}
+  }catch{
+    if(c){ c.className='muted'; c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarMaterial()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; }
+  }
 }
 function formMaterial(){ const z=$('form-material'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="form-panel">
     <input id="m-titulo" placeholder="Título de la lección"/>
     <div class="row" style="margin-top:10px;align-items:center">${fechaSelectHTML('m','',{opcional:true})}<input id="m-vers" placeholder="Versículo"/></div>
-    <label style="margin-top:10px">📎 Subir documento (PDF, imagen, Word…)</label>
+    <label for="m-file" style="margin-top:10px">📎 Subir documento (PDF, imagen, Word…)</label>
     <input id="m-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"/>
     <button class="btn small-btn" style="margin-top:12px" onclick="guardarMaterial()">Guardar</button></div>`; }
 async function guardarMaterial(){
@@ -1922,13 +1982,20 @@ async function guardarMaterial(){
   }catch(e){ toast(e.message); }
 }
 async function cargarNinos(){
-  try{ const n=await api('/ninos/clase/'+_claseActual+'/ninos'); window._ninos=n; const c=$('ninos-lista');
+  const c=$('ninos-lista');
+  try{ const n=await api('/ninos/clase/'+_claseActual+'/ninos'); window._ninos=n;
     c.className=n.length?'list':'muted';
     c.innerHTML=n.length? n.map(x=>`<div class="item-card"><b>${escHtml(x.nombre)}</b>${x.edad?' <span class="muted small">'+escHtml(String(x.edad))+' años</span>':''}
       ${x.alergias?` <span class="estado-chip estado-rechazado">⚠️ ${escHtml(x.alergias)}</span>`:''}
       <div class="muted small">${x.familia?'Familia '+escHtml(x.familia):''}</div></div>`).join('') : '<p class="small">Sin niños.</p>';
     renderAsistNinos();
-  }catch{}
+  }catch{
+    if(c){ c.className='muted'; c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarNinos()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; }
+    // Un fallo aquí no debe dejar "Asistencia" colgada en "Cargando…"
+    window._ninos=[];
+    const asist=$('asist-ninos');
+    if(asist){ asist.className='muted'; asist.innerHTML='<p class="small">No se pudo cargar la lista de niños.</p>'; }
+  }
 }
 function formNino(){ const z=$('form-nino'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="form-panel">
@@ -2024,7 +2091,7 @@ async function cargarAvisosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/avisos'); const c=$('mg-avisos'); const lider=window._grupoLider;
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin avisos todavía.</p>'; return; }
     c.className='list';
-    c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${escHtml(a.texto||'')}</div></div>${lider?`<button class="link" style="color:var(--red)" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${escHtml(a.texto||'')}</div></div>${lider?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar aviso" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
   }catch{ $('mg-avisos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formAvisoGrupo(){ const z=$('mg-aviso-form'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2046,7 +2113,7 @@ async function cargarRecursosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/recursos'); const c=$('mg-recursos'); const lider=window._grupoLider;
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin recursos todavía.</p>'; return; }
     c.className='list';
-    c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${escHtml(safeUrl(rc.url))}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link" style="color:var(--red)" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${escHtml(safeUrl(rc.url))}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar recurso" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
   }catch{ $('mg-recursos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formRecursoGrupo(){ const z=$('mg-rec-form'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2103,7 +2170,7 @@ async function _renderAgregarMiembro(){
   z.innerHTML=`<div class="row" style="gap:8px;margin-bottom:12px"><select id="mg-nuevo" style="flex:1">${libres.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select><button class="btn small-btn" onclick="agregarMiembroGrupo()">Agregar al grupo</button></div>`;
 }
 async function agregarMiembroGrupo(){ try{ await api('/grupo/'+_grupoSel+'/miembros',{method:'POST',body:JSON.stringify({persona_id:$('mg-nuevo').value})}); $('mg-add-form').innerHTML=''; cargarMiembrosGrupo(); toast('👋 Agregado y avisado'); }catch(e){ toast(e.message); } }
-function quitarMiembroGrupo(id,nombre){ modalConfirm('¿Quitar a '+nombre+' del grupo?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/miembros/'+id,{method:'DELETE'}); cargarMiembrosGrupo(); toast('Listo'); }catch(e){ toast(e.message);} }); }
+function quitarMiembroGrupo(id,nombre){ modalConfirm('¿Quitar a '+escHtml(nombre)+' del grupo?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/miembros/'+id,{method:'DELETE'}); cargarMiembrosGrupo(); toast('Listo'); }catch(e){ toast(e.message);} }); }
 // --- Tareas (el líder asigna tareas a un miembro → aparecen en "Mi Servicio") ---
 function formTareaGrupo(){ const z=$('mg-tarea-form'); if(z.innerHTML){z.innerHTML='';return;}
   const ms=window._mgMiembros||[];
@@ -2126,7 +2193,7 @@ async function cargarTareasGrupo(){
   catch{ cont.className='muted'; cont.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarTareasGrupo()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; return; }
   if(!list.length){ cont.className='muted'; cont.innerHTML='<p class="small">Sin tareas asignadas.</p>'; return; }
   cont.className='list';
-  cont.innerHTML=list.map(t=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(t.titulo)}</b> <span class="muted small">→ ${escHtml(t.nombre)}</span>${t.detalle?`<div class="muted small">${escHtml(t.detalle)}</div>`:''} <span class="estado-chip ${t.estado==='hecho'?'estado-aceptado':'estado-pendiente'}">${t.estado==='hecho'?'✅ Hecho':'⏳ Pendiente'}</span></div><button class="link" style="color:var(--red)" onclick="borrarTareaGrupo(${t.id})">🗑️</button></div>`).join('');
+  cont.innerHTML=list.map(t=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(t.titulo)}</b> <span class="muted small">→ ${escHtml(t.nombre)}</span>${t.detalle?`<div class="muted small">${escHtml(t.detalle)}</div>`:''} <span class="estado-chip ${t.estado==='hecho'?'estado-aceptado':'estado-pendiente'}">${t.estado==='hecho'?'✅ Hecho':'⏳ Pendiente'}</span></div><button class="link icon-only" style="color:var(--red)" aria-label="Eliminar tarea" onclick="borrarTareaGrupo(${t.id})">🗑️</button></div>`).join('');
 }
 function borrarTareaGrupo(id){ modalConfirm('¿Eliminar esta tarea?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/tareas/'+id,{method:'DELETE'}); cargarTareasGrupo(); toast('Tarea eliminada'); }catch(e){ toast(e.message);} }); }
 
@@ -2160,11 +2227,11 @@ async function verPredica(id){
   const recs=(d.recursos||[]).map(r=>{
     const ic=r.tipo==='archivo'?'📎':r.tipo==='libro'?'📚':'🔗';
     const link=r.url?`<a href="${escHtml(safeUrl(r.url))}" target="_blank">${r.tipo==='archivo'?'Abrir / descargar':'Abrir'}</a>`:'';
-    return `<div class="item-card flex"><div style="flex:1"><b>${ic} ${escHtml(r.titulo)}</b> <span class="muted small">${link}</span></div>${edit?`<button class="link" style="color:var(--red)" onclick="borrarRecPredica(${r.id})">🗑️</button>`:''}</div>`;
+    return `<div class="item-card flex"><div style="flex:1"><b>${ic} ${escHtml(r.titulo)}</b> <span class="muted small">${link}</span></div>${edit?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar recurso" onclick="borrarRecPredica(${r.id})">🗑️</button>`:''}</div>`;
   }).join('');
   $('prd').className='';
   $('prd').innerHTML=`<div class="card">
-    <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link" style="color:var(--red)" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
+    <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link icon-only" style="color:var(--red)" aria-label="Eliminar predicación" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
     <div class="muted small" style="margin-top:4px">${d.fecha?'📅 '+fechaTxt(d.fecha):''}${d.predicador?' · 🎤 '+escHtml(d.predicador):''}</div>
     ${d.notas?`<div style="margin-top:14px;white-space:pre-wrap;line-height:1.5">${escHtml(d.notas)}</div>`:'<p class="muted small" style="margin-top:10px">Sin notas.</p>'}
   </div>
@@ -2177,10 +2244,10 @@ async function formPredica(id){
   const v=(x)=>x?String(x).replace(/"/g,'&quot;'):'';
   $('content').innerHTML=`<button class="link" onclick="${id?`verPredica(${id})`:'vistaPredica()'}">‹ Volver</button>
    <div class="card" style="margin-top:8px"><h2 style="font-size:18px">${id?'Editar prédica':'Nueva prédica'}</h2>
-    <label>Nombre de la prédica</label><input id="pp-titulo" value="${v(p.titulo)}" placeholder="Ej. El amor de Dios"/>
+    <label for="pp-titulo">Nombre de la prédica</label><input id="pp-titulo" value="${v(p.titulo)}" placeholder="Ej. El amor de Dios"/>
     <label>Fecha</label><div>${fechaSelectHTML('pp', p.fecha||'')}</div>
-    <label>Predicador</label><input id="pp-predicador" value="${v(p.predicador)}" placeholder="Quién predicó"/>
-    <label>Notas / bosquejo</label><textarea id="pp-notas" style="min-height:150px">${escHtml(p.notas||'')}</textarea>
+    <label for="pp-predicador">Predicador</label><input id="pp-predicador" value="${v(p.predicador)}" placeholder="Quién predicó"/>
+    <label for="pp-notas">Notas / bosquejo</label><textarea id="pp-notas" style="min-height:150px">${escHtml(p.notas||'')}</textarea>
     <p id="pp-error" class="error"></p>
     <button class="btn" style="margin-top:12px" onclick="guardarPredica(${id||0})">${id?'Guardar cambios':'Crear prédica'}</button></div>`;
 }
@@ -2297,7 +2364,7 @@ async function verIglesiaObispo(id, mes){
 function modalDetalle(titulo, html){
   let ov=$('det-ov'); if(!ov){ ov=document.createElement('div'); ov.id='det-ov'; ov.className='hmodal-ov'; document.body.appendChild(ov); }
   ov.innerHTML=`<div class="hmodal" onclick="event.stopPropagation()" style="max-width:600px">
-    <div class="hmodal-head"><b style="flex:1;font-size:16px">${titulo}</b><button class="cal-navbtn" onclick="cerrarDetalle()">✕</button></div>
+    <div class="hmodal-head"><b style="flex:1;font-size:16px">${titulo}</b><button class="cal-navbtn" onclick="cerrarDetalle()" aria-label="Cerrar">✕</button></div>
     <div style="padding:18px;overflow:auto">${html}</div></div>`;
   ov.onclick=cerrarDetalle;
 }
@@ -2355,7 +2422,7 @@ async function cargarCumpleanosDirectorio(){
 }
 function dirAvatar(p, size){
   size=size||48;
-  if(p.foto_url) return `<img src="${escHtml(p.foto_url)}" alt="" class="dir-avatar" style="width:${size}px;height:${size}px">`;
+  if(p.foto_url) return `<img src="${escHtml(safeUrl(p.foto_url))}" alt="" class="dir-avatar" style="width:${size}px;height:${size}px">`;
   const ini=(p.nombre||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
   return `<div class="dir-avatar dir-avatar-ini" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.38)}px">${escHtml(ini)}</div>`;
 }
@@ -2396,13 +2463,13 @@ async function vistaPerfilDirectorio(){
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
       <div id="dp-foto-preview">${dirAvatar({nombre:ME.persona.nombre,foto_url:p.foto_url},64)}</div>
       <div style="flex:1">
-        <label style="margin:0">Foto de perfil</label>
+        <label for="dp-foto" style="margin:0">Foto de perfil</label>
         <input id="dp-foto" type="file" accept="image/*"/>
       </div>
     </div>
-    <label>Teléfono</label>
+    <label for="dp-tel">Teléfono</label>
     <input id="dp-tel" type="tel" value="${p.telefono?String(p.telefono).replace(/"/g,'&quot;'):''}" placeholder="Ej. +56 9 1234 5678"/>
-    <label style="margin-top:10px">Correo</label>
+    <label for="dp-email" style="margin-top:10px">Correo</label>
     <input id="dp-email" type="email" value="${p.email?String(p.email).replace(/"/g,'&quot;'):''}" placeholder="tucorreo@ejemplo.com"/>
     <label style="margin-top:10px">Fecha de cumpleaños</label>
     <div>${fechaSelectHTML('dp-cumple', p.cumple||'', {opcional:true, desde:new Date().getFullYear()-100, hasta:new Date().getFullYear()})}</div>
@@ -2576,8 +2643,10 @@ async function adminCrearUsuario(){
   const body={nombre:$('au-nombre').value.trim(),usuario:$('au-usuario').value.trim(),password:$('au-pass').value,email:$('au-email').value.trim()};
   if(!body.nombre||!body.usuario){ $('au-err').textContent='Pon nombre y usuario'; return; }
   if((body.password||'').length<8){ $('au-err').textContent='La contraseña debe tener al menos 8 caracteres'; return; }
-  try{ await api('/admin/usuarios',{method:'POST',body:JSON.stringify(body)}); toast('✅ Usuario creado'); vistaAdmin(); }
-  catch(e){ $('au-err').textContent=e.message; }
+  await conBoton(botonActual(), async()=>{
+    try{ await api('/admin/usuarios',{method:'POST',body:JSON.stringify(body)}); toast('✅ Usuario creado'); vistaAdmin(); }
+    catch(e){ $('au-err').textContent=e.message; }
+  });
 }
 
 // --- Asignar rol (agregado rápido, con accesos visibles) ---
@@ -2644,15 +2713,15 @@ async function vistaSuperadmin(){
     <div class="card" style="max-width:640px;margin-bottom:20px">
       <h2 style="font-size:1.3rem;margin-bottom:4px">🛡️ Crear iglesia</h2>
       <p class="muted small" style="margin-bottom:14px">Crea una nueva iglesia junto a la cuenta de su pastor. El código que se genera se lo entregas a la iglesia para que sus feligreses puedan unirse.</p>
-      <label>Nombre de la iglesia</label>
+      <label for="sa-nombre-ig">Nombre de la iglesia</label>
       <input id="sa-nombre-ig" placeholder="Ej. Iglesia Monte Sion"/>
-      <label style="margin-top:8px">Código <span class="muted">(opcional — se genera solo si lo dejas vacío)</span></label>
+      <label for="sa-codigo" style="margin-top:8px">Código <span class="muted">(opcional — se genera solo si lo dejas vacío)</span></label>
       <input id="sa-codigo" placeholder="Ej. MONTESION"/>
-      <label style="margin-top:8px">Nombre del pastor</label>
+      <label for="sa-pastor-nombre" style="margin-top:8px">Nombre del pastor</label>
       <input id="sa-pastor-nombre" placeholder="Nombre y apellido"/>
-      <label style="margin-top:8px">Usuario del pastor</label>
+      <label for="sa-pastor-usuario" style="margin-top:8px">Usuario del pastor</label>
       <input id="sa-pastor-usuario" placeholder="Usuario para entrar"/>
-      <label style="margin-top:8px">Correo del pastor</label>
+      <label for="sa-pastor-email" style="margin-top:8px">Correo del pastor</label>
       <input id="sa-pastor-email" type="email" placeholder="correo@ejemplo.com"/>
       <label style="margin-top:8px">Contraseña temporal del pastor</label>
       <div class="row" style="gap:8px">
@@ -2703,9 +2772,9 @@ function saEditarIglesia(id){
   const root=$('modal-root');
   root.innerHTML=`<div class="modal-bg"><div class="modal">
     <h3>✏️ Editar iglesia</h3>
-    <label>Nombre</label>
+    <label for="sa-ed-nombre">Nombre</label>
     <input id="sa-ed-nombre" value="${escHtml(ig.nombre)}"/>
-    <label style="margin-top:8px">Código</label>
+    <label for="sa-ed-codigo" style="margin-top:8px">Código</label>
     <input id="sa-ed-codigo" value="${escHtml(ig.codigo_unico||'')}"/>
     <p id="sa-ed-error" class="error"></p>
     <div class="row" style="margin-top:14px">
@@ -2777,21 +2846,23 @@ async function saCrearIglesia(){
   if(!body.nombre_iglesia){ err.textContent='Escribe el nombre de la iglesia'; return; }
   if(!body.pastor_nombre||!body.pastor_usuario||!body.pastor_email){ err.textContent='Completa nombre, usuario y correo del pastor'; return; }
   if((body.pastor_password||'').length<8){ err.textContent='La contraseña temporal debe tener al menos 8 caracteres'; return; }
-  try{
-    const r=await api('/superadmin/iglesias',{method:'POST',body:JSON.stringify(body)});
-    toast('✅ Iglesia creada');
-    const igCodigo=(r.iglesia&&(r.iglesia.codigo_unico||r.iglesia.codigo))||codigo||'';
-    const pastorUsuario=(r.pastor&&r.pastor.usuario)||body.pastor_usuario;
-    $('sa-resultado').innerHTML=`
-      <div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
-        <p class="muted small" style="margin-bottom:6px">Código de la iglesia — compártelo con tu comunidad:</p>
-        <div style="font-size:1.8rem;font-weight:800;letter-spacing:.08em;color:var(--primary)">${escHtml(igCodigo)}</div>
-        <button class="btn small-btn" style="margin-top:10px" onclick="saCopiar('${escHtml(igCodigo)}')">📋 Copiar código</button>
-        <p class="muted small" style="margin-top:10px">Pastor creado: <b>${escHtml(pastorUsuario)}</b></p>
-      </div>`;
-    ['sa-nombre-ig','sa-codigo','sa-pastor-nombre','sa-pastor-usuario','sa-pastor-email','sa-pastor-pass'].forEach(id=>{ const i=$(id); if(i) i.value=''; });
-    saCargarLista();
-  }catch(e){ err.textContent=(e&&e.message)||'No se pudo crear la iglesia'; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      const r=await api('/superadmin/iglesias',{method:'POST',body:JSON.stringify(body)});
+      toast('✅ Iglesia creada');
+      const igCodigo=(r.iglesia&&(r.iglesia.codigo_unico||r.iglesia.codigo))||codigo||'';
+      const pastorUsuario=(r.pastor&&r.pastor.usuario)||body.pastor_usuario;
+      $('sa-resultado').innerHTML=`
+        <div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
+          <p class="muted small" style="margin-bottom:6px">Código de la iglesia — compártelo con tu comunidad:</p>
+          <div style="font-size:1.8rem;font-weight:800;letter-spacing:.08em;color:var(--primary)">${escHtml(igCodigo)}</div>
+          <button class="btn small-btn" style="margin-top:10px" onclick="saCopiar('${escHtml(igCodigo)}')">📋 Copiar código</button>
+          <p class="muted small" style="margin-top:10px">Pastor creado: <b>${escHtml(pastorUsuario)}</b></p>
+        </div>`;
+      ['sa-nombre-ig','sa-codigo','sa-pastor-nombre','sa-pastor-usuario','sa-pastor-email','sa-pastor-pass'].forEach(id=>{ const i=$(id); if(i) i.value=''; });
+      saCargarLista();
+    }catch(e){ err.textContent=(e&&e.message)||'No se pudo crear la iglesia'; }
+  });
 }
 function saCopiar(codigo){
   if(!codigo) return;
@@ -2803,15 +2874,17 @@ function saCopiar(codigo){
 // ============================================================
 //  AJUSTES — apariencia (tema, color de acento, tamaño de texto)
 // ============================================================
+// Cada acento trae su propio tono de barra lateral (`side`) y su realce (`acc`),
+// para que al cambiarlo NO quede la app a medias con el azul fijo del CSS.
 const ACENTOS={
-  cielo:    {nombre:'Cielo',    p:'#1C61A6',p7:'#154E86',p6:'#1A5B9C',turq:'#F5A623'},  // paleta del logo
-  pino:     {nombre:'Pino',     p:'#0F5C57',p7:'#0B4745',p6:'#0E5450',turq:'#C19E55'},
-  azul:     {nombre:'Azul',     p:'#2563EB',p7:'#1D4ED8',p6:'#1E54D9',turq:'#0EA5E9'},
-  esmeralda:{nombre:'Esmeralda',p:'#059669',p7:'#047857',p6:'#059669',turq:'#10B981'},
-  violeta:  {nombre:'Violeta',  p:'#7C3AED',p7:'#6D28D9',p6:'#7C3AED',turq:'#A855F7'},
-  naranja:  {nombre:'Naranja',  p:'#EA580C',p7:'#C2410C',p6:'#EA580C',turq:'#F59E0B'},
-  rosa:     {nombre:'Rosa',     p:'#DB2777',p7:'#BE185D',p6:'#DB2777',turq:'#F472B6'},
-  grafito:  {nombre:'Grafito',  p:'#334155',p7:'#1E293B',p6:'#334155',turq:'#64748B'},
+  cielo:    {nombre:'Cielo',    p:'#1C61A6',p7:'#154E86',p6:'#1A5B9C',side:'#0F3355',acc:'#D98C1F'},  // paleta del logo
+  pino:     {nombre:'Pino',     p:'#0F5C57',p7:'#0B4745',p6:'#0E5450',side:'#08332F',acc:'#C19E55'},
+  azul:     {nombre:'Azul',     p:'#2563EB',p7:'#1D4ED8',p6:'#1E54D9',side:'#152A63',acc:'#F0A32C'},
+  esmeralda:{nombre:'Esmeralda',p:'#059669',p7:'#047857',p6:'#059669',side:'#06382B',acc:'#D6A840'},
+  violeta:  {nombre:'Violeta',  p:'#7C3AED',p7:'#6D28D9',p6:'#7C3AED',side:'#2E1A55',acc:'#E0A32E'},
+  naranja:  {nombre:'Naranja',  p:'#EA580C',p7:'#C2410C',p6:'#EA580C',side:'#4A2109',acc:'#FBBF24'},
+  rosa:     {nombre:'Rosa',     p:'#DB2777',p7:'#BE185D',p6:'#DB2777',side:'#4A1030',acc:'#E8B04B'},
+  grafito:  {nombre:'Grafito',  p:'#334155',p7:'#1E293B',p6:'#334155',side:'#16202B',acc:'#B07D2B'},
 };
 function ajustes(){ try{ return JSON.parse(localStorage.getItem('ajustes')||'{}'); }catch{ return {}; } }
 function aplicarAjustes(){
@@ -2820,8 +2893,12 @@ function aplicarAjustes(){
   root.style.setProperty('--primary',ac.p);
   root.style.setProperty('--primary-700',ac.p7);
   root.style.setProperty('--primary-600',ac.p6);
-  root.style.setProperty('--turq',ac.turq);
-  root.style.setProperty('--grad','linear-gradient(135deg,'+ac.p+' 0%,'+ac.turq+' 100%)');
+  root.style.setProperty('--sidebar',ac.side);
+  root.style.setProperty('--gold',ac.acc);
+  root.style.setProperty('--turq',ac.acc);
+  // Un solo color en dos tonos (igual que el CSS): el realce va aparte, no dentro del degradado.
+  root.style.setProperty('--grad','linear-gradient(135deg,'+ac.p+' 0%,'+ac.p7+' 100%)');
+  root.style.setProperty('--grad-hero','linear-gradient(120deg,'+ac.side+' 0%,'+ac.p7+' 62%,'+ac.p+' 100%)');
   root.style.fontSize=({sm:'15px',md:'16px',lg:'18px'}[a.texto]||'16px');
   const dark = a.tema==='dark' || (a.tema==='auto' && window.matchMedia && matchMedia('(prefers-color-scheme:dark)').matches);
   root.setAttribute('data-theme', dark?'dark':'light');
@@ -2946,13 +3023,13 @@ function abrirRecuperar(){
       <button class="cal-navbtn" onclick="cerrarRecuperar()" aria-label="Cerrar">✕</button></div>
     <div style="padding:16px">
       <div id="rec-paso1">
-        <label>Tu correo (Gmail)</label>
+        <label for="rec-email">Tu correo (Gmail)</label>
         <input id="rec-email" type="email" placeholder="tucorreo@gmail.com"/>
         <p class="muted small" style="margin:6px 0 0">Te enviaremos un código de 6 dígitos.</p>
         <button class="btn" style="width:100%;margin-top:10px" onclick="recEnviar()">Enviar código</button>
       </div>
       <div id="rec-paso2" class="hidden">
-        <label>Código (6 dígitos)</label>
+        <label for="rec-codigo">Código (6 dígitos)</label>
         <input id="rec-codigo" inputmode="numeric" maxlength="6" placeholder="000000"/>
         <label style="margin-top:8px">Nueva contraseña</label>
         <div class="row" style="gap:8px"><input id="rec-nueva" type="password" placeholder="Nueva contraseña"/>
@@ -2987,13 +3064,13 @@ async function recConfirmar(){
 function vistaAjustes(){
   const a=ajustes(), acSel=a.acento||'cielo', temaSel=a.tema||'light', txtSel=a.texto||'md';
   const emailActual=(ME.persona&&ME.persona.email)?String(ME.persona.email).replace(/"/g,'&quot;'):'';
-  const opt=(g,val,act,label)=>`<button class="ajuste-opt ${val===act?'sel':''}" onclick="setAjuste('${g}','${val}')">${label}</button>`;
+  const opt=(g,val,act,label)=>`<button class="ajuste-opt ${val===act?'sel':''}" aria-pressed="${val===act}" onclick="setAjuste('${g}','${val}')">${label}</button>`;
   $('content').innerHTML=`
     <div class="card" style="max-width:560px">
       <h2 style="font-size:1.3rem;margin-bottom:4px">🎨 Ajustes de apariencia</h2>
       <p class="muted small" style="margin-bottom:18px">Personaliza cómo se ve la app. Se guarda en este dispositivo.</p>
       <div class="ajuste-grupo"><label style="margin:0">Color de acento</label>
-        <div class="ajuste-opts">${Object.entries(ACENTOS).map(([k,v])=>`<div class="swatch ${k===acSel?'sel':''}" title="${v.nombre}" style="background:${v.p}" onclick="setAjuste('acento','${k}')"></div>`).join('')}</div></div>
+        <div class="ajuste-opts">${Object.entries(ACENTOS).map(([k,v])=>`<button type="button" class="swatch ${k===acSel?'sel':''}" title="${v.nombre}" aria-label="Color ${v.nombre}" aria-pressed="${k===acSel}" style="background:linear-gradient(135deg,${v.p} 0%,${v.p} 62%,${v.acc} 62%,${v.acc} 100%)" onclick="setAjuste('acento','${k}')"></button>`).join('')}</div></div>
       <div class="ajuste-grupo"><label style="margin:0">Tema</label>
         <div class="ajuste-opts">${opt('tema','light',temaSel,'☀️ Claro')}${opt('tema','dark',temaSel,'🌙 Oscuro')}${opt('tema','auto',temaSel,'🖥️ Automático')}</div></div>
       <div class="ajuste-grupo"><label style="margin:0">Tamaño del texto</label>
@@ -3023,7 +3100,7 @@ function vistaAjustes(){
       <label class="check" style="margin-top:8px"><input type="checkbox" id="cta-tel-mostrar"/> Mostrar mi teléfono en el directorio</label>
       <p class="muted small" style="margin:4px 0 0">Por defecto tu teléfono está <b>oculto</b>; actívalo si quieres que aparezca en tu tarjeta del directorio.</p>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>
-      <label>Cambiar contraseña</label>
+      <label for="cta-actual">Cambiar contraseña</label>
       <input id="cta-actual" type="password" placeholder="Contraseña actual" style="margin-bottom:8px"/>
       <div class="row" style="gap:8px">
         <input id="cta-nueva" type="password" placeholder="Nueva contraseña"/>
@@ -3144,6 +3221,7 @@ const Chat = {
     this.convActual=id;
     let data;
     try{ data=await api('/mensajes/conversacion/'+id); }catch(e){ return toast(e.message); }
+    if(this.convActual!==id) return; // el usuario abrió otra conversación mientras cargaba esta
     const mensajes=data.mensajes||[];
     const conv=data.conversacion||{};
     const hilo=$('chatHilo'); if(!hilo) return;

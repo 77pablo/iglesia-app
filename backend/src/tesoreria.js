@@ -31,8 +31,11 @@ r.get('/resumen', (req, res) => {
   const ig = req.user.iglesia_id;
   const ing = sum(ig, "AND tipo = 'ingreso'");
   const gas = sum(ig, "AND tipo = 'gasto'");
-  const ingMes = sum(ig, "AND tipo = 'ingreso' AND strftime('%Y-%m', fecha) = strftime('%Y-%m','now')");
-  const gasMes = sum(ig, "AND tipo = 'gasto'   AND strftime('%Y-%m', fecha) = strftime('%Y-%m','now')");
+  // 'localtime': Chile es UTC-3/-4, asi que un movimiento de fin de mes en
+  // hora local puede caer al dia siguiente en UTC (y contarse en el mes
+  // equivocado) si no se ajusta antes de agrupar por mes.
+  const ingMes = sum(ig, "AND tipo = 'ingreso' AND strftime('%Y-%m', fecha) = strftime('%Y-%m','now','localtime')");
+  const gasMes = sum(ig, "AND tipo = 'gasto'   AND strftime('%Y-%m', fecha) = strftime('%Y-%m','now','localtime')");
   res.json({ saldo: ing - gas, ingMes, gasMes, balanceMes: ingMes - gasMes });
 });
 
@@ -53,7 +56,10 @@ const movimientoSchema = z.object({
   categoria: z.string().trim().max(100).optional(),
   monto: z.coerce.number().positive('el monto debe ser un numero mayor que cero'),
   descripcion: z.string().trim().max(500).optional(),
-  fecha: z.string().trim().optional(),
+  // Formato fijo YYYY-MM-DD (o vacio/omitido -> usa el default de la BD).
+  // Sin este formato, un string cualquiera pasaba a SQLite y strftime()
+  // devolvia NULL, rompiendo los totales mensuales (resumen/reportes).
+  fecha: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha invalida').optional().or(z.literal('')),
   comprobante_url: z.string().trim().max(500).optional()
 });
 r.post('/movimientos', soloTesorero, limiterSensible, validar(movimientoSchema), (req, res) => {
@@ -100,8 +106,11 @@ r.get('/transparencia', (req, res) => {
   const ig = req.user.iglesia_id;
   const recaudado = sum(ig, "AND tipo = 'ingreso'");
   const gastado = sum(ig, "AND tipo = 'gasto'");
+  // GROUP BY sobre la MISMA expresion que se selecciona: si se agrupa por la
+  // columna cruda "categoria", NULL y el texto literal 'otro' caen en grupos
+  // distintos aunque el SELECT los etiquete igual (dos filas "otro").
   const porCategoria = db.prepare(
-    "SELECT COALESCE(categoria,'otro') AS categoria, SUM(monto) AS monto FROM movimiento WHERE iglesia_id = ? AND tipo = 'gasto' GROUP BY categoria ORDER BY monto DESC"
+    "SELECT COALESCE(categoria,'otro') AS categoria, SUM(monto) AS monto FROM movimiento WHERE iglesia_id = ? AND tipo = 'gasto' GROUP BY COALESCE(categoria,'otro') ORDER BY monto DESC"
   ).all(ig);
   res.json({ recaudado, gastado, saldo: recaudado - gastado, porCategoria });
 });

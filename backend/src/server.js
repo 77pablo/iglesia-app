@@ -37,11 +37,18 @@ import pushRouter from './push.js';
 import cuentaRouter from './cuenta.js';
 import adminRouter from './admin.js';
 import mensajesRouter from './mensajes.js';
-import directorioRouter, { generarCumpleanosHoy } from './directorio.js';
+import directorioRouter, { generarCumpleanosHoyThrottled } from './directorio.js';
 import publicoRouter from './publico.js';
 import registroRouter from './registro.js';
 import superadminRouter from './superadmin.js';
 import consentimientoRouter, { tieneConsentimientoVigente } from './consentimiento.js';
+
+// --- Red de seguridad global: un rechazo/excepcion no atrapada NO debe tumbar
+// el proceso (que serviria a TODAS las iglesias). Express 4 no captura los
+// rechazos de promesas dentro de handlers async por si solo, asi que esto es
+// la ultima linea de defensa si algun handler async se escapara sin try/catch.
+process.on('unhandledRejection', (err) => { console.error('[unhandledRejection]', err); });
+process.on('uncaughtException', (err) => { console.error('[uncaughtException]', err); });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -205,7 +212,7 @@ app.get('/api/me', authMiddleware, (req, res) => {
   if (!persona) return res.status(404).json({ error: 'Persona no encontrada' });
   // Genera recordatorios pendientes de la iglesia al iniciar sesion (no duplica).
   try { generarRecordatoriosThrottled(persona.iglesia_id); } catch (e) { console.error('[recordatorios]', e.message); }
-  try { generarCumpleanosHoy(persona.iglesia_id); } catch (e) { console.error('[cumple]', e.message); }
+  try { generarCumpleanosHoyThrottled(persona.iglesia_id); } catch (e) { console.error('[cumple]', e.message); }
   const iglesia = db.prepare('SELECT nombre, codigo_unico FROM iglesia WHERE id = ?').get(persona.iglesia_id);
   res.json({
     persona: perfilPublico(persona),

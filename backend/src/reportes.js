@@ -18,6 +18,15 @@ r.use((req, res, next) => {
 });
 
 // --- Asistencia: serie mensual (total) + desglose por grupo ---
+// Nota sobre localtime: e.fecha es SIEMPRE una fecha calendario pura
+// 'YYYY-MM-DD' (sin hora; la hora vive aparte en hora_inicio/hora_fin), no
+// un instante UTC. Verificado empiricamente: strftime(..., 'localtime')
+// sobre un valor 'YYYY-MM-DD' lo trata como medianoche UTC y le resta el
+// huso horario local, retrocediendo la fecha (p.ej. un evento el "2026-02-01"
+// termina agrupado en enero). Por eso, a diferencia de crecimientoMensual
+// (que agrupa un timestamp real), aqui NO se agrega 'localtime' a la
+// columna: ya esta en hora local por construccion y agregarlo introduciria
+// el mismo bug que se busca corregir, en sentido inverso.
 function asistenciaMensual(iglesiaId) {
   return db.prepare(
     `SELECT strftime('%Y-%m', e.fecha) AS mes, COUNT(*) AS total
@@ -43,6 +52,10 @@ r.get('/asistencia', (req, res) => {
 });
 
 // --- Tesoreria: ingresos/gastos por mes + saldo ---
+// Mismo motivo que asistenciaMensual: movimiento.fecha es una fecha pura
+// 'YYYY-MM-DD' (validada asi en tesoreria.js; el default de la BD tambien
+// usa date('now','localtime'), no un timestamp). No se agrega 'localtime'
+// a esta columna por la misma razon documentada arriba.
 function tesoreriaMensual(iglesiaId) {
   const filas = db.prepare(
     `SELECT strftime('%Y-%m', fecha) AS mes,
@@ -62,9 +75,16 @@ r.get('/tesoreria', (req, res) => {
 });
 
 // --- Crecimiento: altas por mes (persona.creada_en) + total activos ---
+// creada_en es un timestamp completo en UTC (datetime('now')): una persona
+// dada de alta cerca de medianoche en Chile (UTC-3/-4) puede quedar
+// registrada ya en el dia/mes siguiente en UTC. 'localtime' corrige esto
+// al agrupar por el mes calendario que corresponde en hora local.
+function contarActivos(iglesiaId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM persona WHERE iglesia_id = ? AND activo = 1').get(iglesiaId).n;
+}
 function crecimientoMensual(iglesiaId) {
   return db.prepare(
-    `SELECT strftime('%Y-%m', creada_en) AS mes, COUNT(*) AS altas
+    `SELECT strftime('%Y-%m', creada_en, 'localtime') AS mes, COUNT(*) AS altas
        FROM persona
       WHERE iglesia_id = ?
       GROUP BY mes ORDER BY mes`
@@ -72,8 +92,7 @@ function crecimientoMensual(iglesiaId) {
 }
 r.get('/crecimiento', (req, res) => {
   const ig = req.user.iglesia_id;
-  const totalActivos = db.prepare('SELECT COUNT(*) AS n FROM persona WHERE iglesia_id = ? AND activo = 1').get(ig).n;
-  res.json({ mensual: crecimientoMensual(ig), totalActivos });
+  res.json({ mensual: crecimientoMensual(ig), totalActivos: contarActivos(ig) });
 });
 
 // --- Exportar a CSV (con BOM, para que Excel respete los acentos) ---
@@ -101,7 +120,7 @@ r.get('/export.csv', (req, res) => {
     for (const f of tesoreriaMensual(ig)) filas.push([f.mes, f.ingresos, f.gastos, f.saldo]);
   } else if (tipo === 'crecimiento') {
     nombre = 'reporte-crecimiento.csv';
-    const totalActivos = db.prepare('SELECT COUNT(*) AS n FROM persona WHERE iglesia_id = ? AND activo = 1').get(ig).n;
+    const totalActivos = contarActivos(ig);
     filas = [['Mes', 'Altas']];
     for (const f of crecimientoMensual(ig)) filas.push([f.mes, f.altas]);
     filas.push([]);

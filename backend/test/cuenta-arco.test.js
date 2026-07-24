@@ -80,6 +80,22 @@ test('eliminar tambien limpia el nombre en aprobacion_log y en notificaciones de
   assert.equal(cumple, 0, 'las notificaciones de cumple que lo nombran se borraron');
 });
 
+// --- Fix: /eliminar tambien borra las suscripciones push de la persona ---
+test('POST /api/cuenta/eliminar: borra las suscripciones push (push_sub y dispositivo_push) de la persona', async () => {
+  db.prepare("INSERT INTO push_sub (persona_id, endpoint, p256dh, auth) VALUES (?, 'https://push.test/endpoint-1', 'p256dh-x', 'auth-x')")
+    .run(SEM.miembro1.id);
+  db.prepare("INSERT INTO dispositivo_push (persona_id, token, plataforma) VALUES (?, 'token-legacy-1', 'android')")
+    .run(SEM.miembro1.id);
+
+  const res = await fetch(base + '/api/cuenta/eliminar', { method: 'POST', headers: H(SEM.miembro1) });
+  assert.equal(res.status, 200);
+
+  const pushSub = db.prepare('SELECT COUNT(*) AS n FROM push_sub WHERE persona_id = ?').get(SEM.miembro1.id).n;
+  const dispPush = db.prepare('SELECT COUNT(*) AS n FROM dispositivo_push WHERE persona_id = ?').get(SEM.miembro1.id).n;
+  assert.equal(pushSub, 0, 'ya no quedan suscripciones push_sub de la persona eliminada');
+  assert.equal(dispPush, 0, 'ya no quedan tokens dispositivo_push de la persona eliminada');
+});
+
 test('GET /api/cuenta/mis-datos: no filtra datos de otra persona', async () => {
   const telefonoAjeno = '+56999999999';
   db.prepare('UPDATE persona SET telefono = ? WHERE id = ?').run(telefonoAjeno, SEM.miembro2.id);

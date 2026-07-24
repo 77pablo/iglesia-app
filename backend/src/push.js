@@ -85,11 +85,16 @@ r.post('/baja', validar(bajaSchema), (req, res) => {
 
 // Envia un push de prueba a mi mismo.
 r.post('/probar', async (req, res) => {
-  if (!pushActivo) return res.status(400).json({ error: 'El push no esta configurado en el servidor (faltan claves VAPID).' });
-  const tengo = db.prepare('SELECT COUNT(*) AS n FROM push_sub WHERE persona_id = ?').get(req.user.persona_id).n;
-  if (!tengo) return res.status(400).json({ error: 'Este dispositivo aun no esta suscrito a las notificaciones.' });
-  await enviarPush([req.user.persona_id], { titulo: '🔔 Prueba', texto: '¡Las notificaciones push funcionan!', url: '/' });
-  res.json({ ok: true });
+  try {
+    if (!pushActivo) return res.status(400).json({ error: 'El push no esta configurado en el servidor (faltan claves VAPID).' });
+    const tengo = db.prepare('SELECT COUNT(*) AS n FROM push_sub WHERE persona_id = ?').get(req.user.persona_id).n;
+    if (!tengo) return res.status(400).json({ error: 'Este dispositivo aun no esta suscrito a las notificaciones.' });
+    await enviarPush([req.user.persona_id], { titulo: '🔔 Prueba', texto: '¡Las notificaciones push funcionan!', url: '/' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[push] error en /probar:', e);
+    if (!res.headersSent) res.status(500).json({ error: 'Error al procesar la solicitud' });
+  }
 });
 
 export default r;
