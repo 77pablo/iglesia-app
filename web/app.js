@@ -1294,13 +1294,13 @@ async function vistaReportes(){
     const altasMesActual=(crec.mensual.find(m=>m.mes===mesActual)||{altas:0}).altas;
 
     $('rep').innerHTML=`
-      <div class="head-row no-print" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+      <div class="btn-fila no-print" style="margin-bottom:18px">
         <button class="btn ghost small-btn" onclick="exportarReporte('asistencia')">📥 Asistencia CSV</button>
         <button class="btn ghost small-btn" onclick="exportarReporte('tesoreria')">📥 Tesorería CSV</button>
         <button class="btn ghost small-btn" onclick="exportarReporte('crecimiento')">📥 Crecimiento CSV</button>
-        <button class="btn ghost small-btn" onclick="window.print()">🖨️ Imprimir</button>
+        <button class="btn ghost small-btn" style="margin-left:auto" onclick="window.print()">🖨️ Imprimir</button>
       </div>
-      <div class="widgets" style="margin-bottom:18px">
+      <div class="widgets cifras" style="margin-bottom:18px">
         <div class="widget"><div class="widget-head">✅ Asistencia último mes</div><div class="stat-num">${ultimaAsis?ultimaAsis.total:'—'}</div></div>
         <div class="widget"><div class="widget-head">💰 Saldo total</div><div class="stat-num">${money(teso.saldoTotal)}</div></div>
         <div class="widget"><div class="widget-head">👥 Miembros activos</div><div class="stat-num">${crec.totalActivos}</div></div>
@@ -1367,7 +1367,7 @@ async function vistaMusica(){
     <div class="card"><h3 style="font-size:16px;margin-bottom:10px">Orden del servicio</h3>
       <label for="set-ev">Evento</label><select id="set-ev"></select>
       <div id="setlist" style="margin-top:14px" class="muted">…</div>
-      <h3 style="font-size:16px;margin:20px 0 10px">🎸 Equipo y ensayo</h3>
+      <h3 style="font-size:16px;margin:28px 0 16px">🎸 Equipo y ensayo</h3>
       <div id="plan" class="muted">…</div></div>
     <div class="card" style="margin-top:16px">
       <div class="head-row"><h3 style="font-size:16px">📎 Material / Partituras</h3><span id="add-material-zona"></span></div>
@@ -1506,8 +1506,8 @@ async function cargarPlan(eventoId){
         <button class="btn ghost small-btn" onclick="avisarEquipo()">📣 Avisar al equipo</button></div>`;
     }
     $('plan').className='';
-    $('plan').innerHTML=`<div style="margin-bottom:14px"><div class="widget-head" style="font-size:14px">🗓️ Ensayo</div>${ensayoHtml}</div>
-      <div class="widget-head" style="font-size:14px">🎸 Equipo (${numPersonas})</div>${equipoHtml}${addHtml}`;
+    $('plan').innerHTML=`<div class="sub-bloque"><div class="sub-titulo">🗓️ Ensayo</div>${ensayoHtml}</div>
+      <div class="sub-bloque"><div class="sub-titulo">🎸 Equipo (${numPersonas})</div>${equipoHtml}${addHtml}</div>`;
   }catch{ $('plan').innerHTML='<p class="error">No se pudo cargar el plan.</p>'; }
 }
 async function guardarEnsayo(){
@@ -1850,9 +1850,9 @@ async function vistaTesoreria(){
           : '<p class="muted small">Sin campañas.</p>'}
       </div>
       <div class="card" style="margin-bottom:18px"><div class="widget-head">🔓 Transparencia</div>
-        <p class="small" style="margin:6px 0">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
+        <p class="small" style="margin:6px 0 14px">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
         ${trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0;
-          return `<div style="display:flex;justify-content:space-between;font-size:13px;margin:4px 0"><span>${cap(g.categoria)}</span><span class="muted">${pct}% · ${money(g.monto)}</span></div>`;}).join('')}
+          return `<div class="dato-row"><span>${cap(g.categoria)}</span><span class="val">${pct}% · ${money(g.monto)}</span></div>`;}).join('')}
       </div>
       <div class="card"><div class="widget-head">Movimientos</div>
         <div class="list" id="mov-list" style="margin-top:8px">${movs.map(filaMov).join('')}</div>

@@ -79,7 +79,7 @@ h1,h2,h3{letter-spacing:-.018em;line-height:1.25;}
 .btn.ghost{background:var(--surface);color:var(--primary);border:1px solid var(--border);box-shadow:var(--shadow-xs);}
 .btn.ghost:hover{border-color:var(--primary);background:var(--primary-50);box-shadow:var(--shadow-xs);}
 .btn.ghost:active{background:var(--primary-50);filter:brightness(.97);}
-.btn.small-btn{flex:none;width:auto;padding:9px 15px;font-size:.844rem;}
+.btn.small-btn{flex:none;width:auto;padding:10px 16px;font-size:.844rem;}
 .row{display:flex;gap:10px;}
 .row > .btn{flex:1;}                      /* solo los botones en fila comparten ancho */
 .login-card .step > .btn{width:100%;}     /* botón único de paso: full-width consistente */
@@ -223,6 +223,10 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
 .hero h2{position:relative;font-size:1.5625rem;font-weight:800;letter-spacing:-.02em;}
 .hero p{position:relative;opacity:.94;margin-top:5px;font-size:0.9375rem;}
 .widgets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:var(--gap);}
+/* Fila de cifras (4 o más): baja el mínimo para que no quede una sola sobrando */
+.widgets.cifras{grid-template-columns:repeat(auto-fit,minmax(min(100%,192px),1fr));}
+/* En una baldosa más angosta la cifra baja de tamaño y no roza los bordes */
+.widgets.cifras .stat-num{font-size:2.05rem;}
 .widget{background:var(--surface);border:1px solid var(--border);
   border-radius:16px;padding:24px 22px 20px;box-shadow:0 4px 20px rgba(0,0,0,.02);
   transition:transform .25s var(--ease),box-shadow .25s var(--ease),border-color .25s var(--ease);}
@@ -236,7 +240,7 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
 .mini-item:hover{transform:translateX(3px);}
 .mini-date{background:var(--primary-50);color:var(--primary-700);border-radius:var(--r-sm);
   min-width:48px;text-align:center;padding:7px 4px;line-height:1.05;font-weight:700;flex-shrink:0;}
-.mini-date b{display:block;font-size:1.0625rem;} .mini-date span{font-size:0.6563rem;text-transform:uppercase;letter-spacing:.03em;}
+.mini-date b{display:block;font-size:1.0625rem;} .mini-date span{font-size:0.6875rem;text-transform:uppercase;letter-spacing:.04em;}
 
 /* Accesos rápidos (grid de módulos) */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,148px),1fr));gap:14px;margin-top:8px;}
@@ -258,7 +262,7 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
 .item-titulo{overflow-wrap:anywhere;}
 .fecha-chip{background:var(--primary-50);color:var(--primary-700);border-radius:var(--r-sm);
   min-width:58px;padding:10px;text-align:center;line-height:1.1;flex-shrink:0;}
-.fecha-chip b{display:block;font-size:1.3125rem;} .fecha-chip span{font-size:0.7188rem;text-transform:uppercase;letter-spacing:.03em;}
+.fecha-chip b{display:block;font-size:1.3125rem;} .fecha-chip span{font-size:0.75rem;text-transform:uppercase;letter-spacing:.04em;}
 .item-titulo{font-weight:600;font-size:0.9688rem;letter-spacing:-.01em;}
 
 .anuncio-card.urgente{border-color:#FCA5A5;background:#FFF7F7;
@@ -393,6 +397,21 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
 /* Panel gris de los formularios inline (crear canción, aviso, recurso, niño…) */
 .form-panel{background:var(--bg);padding:14px;border-radius:12px;margin-bottom:12px;}
 
+/* Sub-bloque dentro de una tarjeta: título con hilo y aire propio, para que
+   varios apartados en la misma tarjeta no se lean como un solo amontonamiento. */
+.sub-bloque + .sub-bloque{margin-top:24px;}
+.sub-titulo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.875rem;
+  letter-spacing:-.01em;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid var(--border);}
+
+/* Fila de dato: etiqueta a la izquierda, cifra a la derecha, separadas por un hilo */
+.dato-row{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  font-size:0.8125rem;padding:9px 0;border-top:1px solid var(--border);}
+.dato-row:first-of-type{border-top:none;}
+.dato-row .val{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+/* Grupo de botones de acción: se leen como un grupo, no repartidos a lo ancho */
+.btn-fila{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+
 /* ---------- Calendario (vista de mes) ---------- */
 .cal-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
   padding:18px;box-shadow:var(--shadow-xs);}
@@ -403,8 +422,8 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
   display:flex;align-items:center;justify-content:center;transition:.15s;box-shadow:var(--shadow-xs);}
 .cal-navbtn:hover{background:var(--primary-50);border-color:var(--primary);}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
-.cal-dow{text-align:center;font-size:0.6875rem;font-weight:700;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.04em;padding:4px 0 8px;}
+.cal-dow{text-align:center;font-size:0.75rem;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em;padding:4px 0 10px;}
 /* Todas las casillas se ven igual: con el resaltado de color (sin distinguir
    fin de semana ni si tienen evento). Las casillas vacías del mes quedan sin fondo. */
 .cal-cell{min-height:96px;border:1px solid var(--border);border-radius:10px;padding:6px;
@@ -416,24 +435,24 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
 .cal-cell.tiene{background:var(--primary-50);}
 .cal-cell.sel{box-shadow:inset 0 0 0 2px var(--primary-600);border-color:var(--primary-600);}
 .cal-daynum{font-size:0.7813rem;font-weight:700;color:var(--muted);}
-.cal-ev{font-size:0.6563rem;line-height:1.3;padding:3px 6px;border-radius:6px;background:var(--surface);
+.cal-ev{font-size:0.6875rem;line-height:1.35;padding:4px 6px;border-radius:6px;background:var(--surface);
   border:1px solid var(--border);border-left:3px solid var(--primary);color:var(--text);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cal-ev:hover{filter:brightness(.97);}
 .cal-ev.pend{border-left-style:dashed;opacity:.75;}
-.cal-mas{font-size:0.625rem;color:var(--muted);font-weight:600;padding-left:4px;}
+.cal-mas{font-size:0.6875rem;color:var(--muted);font-weight:600;padding-left:4px;}
 .cal-leyenda{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
 .cal-leg{display:inline-flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--muted);}
 .cal-leg-dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
 @media(max-width:640px){
-  .cal-cell{min-height:64px;padding:4px;}
-  .cal-ev{font-size:0.5625rem;padding:2px 4px;}
+  .cal-cell{min-height:72px;padding:5px;}
+  .cal-ev{font-size:0.625rem;padding:3px 5px;}
   .cal-wrap{padding:10px;}
 }
 @media(max-width:520px){
   .cal-wrap{overflow-x:auto;}          /* scroll local, no rompe la página */
   .cal-grid{min-width:480px;}          /* mantiene celdas legibles */
-  .cal-ev{font-size:0.625rem;}
+  .cal-ev{font-size:0.6875rem;}        /* el mes ya hace scroll: no hace falta encoger */
 }
 
 /* ---------- Modal del Himnario (buscador + transpositor) ---------- */
@@ -558,6 +577,14 @@ body{transition:background-color .3s ease,color .3s ease;}
   flex-shrink:0;cursor:pointer;font-size:1rem;color:var(--muted);transition:.15s var(--ease);}
 .btn-ico:hover{background:var(--bg);color:var(--text);}
 .chat-escribiendo{height:20px;font-size:.8em;color:var(--muted);padding:0 12px;}
+/* En celular las dos columnas no caben: la lista se apila sobre el hilo
+   (mismo patrón que ya usa .hmodal-body). Antes el hilo quedaba cortado. */
+@media(max-width:720px){
+  .chat-wrap{flex-direction:column;height:auto;}
+  .chat-lista{width:auto;max-height:34vh;border-right:none;border-bottom:1px solid var(--border);}
+  .chat-hilo{min-height:56vh;}
+  .burbuja{max-width:86%;}
+}
 [data-theme="dark"] .burbuja{background:#1c2530;}
 [data-theme="dark"] .burbuja.mia{background:#123321;}
 [data-theme="dark"] .chat-item.sel{background:var(--primary-50);}
