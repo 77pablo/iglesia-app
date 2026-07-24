@@ -219,7 +219,13 @@ app.get('/api/me', authMiddleware, (req, res) => {
     iglesia,
     roles: getRoles(persona.id),
     modulos: modulosVisibles(persona.id),   // lo que la app le muestra
-    consentimiento_pendiente: !tieneConsentimientoVigente(persona.id)
+    // El super-admin (dueño del sistema, iglesia_id=NULL) no es feligrés de
+    // ninguna iglesia, así que NO pasa por el consentimiento general. Además,
+    // la tabla consentimiento exige iglesia_id NOT NULL: registrar su
+    // consentimiento fallaría y lo dejaría atascado en la puerta legal.
+    consentimiento_pendiente: persona.rol_global === 'super_admin'
+      ? false
+      : !tieneConsentimientoVigente(persona.id)
   });
 });
 

@@ -65,3 +65,18 @@ test('super_admin con iglesia_id=NULL no se rompe por el chequeo de iglesia', as
   const res = await fetch(base + '/api/me', { headers: { Authorization: 'Bearer ' + token } });
   assert.notEqual(res.status, 401);
 });
+
+test('super_admin: consentimiento_pendiente=false (no pasa por la puerta legal de feligrés)', async () => {
+  // Regresión: el super-admin (iglesia_id=NULL) quedaba atascado en la pantalla
+  // de consentimiento porque /me lo marcaba pendiente y la tabla consentimiento
+  // exige iglesia_id NOT NULL, así que aceptar fallaba. Debe quedar exento.
+  const r = db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, activo) VALUES (NULL,'sa2','SA2','x','super_admin',1)"
+  ).run();
+  const token = signToken({ id: Number(r.lastInsertRowid), iglesia_id: null });
+
+  const res = await fetch(base + '/api/me', { headers: { Authorization: 'Bearer ' + token } });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.consentimiento_pendiente, false);
+});

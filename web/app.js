@@ -101,7 +101,10 @@ function showStep(n){
   if(inp) setTimeout(()=>inp.focus(),60);
 }
 function next(n){
-  if(n>=2){ const ig=$('iglesia').value.trim(); if(!ig) return err('Escribe el nombre o código de tu iglesia'); $('ig-label').textContent='· '+ig; }
+  // La iglesia se valida SOLO al avanzar a la pantalla de usuario (paso 2).
+  // Antes usaba n>=2, así que al pasar de usuario a contraseña (paso 3) volvía
+  // a exigirla y bloqueaba el login del super-admin, que va sin iglesia.
+  if(n===2){ const ig=$('iglesia').value.trim(); if(!ig) return err('Escribe el nombre o código de tu iglesia'); $('ig-label').textContent='· '+ig; }
   if(n>=3 && !$('usuario').value.trim()) return err('Escribe tu usuario');
   err(''); showStep(n);
 }
