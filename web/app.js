@@ -2516,12 +2516,16 @@ function accionesBtns(editFn, delFn, id){
     <button class="link" style="color:var(--red)" onclick="${delFn}(${id})">🗑️ Borrar</button></div>`;
 }
 // Modal de confirmación genérico
-function modalConfirm(msg, onYes){
+// Modal de confirmación genérico. opts: { okLabel, danger }.
+function modalConfirm(msg, onYes, opts){
+  opts = opts || {};
+  const okLabel = opts.okLabel || 'Sí, continuar';
+  const okClase = opts.danger ? 'btn danger' : 'btn';
   const root=$('modal-root');
   root.innerHTML=`<div class="modal-bg"><div class="modal"><h3>Confirmar</h3>
     <p class="muted" style="margin:8px 0 16px">${msg}</p>
     <div class="row"><button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-    <button class="btn" id="cf-ok">Sí, continuar</button></div></div></div>`;
+    <button class="${okClase}" id="cf-ok">${okLabel}</button></div></div></div>`;
   root.classList.add('show');
   $('cf-ok').onclick=()=>{ cerrarModal(); onYes(); };
 }
@@ -2764,6 +2768,7 @@ async function saCargarLista(){
           <button class="btn ghost small-btn" onclick="saEditarIglesia(${ig.id})">✏️ Editar</button>
           <button class="btn ghost small-btn" onclick="saToggleActiva(${ig.id})">${activa?'⛔ Desactivar':'✅ Reactivar'}</button>
           <button class="btn ghost small-btn" onclick="saResetPastor(${ig.id})">🔑 Resetear contraseña del pastor</button>
+          <button class="btn ghost small-btn" style="color:var(--red)" onclick="saEliminarIglesia(${ig.id})">🗑️ Eliminar</button>
         </div>
       </div>`;
     }).join('') : '<p class="muted small">Aún no hay iglesias creadas.</p>';
@@ -2834,6 +2839,28 @@ async function saResetPastor(id){
       root.classList.add('show');
     }catch(e){ toast((e&&e.message)||'No se pudo resetear la contraseña'); }
   });
+}
+// ---------- Eliminar iglesia por completo (doble confirmación) ----------
+function saEliminarIglesia(id){
+  const ig=SA_IGLESIAS.find(i=>i.id===id); if(!ig) return;
+  const miembros=ig.miembros||0, eventos=ig.eventos||0;
+  modalConfirm(
+    `Vas a eliminar <b>${escHtml(ig.nombre)}</b>: <b>${miembros}</b> miembro(s), <b>${eventos}</b> evento(s), y toda su tesorería, mensajes, niños y archivos subidos.<br><br><b>Esto NO se puede deshacer.</b>`,
+    ()=>{
+      modalConfirm(
+        `¿De verdad quieres eliminar <b>${escHtml(ig.nombre)}</b>? Esta acción es <b>definitiva</b>.`,
+        async()=>{
+          try{
+            const r=await api('/superadmin/iglesias/'+id,{method:'DELETE'});
+            toast('🗑️ Iglesia eliminada'+((r&&r.archivos_borrados)?` (${r.archivos_borrados} archivo(s))`:''));
+            saCargarLista();
+          }catch(e){ toast((e&&e.message)||'No se pudo eliminar'); }
+        },
+        { okLabel:'Sí, eliminar definitivamente', danger:true }
+      );
+    },
+    { okLabel:'Sí, eliminar', danger:true }
+  );
 }
 async function saCrearIglesia(){
   const err=$('sa-error'); err.textContent='';

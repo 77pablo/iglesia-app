@@ -79,6 +79,8 @@ h1,h2,h3{letter-spacing:-.018em;line-height:1.25;}
 .btn.ghost{background:var(--surface);color:var(--primary);border:1px solid var(--border);box-shadow:var(--shadow-xs);}
 .btn.ghost:hover{border-color:var(--primary);background:var(--primary-50);box-shadow:var(--shadow-xs);}
 .btn.ghost:active{background:var(--primary-50);filter:brightness(.97);}
+.btn.danger{background:var(--red);box-shadow:0 1px 2px rgba(220,38,38,.2);}
+.btn.danger:hover{background:var(--red-tx);box-shadow:0 6px 20px rgba(220,38,38,.28);}
 .btn.small-btn{flex:none;width:auto;padding:10px 16px;font-size:.844rem;}
 .row{display:flex;gap:10px;}
 .row > .btn{flex:1;}                      /* solo los botones en fila comparten ancho */
