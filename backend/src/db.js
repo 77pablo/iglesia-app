@@ -107,6 +107,34 @@ CREATE TABLE IF NOT EXISTS asignacion (
   motivo      TEXT
 );
 
+-- ORGANIZACION DE EVENTOS: hoja de coordinacion (cosas + gastos)
+CREATE TABLE IF NOT EXISTS evento_org (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  iglesia_id   INTEGER NOT NULL REFERENCES iglesia(id),
+  evento_id    INTEGER REFERENCES evento(id),
+  titulo       TEXT,
+  fecha        TEXT,
+  hora_llegada TEXT,
+  creado_por   INTEGER REFERENCES persona(id),
+  creada_en    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_evento_org_evento ON evento_org(evento_id) WHERE evento_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS evento_org_cosa (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id   INTEGER NOT NULL REFERENCES evento_org(id),
+  nombre   TEXT NOT NULL,
+  cantidad INTEGER NOT NULL DEFAULT 1,
+  listo    INTEGER NOT NULL DEFAULT 0,
+  orden    INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS evento_org_gasto (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id    INTEGER NOT NULL REFERENCES evento_org(id),
+  concepto  TEXT NOT NULL,
+  monto     REAL NOT NULL,
+  creado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ASISTENCIA: quien fue a un evento  (metodo: 'lista' | 'qr' | 'facial')
 CREATE TABLE IF NOT EXISTS asistencia (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
