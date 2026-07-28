@@ -17,7 +17,16 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_PATH = path.join(__dirname, '..', 'src', 'server.js');
 const PORT = 3931;
-const BASE = `http://localhost:${PORT}`;
+// Se usa la IP literal, NO "localhost": limiterLogin cuenta por IP, y "localhost"
+// resuelve a ::1 y a 127.0.0.1 a la vez. Node trae autoSelectFamily activado por
+// defecto, asi que cada conexion nueva compite entre ambas familias y puede
+// salir por una u otra. El servidor ve entonces "::1" o "::ffff:127.0.0.1", que
+// para express-rate-limit son DOS cubos distintos: los intentos se repartirian
+// entre dos contadores y el 429 llegaria mas tarde de lo previsto (o nunca).
+const HOST = '127.0.0.1';
+const BASE = `http://${HOST}:${PORT}`;
+// El limite declarado en src/seguridad.js para limiterLogin.
+const LIMITE_LOGIN = 5;
 const DB_PATH = path.join(os.tmpdir(), `iglesia-test-seguridad-${Date.now()}.db`);
 
 let servidor;
@@ -116,41 +125,71 @@ test('POST /api/admin/usuarios con body invalido responde 400 (validacion zod en
   assert.ok(body.error);
 });
 
-test('POST /api/login: al superar 5 peticiones/IP en la ventana, responde 429', async () => {
-  // Ya se hicieron 2 peticiones a /api/login en los tests anteriores (una
-  // invalida y una valida), que cuentan contra el mismo limitador. Con 4
-  // intentos mas alcanzamos y superamos el limite de 5.
-  const intento = () => fetch(`${BASE}/api/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ iglesia: 'MONTESION', usuario: 'pastor', password: 'incorrecta' })
-  });
-  let ultimoStatus;
-  for (let i = 0; i < 4; i++) {
-    const r = await intento();
-    ultimoStatus = r.status;
+const intentoDeLogin = () => fetch(`${BASE}/api/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ iglesia: 'MONTESION', usuario: 'pastor', password: 'incorrecta' })
+});
+
+// Deja la ventana de esta IP agotada pidiendo logins hasta ver el 429, en vez de
+// suponer cuantas peticiones de login hicieron los tests anteriores del archivo
+// (ese acoplamiento era la causa del test intermitente: bastaba con que una
+// peticion previa no llegara a contar para que el 429 se corriera un intento y
+// la asercion fallara). El tope de intentos sale de la cabecera RateLimit-Limit
+// que devuelve el propio servidor, asi que si el limitador estuviera apagado o
+// mal configurado el bucle se agota y el test falla, no se cuelga.
+// Es idempotente: si la ventana ya estaba agotada, la primera respuesta ya es 429.
+async function agotarLimiteDeLogin() {
+  let respuesta = await intentoDeLogin();
+  const limite = Number(respuesta.headers.get('ratelimit-limit'));
+  assert.equal(
+    limite, LIMITE_LOGIN,
+    `el servidor de pruebas debe tener limiterLogin activo con limite ${LIMITE_LOGIN} ` +
+    `(RateLimit-Limit recibido: ${respuesta.headers.get('ratelimit-limit')})`
+  );
+  let intentos = 1;
+  // Peor caso: ventana recien empezada -> 'limite' pasan y el siguiente bloquea.
+  while (respuesta.status !== 429 && intentos <= limite) {
+    respuesta = await intentoDeLogin();
+    intentos++;
   }
-  assert.equal(ultimoStatus, 429);
-  const r = await intento();
-  assert.equal(r.status, 429);
-  const body = await r.json();
+  assert.equal(
+    respuesta.status, 429,
+    `el limitador debia bloquear como muy tarde en el intento ${limite + 1} de la ventana, ` +
+    `pero tras ${intentos} intentos seguidos el estado sigue siendo ${respuesta.status}`
+  );
+  return { respuesta, intentos };
+}
+
+test('POST /api/login: al superar el limite de peticiones/IP en la ventana, responde 429', async () => {
+  const { respuesta } = await agotarLimiteDeLogin();
+  assert.equal(respuesta.headers.get('ratelimit-remaining'), '0', 'el cubo de esta IP debe quedar a cero');
+  // El bloqueo se MANTIENE: no es un 429 suelto, la ventana sigue cerrada.
+  const otra = await intentoDeLogin();
+  assert.equal(otra.status, 429);
+  const body = await otra.json();
   assert.ok(body.error);
 });
 
-test('POST /api/cuenta/recuperar comparte el limitador de login (5/IP/15min) y ya esta agotado', async () => {
+test('POST /api/cuenta/recuperar comparte el limitador de login (5/IP/15min)', async () => {
   // cuenta.js monta limiterLogin (el mismo limitador de /api/login, no una
   // copia) en /recuperar y /recuperar/confirmar: son rutas PUBLICAS y con el
-  // mismo perfil de riesgo (fuerza bruta / enumeracion) que el login. Como
-  // express-rate-limit cuenta por IP (no por ruta), y el test anterior ya
-  // agoto la ventana de esta IP contra /api/login, esta peticion a
-  // /recuperar debe llegar YA bloqueada con 429 -- lo que demuestra que el
-  // limitador esta realmente activo en esta ruta (y no solo en login).
+  // mismo perfil de riesgo (fuerza bruta / enumeracion) que el login.
+  // La ventana se agota AQUI y solo contra /api/login, sin depender de lo que
+  // hayan hecho los tests anteriores. Como esta es la primera peticion del
+  // archivo a /recuperar, si el limitador de esa ruta fuera una instancia
+  // propia su contador estaria a cero y responderia 400; que responda 429
+  // demuestra que el contador es el mismo que el de /api/login.
+  await agotarLimiteDeLogin();
   const r = await fetch(`${BASE}/api/cuenta/recuperar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'no-es-un-correo' })
   });
-  assert.equal(r.status, 429);
+  assert.equal(r.status, 429, 'la primera peticion a /recuperar ya debe llegar bloqueada por el gasto hecho en /api/login');
+  // Y el que bloquea es el limitador de LOGIN (limite 5), no el general (100).
+  assert.equal(r.headers.get('ratelimit-limit'), String(LIMITE_LOGIN));
+  assert.equal(r.headers.get('ratelimit-remaining'), '0');
   const body = await r.json();
   assert.ok(body.error);
 });
