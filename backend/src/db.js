@@ -378,6 +378,15 @@ CREATE TABLE IF NOT EXISTS recordatorio_enviado (
   UNIQUE (clave, persona_id)
 );
 
+-- AVISOS DE SISTEMA: dedupe de avisos que NO pertenecen a ninguna iglesia ni a
+-- ninguna persona (hoy: "el respaldo no esta funcionando", que se manda al
+-- super-admin, cuenta de sistema con iglesia_id NULL). No se reutiliza
+-- recordatorio_enviado porque su iglesia_id es NOT NULL y aqui no hay iglesia.
+CREATE TABLE IF NOT EXISTS aviso_sistema (
+  clave  TEXT PRIMARY KEY,
+  fecha  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- EQUIPO DE MUSICA (Fase 4.5): quien toca que en un evento.
 --  El lider de musica arma el equipo; el pastor/otros solo observan.
 CREATE TABLE IF NOT EXISTS equipo_musica (

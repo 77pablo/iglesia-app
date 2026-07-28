@@ -12,6 +12,7 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import db from './db.js';
 
 // Umbrales del spec (docs/superpowers/specs/2026-07-28-indicador-persistencia-design.md).
 export const UMBRAL_RETRASO_SEG = 15 * 60;   // el retraso normal se mide en segundos
@@ -223,4 +224,44 @@ export async function estadoPersistencia() {
   const ttlMs = esArrancando(valor) ? CACHE_ARRANCANDO_MS : CACHE_MS;
   cache = { ts: Date.now(), valor, ttlMs };
   return valor;
+}
+
+// ============================================================
+//  AVISO: cuando el respaldo esta MAL, notificar al super-admin.
+// ============================================================
+
+// Avisa al super-admin cuando el respaldo esta MAL. Solo 'mal': 'desconocido'
+// es "no pude comprobarlo" y avisar por un corte de red de tres segundos es el
+// ruido que hace que las alarmas se aprendan a ignorar.
+// Devuelve cuantas notificaciones creo (0 si ya se aviso hoy).
+export function avisarSiMal(estado, hoy = new Date().toISOString().slice(0, 10)) {
+  if (!estado) return 0;
+  if (estado.bd.estado !== 'mal' && estado.uploads.estado !== 'mal') return 0;
+
+  const ins = db.prepare('INSERT OR IGNORE INTO aviso_sistema (clave) VALUES (?)')
+    .run('persistencia:mal:' + hoy);
+  if (ins.changes === 0) return 0;   // ya se aviso hoy
+
+  const partes = [];
+  if (estado.bd.estado === 'mal') partes.push('la base de datos');
+  if (estado.uploads.estado === 'mal') partes.push('los archivos subidos');
+  const texto = `No se está respaldando ${partes.join(' ni ')}. `
+    + 'Si el servicio se reinicia ahora, esos datos se pierden. '
+    + 'Revisa las variables R2_* y LITESTREAM_* en Render.';
+
+  const admins = db.prepare("SELECT id FROM persona WHERE rol_global = 'super_admin' AND activo = 1").all();
+  const st = db.prepare("INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?, 'sistema', ?, ?)");
+  for (const a of admins) st.run(a.id, '⚠️ El respaldo no está funcionando', texto);
+  return admins.length;
+}
+
+// Dispara la comprobacion y olvida. Mismo patron que generarRecordatoriosThrottled:
+// se llama desde /api/me, asi que cualquier trafico en la app comprueba el respaldo.
+let ultimaVigilancia = 0;
+export function vigilarPersistenciaThrottled() {
+  if (Date.now() - ultimaVigilancia < CACHE_MS) return;
+  ultimaVigilancia = Date.now();
+  estadoPersistencia()
+    .then(e => { try { avisarSiMal(e); } catch (err) { console.error('[persistencia]', err.message); } })
+    .catch(err => console.error('[persistencia]', err.message));
 }
