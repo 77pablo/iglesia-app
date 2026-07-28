@@ -1,14 +1,35 @@
 // ============================================================
 //  Seguridad: rate limiting + validacion de entrada (Fase 6)
-//  - Limitadores de peticiones por IP (express-rate-limit).
+//  - Limitadores de peticiones por persona (o por IP si no hay sesion).
 //  - Middleware reutilizable validar(schema) con zod: valida
 //    req.body/query/params y responde 400 + loguea el rechazo.
 //  Todo el logging usa el prefijo [seguridad] y NUNCA vuelca
 //  contrasenas, tokens ni datos personales completos.
 // ============================================================
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { verificarToken } from './auth.js';
 
 const QUINCE_MIN = 15 * 60 * 1000;
+
+// --- A quien se le cuenta cada peticion ---
+// Por IP a secas, toda una congregacion detras del mismo router (el wifi del
+// templo, una casa) comparte una unica cuota y se bloquean entre si sin haber
+// hecho nada raro. Con sesion iniciada se cuenta por PERSONA; el trafico
+// anonimo (login, registro, recuperar clave) se sigue contando por IP, que es
+// justo donde el limite protege de un ataque.
+//
+// El token se VERIFICA, no solo se lee: si bastara con leerlo, cualquiera
+// inventaria persona_id distintos y se saltaria el limite por completo.
+export function claveLimitador(req) {
+  const cabecera = req.headers?.authorization || '';
+  if (cabecera.startsWith('Bearer ')) {
+    const payload = verificarToken(cabecera.slice(7));
+    if (payload?.persona_id) return 'persona:' + payload.persona_id;
+  }
+  // ipKeyGenerator agrupa IPv6 por prefijo /56: sin eso, cambiar de sufijo
+  // (cosa trivial en IPv6) daria cuota infinita.
+  return 'ip:' + ipKeyGenerator(req.ip);
+}
 
 // Los limitadores se SALTAN solo cuando el arnes de pruebas lo pide
 // (DISABLE_RATE_LIMIT=1). En produccion NUNCA se define esa variable, asi que
@@ -17,15 +38,18 @@ const QUINCE_MIN = 15 * 60 * 1000;
 const saltarEnTest = () => process.env.DISABLE_RATE_LIMIT === '1';
 
 // --- Limitador general: aplica a todo /api ---
+// Cuenta por persona cuando hay sesion (ver claveLimitador): antes, una iglesia
+// entera en el mismo wifi compartia estas 100 peticiones.
 export const limiterGeneral = rateLimit({
   windowMs: QUINCE_MIN,
   limit: 100,
   skip: saltarEnTest,
+  keyGenerator: claveLimitador,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Demasiadas peticiones desde esta IP. Intenta de nuevo en unos minutos.' },
+  message: { error: 'Demasiadas peticiones. Intenta de nuevo en unos minutos.' },
   handler: (req, res, next, options) => {
-    console.warn(`[seguridad] rate-limit general excedido: ip=${req.ip} ruta=${req.method} ${req.originalUrl}`);
+    console.warn(`[seguridad] rate-limit general excedido: clave=${claveLimitador(req)} ruta=${req.method} ${req.originalUrl}`);
     res.status(options.statusCode).json(options.message);
   }
 });
@@ -45,15 +69,18 @@ export const limiterLogin = rateLimit({
 });
 
 // --- Limitador de endpoints sensibles: admin, tesoreria, upload ---
+// Tambien por persona: dos administradores de la misma iglesia trabajando a la
+// vez no deben gastarse el cupo el uno al otro.
 export const limiterSensible = rateLimit({
   windowMs: QUINCE_MIN,
   limit: 10,
   skip: saltarEnTest,
+  keyGenerator: claveLimitador,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones a un recurso sensible. Intenta de nuevo en unos minutos.' },
   handler: (req, res, next, options) => {
-    console.warn(`[seguridad] rate-limit sensible excedido: ip=${req.ip} ruta=${req.method} ${req.originalUrl}`);
+    console.warn(`[seguridad] rate-limit sensible excedido: clave=${claveLimitador(req)} ruta=${req.method} ${req.originalUrl}`);
     res.status(options.statusCode).json(options.message);
   }
 });
@@ -66,11 +93,12 @@ export const limiterSensible = rateLimit({
 export const limiterChat = rateLimit({
   windowMs: QUINCE_MIN,
   limit: 1000,
+  keyGenerator: claveLimitador,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiada actividad de mensajeria. Espera unos segundos.' },
   handler: (req, res, next, options) => {
-    console.warn(`[seguridad] rate-limit chat excedido: ip=${req.ip} ruta=${req.method} ${req.originalUrl}`);
+    console.warn(`[seguridad] rate-limit chat excedido: clave=${claveLimitador(req)} ruta=${req.method} ${req.originalUrl}`);
     res.status(options.statusCode).json(options.message);
   },
   skip: (req) => saltarEnTest() || req.path === '/stream'

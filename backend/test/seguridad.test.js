@@ -154,3 +154,31 @@ test('POST /api/cuenta/recuperar comparte el limitador de login (5/IP/15min) y y
   const body = await r.json();
   assert.ok(body.error);
 });
+
+test('el limitador general cuenta por PERSONA: agotar la cuota de una no bloquea a otra desde la misma IP', async () => {
+  // Prueba de integracion del keyGenerator: no basta con que claveLimitador()
+  // devuelva la clave correcta (eso ya lo cubre rate-limit-por-persona.test.js),
+  // hay que verificar que express-rate-limit la esta usando de verdad.
+  const { DatabaseSync } = await import('node:sqlite');
+  const jwt = (await import('jsonwebtoken')).default;
+  const db = new DatabaseSync(DB_PATH, { readOnly: true });
+  const personas = db.prepare(
+    'SELECT id, iglesia_id FROM persona WHERE activo = 1 AND iglesia_id IS NOT NULL ORDER BY id LIMIT 2'
+  ).all();
+  db.close();
+  assert.equal(personas.length, 2, 'la siembra debe dejar al menos dos personas activas');
+
+  const SECRETO = 'secreto-de-pruebas-no-usar-en-produccion';
+  const tokenDe = (p) => jwt.sign({ persona_id: p.id, iglesia_id: p.iglesia_id }, SECRETO, { expiresIn: '1h' });
+  const pedirComo = (token) => fetch(`${BASE}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+
+  // Se agota la cuota de la primera persona (limite general: 100 / 15 min).
+  const tokenA = tokenDe(personas[0]);
+  let ultimo;
+  for (let i = 0; i < 101; i++) ultimo = (await pedirComo(tokenA)).status;
+  assert.equal(ultimo, 429, 'la persona que supera su cuota debe recibir 429');
+
+  // La segunda persona, desde la MISMA IP, sigue trabajando sin problemas.
+  const res = await pedirComo(tokenDe(personas[1]));
+  assert.equal(res.status, 200, 'otra persona tras la misma IP no debe heredar el bloqueo');
+});
