@@ -565,6 +565,11 @@ agregarColumna('anuncio', 'grupo_id', 'INTEGER');
 agregarColumna('anuncio', 'rol', 'TEXT');
 // MOVIMIENTO: comprobante (voucher) en foto/archivo, para transparencia total
 agregarColumna('movimiento', 'comprobante_url', 'TEXT');
+// EVENTO_ORG_COSA: quien se comprometio a traer esta cosa (Organizacion v2).
+//  responsable_id: persona de la MISMA iglesia y activa al momento de asignar.
+//  asignada_en: cuando se asigno; de ahi se apoya el "no volver a avisar".
+agregarColumna('evento_org_cosa', 'responsable_id', 'INTEGER REFERENCES persona(id)');
+agregarColumna('evento_org_cosa', 'asignada_en', 'TEXT');
 // GRUPO: carpeta de Google Drive vinculada por el líder (compartir archivos/fotos)
 agregarColumna('grupo', 'drive_url', 'TEXT');
 // PERSONA: Directorio de miembros + cumpleaños — foto y toggles de privacidad

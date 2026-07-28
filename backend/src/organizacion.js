@@ -30,7 +30,15 @@ function puedeEditarOrg(personaId, org) {
 // Arma la hoja completa (cosas + gastos + total + evento) a partir de su row.
 // total_gastado NUNCA se persiste: se recalcula al leer, asi no queda descuadrado.
 function armarHoja(org) {
-  const cosas = db.prepare('SELECT id, nombre, cantidad, listo, orden FROM evento_org_cosa WHERE org_id = ? ORDER BY orden, id').all(org.id);
+  // LEFT JOIN (no INNER): una cosa sin responsable debe seguir apareciendo.
+  // responsable_activo permite avisar en la hoja "cuenta inactiva - reasignar"
+  // sin borrar el dato a espaldas del lider.
+  const cosas = db.prepare(
+    `SELECT c.id, c.nombre, c.cantidad, c.listo, c.orden, c.responsable_id,
+            p.nombre AS responsable_nombre, p.activo AS responsable_activo
+       FROM evento_org_cosa c LEFT JOIN persona p ON p.id = c.responsable_id
+      WHERE c.org_id = ? ORDER BY c.orden, c.id`
+  ).all(org.id);
   const gastos = db.prepare('SELECT id, concepto, monto, creado_en FROM evento_org_gasto WHERE org_id = ? ORDER BY id').all(org.id);
   const total = db.prepare('SELECT COALESCE(SUM(monto),0) AS t FROM evento_org_gasto WHERE org_id = ?').get(org.id).t;
   const evento = org.evento_id
