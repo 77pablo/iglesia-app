@@ -15,7 +15,7 @@ import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware } from './auth.js';
 import { enviarPush } from './push.js';
-import { validar } from './seguridad.js';
+import { validar, zRutaSubidaOpcional } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -99,7 +99,9 @@ const perfilSchema = z.object({
   email: z.string().trim().max(200).optional(),
   cumple: z.string().trim().refine(v => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v),
     'la fecha debe ser YYYY-MM-DD o vacia').optional(),
-  foto_url: z.string().trim().max(1000).optional(),
+  // La foto de perfil se sube por /api/upload. Aceptar cualquier host permitia
+  // apuntarla a un servidor ajeno que registra a todo el que abre el directorio.
+  foto_url: zRutaSubidaOpcional(1000).optional(),
   mostrar_telefono: z.coerce.number().int().min(0).max(1).optional(),
   mostrar_email: z.coerce.number().int().min(0).max(1).optional()
 });

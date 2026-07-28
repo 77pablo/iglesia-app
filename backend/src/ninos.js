@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderEdOPastor, esLiderEdEstricto, esObispo, auditar } from './auth.js';
-import { validar } from './seguridad.js';
+import { validar, zRutaSubidaOpcional } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -74,7 +74,9 @@ const materialSchema = z.object({
   titulo: z.string().trim().min(1, 'falta el titulo'),
   fecha: z.string().trim().optional(),
   versiculo: z.string().trim().optional(),
-  material_url: z.string().trim().optional()
+  // El documento de la leccion se sube por /api/upload; el formulario manda ''
+  // cuando la leccion no lleva material.
+  material_url: zRutaSubidaOpcional(1000).optional()
 });
 r.post('/material', soloEncargado, validar(materialSchema), (req, res) => {
   const { clase_id, fecha, titulo, versiculo, material_url } = req.body;

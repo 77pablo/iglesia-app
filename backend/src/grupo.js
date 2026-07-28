@@ -9,7 +9,7 @@ import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esEncargadoGrupo, esPastor, auditar } from './auth.js';
 import { enviarPush } from './push.js';
-import { validar } from './seguridad.js';
+import { validar, motivoUrlRecursoInvalida } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -123,10 +123,19 @@ r.get('/:gid/recursos', (req, res) => {
   if (!puedeVer(req.user.persona_id, g.id)) return res.status(403).json({ error: 'No perteneces a este grupo' });
   res.json(db.prepare('SELECT id, tipo, titulo, url, creado_en FROM recurso_grupo WHERE grupo_id = ? ORDER BY creado_en DESC').all(g.id));
 });
+// Un recurso es de UNA de estas dos clases, y cada una se valida distinto:
+//  - tipo 'archivo': salio de /api/upload -> solo ruta interna /uploads/...
+//  - tipo 'link'   : es un enlace EXTERNO a proposito (YouTube, Drive; la
+//                    funcion documentada en ESTADO.md 4.7). Exigirle /uploads/
+//                    la romperia; se le exige el esquema http/https, que es lo
+//                    que cierra javascript:/data:/file:.
 const recursoSchema = z.object({
   tipo: z.string().trim().optional(),
   titulo: z.string().trim().min(1, 'falta el titulo'),
-  url: z.string().trim().min(1, 'falta el enlace/archivo')
+  url: z.string().trim().min(1, 'falta el enlace/archivo').max(2000)
+}).superRefine((val, ctx) => {
+  const motivo = motivoUrlRecursoInvalida(val.tipo === 'archivo' ? 'archivo' : 'link', val.url);
+  if (motivo) ctx.addIssue({ code: 'custom', path: ['url'], message: motivo });
 });
 r.post('/:gid/recursos', validar(recursoSchema), (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);

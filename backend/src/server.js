@@ -142,15 +142,73 @@ app.use(express.static(webDir));
 const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
 fs.mkdirSync(uploadsDir, { recursive: true });
 
-// Solo se permiten tipos de archivo seguros (documentos / imagenes), nunca ejecutables.
+// Solo se permiten tipos de archivo seguros (documentos / imagenes), nunca
+// ejecutables. La comprobacion es en TRES capas, porque la extension sola no
+// prueba nada (renombrar un .exe a .png es trivial):
+//   1) EXTENSION en lista blanca (el nombre que manda el cliente).
+//   2) MIME declarado coherente con esa extension (tampoco es de fiar por si
+//      solo — tambien lo elige el cliente — pero obliga a mentir dos veces).
+//   3) MAGIC BYTES del archivo ya escrito en disco, para los formatos con
+//      firma reconocible. Esta es la unica capa que mira el CONTENIDO real.
 const EXT_PERMITIDAS = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.png', '.jpg', '.jpeg', '.gif', '.txt'];
+
+// Extension -> MIME(s) que un navegador puede declarar legitimamente.
+// Los formatos de Office admiten ademas 'application/octet-stream': en equipos
+// donde el tipo no esta registrado en el sistema, el navegador manda ese
+// generico y, sin esta concesion, subir un .docx fallaria en maquinas reales.
+const MIME_POR_EXT = {
+  '.pdf':  ['application/pdf'],
+  '.png':  ['image/png'],
+  '.jpg':  ['image/jpeg', 'image/pjpeg'],
+  '.jpeg': ['image/jpeg', 'image/pjpeg'],
+  '.gif':  ['image/gif'],
+  '.txt':  ['text/plain'],
+  '.doc':  ['application/msword', 'application/octet-stream'],
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/octet-stream'],
+  '.ppt':  ['application/vnd.ms-powerpoint', 'application/octet-stream'],
+  '.pptx': ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/octet-stream']
+};
+
+// Firmas (magic bytes) de los formatos que SI se pueden verificar de verdad.
+// Lo que NO esta aqui (.txt, .doc, .docx, .ppt, .pptx) queda cubierto solo por
+// extension + MIME, y es a proposito: .txt no tiene firma ninguna, y .doc/.ppt
+// (OLE2) y .docx/.pptx (un ZIP) comparten su cabecera con muchisimos otros
+// formatos, asi que comprobarla daria una sensacion de seguridad falsa sin
+// distinguir un documento de Office de cualquier otro contenedor. No se
+// inventan verificaciones que no prueban nada.
+const FIRMAS = {
+  '.pdf':  [[0x25, 0x50, 0x44, 0x46, 0x2d]],                          // '%PDF-'
+  '.png':  [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
+  '.jpg':  [[0xff, 0xd8, 0xff]],
+  '.jpeg': [[0xff, 0xd8, 0xff]],
+  '.gif':  [[0x47, 0x49, 0x46, 0x38, 0x37, 0x61],                     // 'GIF87a'
+            [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]]                     // 'GIF89a'
+};
+
+// ¿El contenido real del archivo empieza por la firma de su extension?
+// Si la extension no tiene firma conocida, no se puede afirmar nada: se acepta.
+function contenidoCoincideConExtension(rutaArchivo, ext) {
+  const firmas = FIRMAS[ext];
+  if (!firmas) return true;
+  const maxLargo = Math.max(...firmas.map(f => f.length));
+  const buf = Buffer.alloc(maxLargo);
+  let leidos = 0;
+  const fd = fs.openSync(rutaArchivo, 'r');
+  try { leidos = fs.readSync(fd, buf, 0, maxLargo, 0); } finally { fs.closeSync(fd); }
+  return firmas.some(f => leidos >= f.length && f.every((b, i) => buf[i] === b));
+}
+
 const upload = multer({
   dest: uploadsDir,
   limits: { fileSize: 10 * 1024 * 1024 },   // 10 MB maximo
   fileFilter: (req, file, cb) => {
     const ext = (path.extname(file.originalname) || '').toLowerCase();
-    if (EXT_PERMITIDAS.includes(ext)) return cb(null, true);
-    cb(new Error('Tipo de archivo no permitido'));
+    if (!EXT_PERMITIDAS.includes(ext)) return cb(new Error('Tipo de archivo no permitido'));
+    // El MIME que declara el cliente tiene que cuadrar con la extension.
+    const mime = String(file.mimetype || '').split(';')[0].trim().toLowerCase();
+    if (!(MIME_POR_EXT[ext] || []).includes(mime))
+      return cb(new Error('El tipo declarado del archivo no coincide con su extensión'));
+    cb(null, true);
   }
 });
 // Sirve adjuntos forzando descarga (evita ejecutar/renderizar contenido en el navegador).
@@ -160,9 +218,33 @@ app.use('/uploads', express.static(uploadsDir, {
 // Endpoint sensible: 10 req/IP cada 15 min (subida de archivos).
 app.post('/api/upload', authMiddleware, limiterSensible, (req, res) => {
   upload.single('archivo')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message || 'No se pudo subir el archivo' });
+    if (err) {
+      // Mensajes propios y de multer: ninguno incluye rutas del servidor.
+      const msg = err.code === 'LIMIT_FILE_SIZE'
+        ? 'El archivo supera el máximo de 10 MB'
+        : (err.message || 'No se pudo subir el archivo');
+      return res.status(400).json({ error: msg });
+    }
     if (!req.file) return res.status(400).json({ error: 'No se subió archivo' });
     const ext = (path.extname(req.file.originalname) || '').toLowerCase();
+
+    // Tercera capa: los magic bytes del archivo YA ESCRITO. multer con `dest`
+    // guarda primero y pregunta despues, asi que si el contenido no cuadra hay
+    // que borrar el temporal a mano — si no, el ejecutable disfrazado se queda
+    // en la carpeta de subidas aunque el cliente reciba un 400.
+    let coincide;
+    try {
+      coincide = contenidoCoincideConExtension(req.file.path, ext);
+    } catch (e) {
+      console.error('[upload] no se pudo leer el archivo subido:', e.message);
+      coincide = false;
+    }
+    if (!coincide) {
+      try { fs.unlinkSync(req.file.path); } catch { /* si ya no esta, mejor */ }
+      console.warn(`[seguridad] subida rechazada: el contenido no corresponde a ${ext} (persona=${req.user.persona_id})`);
+      return res.status(400).json({ error: 'El contenido del archivo no corresponde a su extensión' });
+    }
+
     const nuevo = req.file.filename + ext;
     fs.renameSync(req.file.path, path.join(uploadsDir, nuevo));
     res.json({ ok: true, url: '/uploads/' + nuevo, nombre: req.file.originalname });

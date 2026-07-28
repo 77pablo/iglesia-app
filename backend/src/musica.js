@@ -6,7 +6,7 @@ import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esLiderMusicaEstricto, esDelMinisterioMusica, auditar } from './auth.js';
 import { enviarPush } from './push.js';
-import { validar } from './seguridad.js';
+import { validar, zEnlaceExternoOpcional, esRutaSubida, MSG_RUTA_SUBIDA } from './seguridad.js';
 
 const SOLO_LIDER = 'Solo el líder de música puede editar (el pastor solo observa).';
 
@@ -18,11 +18,15 @@ r.get('/canciones', (req, res) => {
   res.json(db.prepare('SELECT * FROM cancion WHERE iglesia_id = ? ORDER BY titulo').all(req.user.iglesia_id));
 });
 
+// `enlace` es un ENLACE EXTERNO a proposito (el video/audio de la cancion en
+// YouTube, Spotify…): no se restringe a /uploads/, solo se le exige el
+// esquema http/https para que no entre un javascript: que se dispare al
+// pinchar la cancion.
 const cancionSchema = z.object({
   titulo: z.string().trim().min(1, 'falta el titulo'),
   autor: z.string().trim().optional(),
   tono: z.string().trim().optional(),
-  enlace: z.string().trim().optional(),
+  enlace: zEnlaceExternoOpcional(1000).optional(),
   letra: z.string().trim().optional()
 });
 r.post('/canciones', validar(cancionSchema), (req, res) => {
@@ -40,7 +44,7 @@ const editarCancionSchema = z.object({
   titulo: z.string().trim().optional(),
   autor: z.string().trim().optional(),
   tono: z.string().trim().optional(),
-  enlace: z.string().trim().optional(),
+  enlace: zEnlaceExternoOpcional(1000).optional(),   // externo a proposito (ver arriba)
   letra: z.string().trim().optional()
 });
 r.patch('/canciones/:id', validar(editarCancionSchema), (req, res) => {
@@ -234,9 +238,14 @@ r.get('/material', (req, res) => {
 });
 
 // Subir/compartir material: cualquier integrante del ministerio de música.
+// El material/partitura se sube por /api/upload (web/app.js: uploadArchivo),
+// asi que solo se admite la ruta interna. NOTA: el himnario de respaldo vive en
+// /assets/ y NO entra por aqui — lo inserta db.js directamente en la BD al
+// arrancar, no el cliente.
 const materialSchema = z.object({
   titulo: z.string().trim().min(1, 'falta el titulo'),
-  archivo_url: z.string().trim().min(1, 'falta el archivo')
+  archivo_url: z.string().trim().min(1, 'falta el archivo').max(1000)
+    .refine(esRutaSubida, MSG_RUTA_SUBIDA)
 });
 r.post('/material', validar(materialSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, auditar, puedeIniciarChatCon, verificarToken } from './auth.js';
-import { validar } from './seguridad.js';
+import { validar, esRutaSubida, MSG_RUTA_SUBIDA } from './seguridad.js';
 import { enviarPush } from './push.js';
 import { emitir, estaConectada, registrar } from './sse.js';
 
@@ -93,9 +93,15 @@ r.post('/directo', validar(directoSchema), (req, res) => {
 // texto y adjunto son ambos opcionales por separado (se puede mandar solo un
 // archivo, con texto vacio); que no vengan ni uno ni otro lo sigue resolviendo
 // el handler con su 400 de "El mensaje esta vacio".
+// El adjunto SIEMPRE sale de /api/upload (web/app.js: uploadArchivo), asi que
+// solo puede ser una ruta interna /uploads/<archivo>. Antes se guardaba
+// cualquier host: se podia mandar al chat de la iglesia un "archivo" que en
+// realidad era un enlace a un servidor ajeno. null/ausente/'' = sin adjunto.
+const adjuntoUrlOpcional = textoOpcional
+  .refine(v => v == null || String(v).trim() === '' || esRutaSubida(v), MSG_RUTA_SUBIDA);
 const enviarMensajeSchema = z.object({
   texto: textoOpcional,
-  adjunto_url: textoOpcional,
+  adjunto_url: adjuntoUrlOpcional,
   adjunto_tipo: textoOpcional
 });
 r.post('/conversacion/:id', validar(enviarMensajeSchema), (req, res) => {

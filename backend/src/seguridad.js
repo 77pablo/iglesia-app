@@ -7,6 +7,7 @@
 //  contrasenas, tokens ni datos personales completos.
 // ============================================================
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { z } from 'zod';
 import { verificarToken } from './auth.js';
 
 const QUINCE_MIN = 15 * 60 * 1000;
@@ -121,4 +122,84 @@ export function validar(schema, fuente = 'body') {
     req[fuente] = resultado.data;
     next();
   };
+}
+
+// ============================================================
+//  URLs que llegan del cliente
+//  Hay DOS clases de campo-URL en la app y NO se validan igual:
+//
+//   1) RUTA SUBIDA — el campo guarda un archivo subido a ESTA app por
+//      /api/upload (adjunto_url del chat, comprobante_url de tesoreria,
+//      foto_url del perfil, material de musica/ninos, recursos "archivo").
+//      Antes se aceptaba cualquier host: bastaba un POST/PATCH a mano para
+//      dejar el "comprobante" o la foto de perfil apuntando a un servidor
+//      ajeno (que registra quien la abre, o sirve otra cosa distinta a la
+//      que la iglesia cree tener guardada). Ahora solo se admite una ruta
+//      interna /uploads/<archivo>.
+//
+//   2) ENLACE EXTERNO — el campo existe justo para apuntar fuera: los
+//      recursos de grupo y de predica tipo 'link' (YouTube, Drive; funcion
+//      documentada en ESTADO.md 4.7), la carpeta de Drive del grupo y el
+//      enlace de una cancion. Exigirles /uploads/ romperia la funcion, asi
+//      que lo que se exige es el ESQUEMA: solo http/https. Eso cierra
+//      javascript:, data:, file: y vbscript:, que es por donde se cuela un
+//      XSS al pinchar el enlace desde la lista de recursos.
+// ============================================================
+
+export const MSG_RUTA_SUBIDA = 'debe ser un archivo subido a la app (/uploads/...)';
+export const MSG_ENLACE_EXTERNO = 'pega un enlace que empiece por http:// o https://';
+
+const PREFIJO_SUBIDA = '/uploads/';
+// Cualquier "algo:" al principio. Se usa para el unico campo de texto libre
+// que ademas puede traer un enlace (la referencia de un recurso tipo 'libro').
+const ESQUEMA_PELIGROSO = /^\s*(javascript|data|vbscript|file|blob)\s*:/i;
+
+// ¿Es una ruta a un archivo subido a esta app?
+// Se exige el prefijo /uploads/, que haya nombre de archivo, y que no haya
+// forma de trepar fuera de la carpeta (ni con '..' literal ni percent-encoded,
+// ni con la barra invertida de Windows).
+export function esRutaSubida(v) {
+  const s = String(v ?? '').trim();
+  if (!s.startsWith(PREFIJO_SUBIDA)) return false;
+  if (s.length === PREFIJO_SUBIDA.length) return false;   // '/uploads/' a secas no apunta a nada
+  if (s.includes('\\')) return false;
+  let decodificada = s;
+  try { decodificada = decodeURIComponent(s); } catch { return false; }   // %ZZ y demas: fuera
+  return !decodificada.includes('..') && !decodificada.includes('\\');
+}
+
+// ¿Es un enlace externo aceptable? Solo http/https, y con host de verdad.
+export function esEnlaceExterno(v) {
+  const s = String(v ?? '').trim();
+  let u;
+  try { u = new URL(s); } catch { return false; }
+  return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname;
+}
+
+export function tieneEsquemaPeligroso(v) {
+  return ESQUEMA_PELIGROSO.test(String(v ?? ''));
+}
+
+// --- Piezas zod reutilizables ---
+// Ambas admiten '' porque los formularios del frontend mandan la cadena vacia
+// cuando no se adjunto nada (ver web/app.js: comprobante_url, material_url…).
+
+export const zRutaSubidaOpcional = (max = 1000) => z.string().trim().max(max)
+  .refine(v => v === '' || esRutaSubida(v), MSG_RUTA_SUBIDA);
+
+export const zEnlaceExternoOpcional = (max = 1000) => z.string().trim().max(max)
+  .refine(v => v === '' || esEnlaceExterno(v), MSG_ENLACE_EXTERNO);
+
+// Comprueba la url de un recurso mixto (grupo/predica), donde el campo `tipo`
+// decide de que clase es. Devuelve el mensaje de error, o null si esta bien.
+//  - 'archivo' -> salio de /api/upload: ruta interna obligatoria.
+//  - 'libro'   -> es una REFERENCIA de texto libre ("Comentario de Juan"),
+//                 no una URL: solo se le cierra el esquema peligroso.
+//  - 'link'    -> enlace externo a proposito: http/https.
+export function motivoUrlRecursoInvalida(tipo, url) {
+  const s = String(url ?? '').trim();
+  if (s === '') return null;                       // recurso sin enlace: lo permite el esquema
+  if (tipo === 'archivo') return esRutaSubida(s) ? null : MSG_RUTA_SUBIDA;
+  if (tipo === 'libro') return tieneEsquemaPeligroso(s) ? MSG_ENLACE_EXTERNO : null;
+  return esEnlaceExterno(s) ? null : MSG_ENLACE_EXTERNO;
 }

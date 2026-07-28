@@ -8,7 +8,7 @@ import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, esPredicador, auditar } from './auth.js';
 import { enviarPush } from './push.js';
-import { validar } from './seguridad.js';
+import { validar, motivoUrlRecursoInvalida } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -83,10 +83,21 @@ r.delete('/:id', soloPredicador, (req, res) => {
 });
 
 // ---------- RECURSOS DE UNA PRÉDICA (links / archivos / libros) ----------
+// Tres clases de recurso, tres reglas distintas para su `url`:
+//  - 'archivo': subido por /api/upload -> solo ruta interna /uploads/...
+//  - 'link'   : enlace EXTERNO a proposito (video del sermon, Drive) -> http/https.
+//  - 'libro'  : es una REFERENCIA de texto libre ("Comentario de Juan
+//               (Hendriksen)"), no una URL: no se le puede exigir esquema sin
+//               romper la funcion; solo se le cierran javascript:/data:/file:.
+// La url vacia sigue valiendo (un recurso puede no llevar enlace).
 const recursoPredicaSchema = z.object({
   tipo: z.string().trim().optional(),
   titulo: z.string().trim().min(1, 'falta el titulo'),
-  url: z.string().trim().optional()
+  url: z.string().trim().max(2000).optional()
+}).superRefine((val, ctx) => {
+  const tipo = ['link', 'archivo', 'libro'].includes(val.tipo) ? val.tipo : 'link';
+  const motivo = motivoUrlRecursoInvalida(tipo, val.url);
+  if (motivo) ctx.addIssue({ code: 'custom', path: ['url'], message: motivo });
 });
 r.post('/:id/recurso', soloPredicador, validar(recursoPredicaSchema), (req, res) => {
   const p = db.prepare('SELECT id FROM predica WHERE id = ? AND iglesia_id = ?').get(req.params.id, req.user.iglesia_id);

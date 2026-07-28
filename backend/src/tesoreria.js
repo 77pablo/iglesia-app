@@ -7,7 +7,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esTesoreroOPastor, esTesoreroEstricto, esObispo, auditar } from './auth.js';
-import { validar, limiterSensible } from './seguridad.js';
+import { validar, limiterSensible, zRutaSubidaOpcional } from './seguridad.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -60,7 +60,10 @@ const movimientoSchema = z.object({
   // Sin este formato, un string cualquiera pasaba a SQLite y strftime()
   // devolvia NULL, rompiendo los totales mensuales (resumen/reportes).
   fecha: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha invalida').optional().or(z.literal('')),
-  comprobante_url: z.string().trim().max(500).optional()
+  // El comprobante es una foto/PDF subido a la app (/api/upload), nunca un
+  // enlace a otro servidor: la transparencia de la iglesia no puede depender
+  // de un host ajeno que manana sirva otra cosa.
+  comprobante_url: zRutaSubidaOpcional(500).optional()
 });
 r.post('/movimientos', soloTesorero, limiterSensible, validar(movimientoSchema), (req, res) => {
   const { tipo, categoria, monto, descripcion, fecha, comprobante_url } = req.body;
