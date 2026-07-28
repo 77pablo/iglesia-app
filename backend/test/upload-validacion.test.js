@@ -174,6 +174,26 @@ test('POST /api/upload: .png con MIME de PDF -> 400 (extension y MIME no cuadran
   assert.equal(r.status, 400);
 });
 
+// El MIME lo pone el SISTEMA del que sube, no el navegador: en Windows sale del
+// registro, en Android del proveedor de archivos. Cuando no conoce la extension
+// manda 'application/octet-stream' = "no se lo que es". Rechazar eso dejaba a un
+// feligres sin poder subir su comprobante, con un mensaje incomprensible, aunque
+// el archivo fuera un PDF perfecto. Y no compraba seguridad: en los formatos con
+// firma es la firma la que decide, como fija el test siguiente.
+test('POST /api/upload: un PDF de verdad declarado como octet-stream entra (el sistema no siempre conoce el tipo)', async () => {
+  const r = await subir('partitura.pdf', PDF, 'application/octet-stream');
+  assert.equal(r.status, 200, 'un PDF valido no puede rechazarse por como lo etiquete el dispositivo');
+  const b = await r.json();
+  assert.match(b.url, /^\/uploads\//);
+});
+
+test('POST /api/upload: octet-stream NO es una puerta trasera: la firma sigue mandando', async () => {
+  const antes = archivosEnUploads();
+  const r = await subir('trampa.png', EJECUTABLE, 'application/octet-stream');
+  assert.equal(r.status, 400, 'admitir "no se que es" no puede dejar pasar un ejecutable');
+  assert.deepEqual(archivosEnUploads(), antes, 'no debe quedar ningun archivo nuevo');
+});
+
 test('POST /api/upload: un ejecutable renombrado a .png -> 400 y el temporal no queda en disco', async () => {
   const antes = archivosEnUploads();
   // Extension permitida y MIME coherente: solo los magic bytes lo delatan.

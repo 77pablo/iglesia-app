@@ -152,10 +152,7 @@ fs.mkdirSync(uploadsDir, { recursive: true });
 //      firma reconocible. Esta es la unica capa que mira el CONTENIDO real.
 const EXT_PERMITIDAS = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.png', '.jpg', '.jpeg', '.gif', '.txt'];
 
-// Extension -> MIME(s) que un navegador puede declarar legitimamente.
-// Los formatos de Office admiten ademas 'application/octet-stream': en equipos
-// donde el tipo no esta registrado en el sistema, el navegador manda ese
-// generico y, sin esta concesion, subir un .docx fallaria en maquinas reales.
+// Extension -> MIME(s) que un cliente puede declarar legitimamente.
 const MIME_POR_EXT = {
   '.pdf':  ['application/pdf'],
   '.png':  ['image/png'],
@@ -163,11 +160,21 @@ const MIME_POR_EXT = {
   '.jpeg': ['image/jpeg', 'image/pjpeg'],
   '.gif':  ['image/gif'],
   '.txt':  ['text/plain'],
-  '.doc':  ['application/msword', 'application/octet-stream'],
-  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/octet-stream'],
-  '.ppt':  ['application/vnd.ms-powerpoint', 'application/octet-stream'],
-  '.pptx': ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/octet-stream']
+  '.doc':  ['application/msword'],
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  '.ppt':  ['application/vnd.ms-powerpoint'],
+  '.pptx': ['application/vnd.openxmlformats-officedocument.presentationml.presentation']
 };
+
+// "No se lo que es". Este MIME no lo elige el navegador sino el SISTEMA de quien
+// sube: en Windows sale del registro, en Android del proveedor de archivos. Si la
+// extension no esta registrada ahi, llega esto — y rechazarlo dejaba sin subir su
+// comprobante a gente con un archivo perfectamente valido, con un mensaje que no
+// explica nada. Se admite para cualquier extension de la lista blanca porque no
+// es lo que sostiene la seguridad: en los formatos con firma manda la firma, y en
+// los demas el MIME lo controla el cliente igual que la extension, asi que
+// exigirlo no detiene a nadie que mienta a proposito.
+const MIME_DESCONOCIDO = 'application/octet-stream';
 
 // Firmas (magic bytes) de los formatos que SI se pueden verificar de verdad.
 // Lo que NO esta aqui (.txt, .doc, .docx, .ppt, .pptx) queda cubierto solo por
@@ -204,9 +211,10 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const ext = (path.extname(file.originalname) || '').toLowerCase();
     if (!EXT_PERMITIDAS.includes(ext)) return cb(new Error('Tipo de archivo no permitido'));
-    // El MIME que declara el cliente tiene que cuadrar con la extension.
+    // El MIME que declara el cliente tiene que cuadrar con la extension (o venir
+    // como "no se lo que es", que es honesto y no debe costarle la subida).
     const mime = String(file.mimetype || '').split(';')[0].trim().toLowerCase();
-    if (!(MIME_POR_EXT[ext] || []).includes(mime))
+    if (mime !== MIME_DESCONOCIDO && !(MIME_POR_EXT[ext] || []).includes(mime))
       return cb(new Error('El tipo declarado del archivo no coincide con su extensión'));
     cb(null, true);
   }

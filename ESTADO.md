@@ -379,7 +379,7 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 28 jul 2026, todo desplegado y 246 tests en verde)
+### 👉 POR DÓNDE RETOMAR (al 28 jul 2026, todo desplegado y 248 tests en verde)
 
 1. **Lo urgente no es código, es configuración en Render.** Confirmar las 4 variables `R2_*`/`LITESTREAM_*`: sin ellas la BD se borra en cada reinicio, y ya hay datos que duelen perder. Después `SMTP_USER`/`SMTP_PASS` (sin ellas nadie recupera su contraseña por correo) y `SUPERADMIN_PASSWORD`.
 2. ✅ ~~**Test intermitente sin resolver**~~ — **acoplamiento roto el 28 jul, pero el fallo original nunca se reprodujo** (0 de 15 corridas aisladas antes de tocar nada, y 20 réplicas instrumentadas en paralelo con trazas idénticas). Se encontraron dos fragilidades reales: (a) el comentario del test decía "ya se hicieron 2 peticiones de login" cuando son **3** —el limitador corre antes que zod, así que el test del body inválido también cuenta—, dejando una holgura de exactamente una petición; y (b) `BASE` usaba `localhost`, que resuelve a `::1` **y** a `127.0.0.1`, y con `autoSelectFamily` cada conexión compite entre ambas familias: **dos cubos distintos del mismo limitador** (medido: `127.0.0.1` → 401 con `remaining=4` mientras `[::1]` → 429 con `remaining=0`). Ahora el test lee `RateLimit-Limit` del servidor y pide en bucle hasta el 429, y usa la IP literal. ⚠️ **Si vuelve a fallar, la causa es una tercera que no se vio.**
