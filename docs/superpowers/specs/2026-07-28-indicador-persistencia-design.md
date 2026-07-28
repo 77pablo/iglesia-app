@@ -150,11 +150,33 @@ resolver.
 
 **El aviso vive en la base de datos cuya pérdida intenta prevenir.** Si la BD es
 efímera, el registro de "ya te avisé" se borra en cada reinicio, y en el plan
-free los reinicios son frecuentes. Se resuelve con deduplicación **por día**,
-reutilizando el mecanismo de `recordatorio_enviado` que ya usan los
-recordatorios: en el peor caso, un aviso al día en vez de uno por reinicio. No
-hay forma de hacerlo mejor sin almacenamiento externo, que es justo lo que falta
-cuando el indicador está en rojo.
+free los reinicios son frecuentes. Se resuelve con deduplicación **por día**: en
+el peor caso, un aviso al día en vez de uno por reinicio. No hay forma de hacerlo
+mejor sin almacenamiento externo, que es justo lo que falta cuando el indicador
+está en rojo.
+
+**Con una tabla propia, no con `recordatorio_enviado`.** El mecanismo de dedupe de
+los recordatorios parecía reutilizable, pero no lo es: su columna `iglesia_id` es
+`NOT NULL REFERENCES iglesia(id)`, y el super-admin es una cuenta de sistema con
+`iglesia_id = NULL`. El `INSERT` fallaría por restricción, y fallaría dentro del
+propio camino del aviso. Aflojar ese `NOT NULL` para acomodar un caso ajeno sería
+debilitar una garantía que hoy es correcta, así que se añade una tabla mínima:
+
+```sql
+CREATE TABLE IF NOT EXISTS aviso_sistema (
+  clave  TEXT PRIMARY KEY,
+  fecha  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+Sin `persona_id` ni `iglesia_id` a propósito: un aviso de sistema no pertenece a
+ninguna iglesia ni a ninguna persona en particular. La clave del día es
+`persistencia:mal:<YYYY-MM-DD>`, y el `INSERT OR IGNORE` que devuelve
+`changes === 0` es la señal de "ya se avisó hoy" — el mismo patrón que ya usa
+`recordatorios.js`, pero sobre una tabla que sí admite este caso.
+
+(La tabla `notificacion` sí acepta al super-admin: solo exige `persona_id`. El
+aviso en sí no tenía problema; el problema era solo el registro de dedupe.)
 
 **Canal:** hoy no hay `SMTP_*` ni `VAPID_*` configuradas, así que el único canal
 que funciona de verdad es el aviso dentro de la app. El diseño no cierra la
