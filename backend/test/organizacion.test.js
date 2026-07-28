@@ -300,6 +300,33 @@ test('borrar la hoja arrastra sus cosas y gastos (transacción con hijos)', asyn
   assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_gasto WHERE org_id = ?').get(id).n, 0);
 });
 
+// El índice único de evento_org(evento_id) es GLOBAL, no por iglesia. Si el INSERT
+// perezoso choca (fila de otra iglesia, o una hoja creada por otro proceso entre el
+// SELECT y el INSERT), el endpoint no debe responder 500 ni entregar la hoja ajena.
+test('hoja de evento: el choque del índice único no da 500 ni filtra la hoja ajena', async () => {
+  const b = await servidor();
+  const A = sembrarOrg('RACA');
+  const B = sembrarOrg('RACB');
+  const ev = db.prepare("INSERT INTO evento (iglesia_id, titulo, fecha) VALUES (?, 'Vigilia', '2026-09-01')").run(A.iglesiaId);
+  const eventoId = Number(ev.lastInsertRowid);
+  // Fila inconsistente: misma evento_id, pero colgando de la OTRA iglesia.
+  const ajena = db.prepare('INSERT INTO evento_org (iglesia_id, evento_id, titulo) VALUES (?,?,?)')
+    .run(B.iglesiaId, eventoId, 'Hoja ajena');
+  const ajenaId = Number(ajena.lastInsertRowid);
+
+  // El líder de A abre la hoja de SU evento: el SELECT (acotado a su iglesia) no la
+  // encuentra y el INSERT choca contra el índice único.
+  const res = await fetch(b + '/api/organizacion/evento/' + eventoId, { headers: { Authorization: 'Bearer ' + tok(A.liderId, A.iglesiaId) } });
+  assert.notEqual(res.status, 500, 'el choque del índice no debe reventar como 500');
+  if (res.status === 200) {
+    const hoja = await res.json();
+    assert.notEqual(hoja.id, ajenaId, 'nunca debe devolver la hoja de otra iglesia');
+    assert.equal(hoja.iglesia_id, A.iglesiaId);
+  }
+  // y la hoja ajena queda intacta
+  assert.equal(db.prepare('SELECT titulo FROM evento_org WHERE id = ?').get(ajenaId).titulo, 'Hoja ajena');
+});
+
 test('borrar el evento borra su hoja de organización (cascada)', async () => {
   const b = await servidor();
   const S = sembrarOrg('CASC');

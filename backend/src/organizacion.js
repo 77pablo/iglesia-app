@@ -68,10 +68,19 @@ r.get('/evento/:eventoId', (req, res) => {
   if (!ev) return res.status(404).json({ error: 'Evento no encontrado' });
   let org = db.prepare('SELECT * FROM evento_org WHERE evento_id = ? AND iglesia_id = ?').get(eventoId, req.user.iglesia_id);
   if (!org) {
-    const info = db.prepare('INSERT INTO evento_org (iglesia_id, evento_id, creado_por) VALUES (?,?,?)')
-      .run(req.user.iglesia_id, eventoId, req.user.persona_id);
-    org = db.prepare('SELECT * FROM evento_org WHERE id = ?').get(Number(info.lastInsertRowid));
-    auditar(req.user.iglesia_id, req.user.persona_id, 'crear_org', 'organizacion', 'evento ' + eventoId);
+    // El indice unico de evento_org(evento_id) es GLOBAL, no por iglesia: el INSERT
+    // puede chocar aunque el SELECT de arriba no encontrara nada (hoja creada por otro
+    // proceso, o fila inconsistente de otra iglesia). Se relee SIEMPRE acotado a la
+    // iglesia: nunca se devuelve la hoja de otra.
+    try {
+      const info = db.prepare('INSERT INTO evento_org (iglesia_id, evento_id, creado_por) VALUES (?,?,?)')
+        .run(req.user.iglesia_id, eventoId, req.user.persona_id);
+      org = db.prepare('SELECT * FROM evento_org WHERE id = ?').get(Number(info.lastInsertRowid));
+      auditar(req.user.iglesia_id, req.user.persona_id, 'crear_org', 'organizacion', 'evento ' + eventoId);
+    } catch {
+      org = db.prepare('SELECT * FROM evento_org WHERE evento_id = ? AND iglesia_id = ?').get(eventoId, req.user.iglesia_id);
+      if (!org) return res.status(409).json({ error: 'No se pudo abrir la hoja, intenta de nuevo' });
+    }
   }
   res.json({ ...armarHoja(org), puede_editar: puedeEditarOrg(req.user.persona_id, org) });
 });
