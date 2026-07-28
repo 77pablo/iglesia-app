@@ -100,6 +100,29 @@ export function generarRecordatorios(iglesiaId) {
     }
   }
 
+  // 3) Recordatorios de COSAS QUE TRAER (Organizacion): 1 dia antes, a quien se
+  // comprometio. La fecha sale del evento si la hoja cuelga de uno; si es una
+  // lista suelta, de su propia fecha. Sin fecha no hay contra que contar: se omite.
+  // Tampoco se recuerda lo que ya esta marcado como listo.
+  const cosas = db.prepare(
+    `SELECT c.id, c.nombre, c.cantidad, c.responsable_id,
+            COALESCE(e.fecha, o.fecha) AS fecha,
+            COALESCE(e.titulo, o.titulo) AS donde, o.hora_llegada
+       FROM evento_org_cosa c
+       JOIN evento_org o ON o.id = c.org_id
+       LEFT JOIN evento e ON e.id = o.evento_id
+      WHERE o.iglesia_id = ? AND c.responsable_id IS NOT NULL
+        AND c.listo = 0 AND COALESCE(e.fecha, o.fecha) IS NOT NULL`
+  ).all(iglesiaId);
+  for (const c of cosas) {
+    if (diasHasta(c.fecha) !== 1) continue;   // solo "mañana"
+    const clave = `org_cosa:${c.id}:dia-1`;
+    if (enviarRecordatorio(iglesiaId, c.responsable_id, clave,
+      `📦 Mañana: ${c.nombre} x${c.cantidad}`,
+      `No olvides llevar ${c.nombre} (x${c.cantidad}) a "${c.donde}"` +
+      (c.hora_llegada ? ` · llegar ${c.hora_llegada}` : '') + '.')) creados++;
+  }
+
   return creados;
 }
 

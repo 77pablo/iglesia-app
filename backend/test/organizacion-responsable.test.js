@@ -193,3 +193,37 @@ test('mis-cosas: exige sesion y no cruza iglesias', async () => {
   const res = await fetch(b + `/api/organizacion/mis-cosas/${cosaId}`, { method: 'PATCH', headers: authB, body: JSON.stringify({ listo: true }) });
   assert.equal(res.status, 403);
 });
+
+test('recordatorio: avisa el dia antes a quien trae algo, y una sola vez', async () => {
+  const b = await servidor();
+  const S = sembrar('RECO');
+  const { cosaId, auth } = await hojaConCosa(b, S);
+  const { generarRecordatorios } = await import('../src/recordatorios.js');
+
+  // La hoja es para mañana.
+  const manana = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
+  await fetch(b + '/api/organizacion/cosas/' + cosaId, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: S.feligresId }) });
+  db.prepare('UPDATE evento_org SET fecha = ? WHERE id = (SELECT org_id FROM evento_org_cosa WHERE id = ?)').run(manana, cosaId);
+
+  const recordatorios = () => db.prepare(
+    'SELECT COUNT(*) n FROM recordatorio_enviado WHERE persona_id = ? AND clave = ?'
+  ).get(S.feligresId, `org_cosa:${cosaId}:dia-1`).n;
+
+  generarRecordatorios(S.iglesiaId);
+  assert.equal(recordatorios(), 1, 'debe recordarle el dia antes');
+
+  // Correrlo de nuevo no duplica (dedupe por clave+persona).
+  generarRecordatorios(S.iglesiaId);
+  assert.equal(recordatorios(), 1);
+});
+
+test('recordatorio: no avisa si la hoja no tiene fecha ni evento', async () => {
+  const b = await servidor();
+  const S = sembrar('RECN');
+  const { cosaId, auth } = await hojaConCosa(b, S);
+  const { generarRecordatorios } = await import('../src/recordatorios.js');
+  await fetch(b + '/api/organizacion/cosas/' + cosaId, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: S.feligresId }) });
+  // La hoja se creo sin fecha: no hay contra que contar los dias.
+  generarRecordatorios(S.iglesiaId);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM recordatorio_enviado WHERE clave LIKE ?').get(`org_cosa:${cosaId}:%`).n, 0);
+});
