@@ -73,3 +73,60 @@ test('el esquema guarda responsable y la hoja lo devuelve con nombre y estado', 
   assert.equal(hoja.cosas[0].responsable_nombre, 'Feligres Juan');
   assert.equal(hoja.cosas[0].responsable_activo, 0);
 });
+
+test('asignar responsable: valida la persona, avisa una sola vez y permite desasignar', async () => {
+  const b = await servidor();
+  const S = sembrar('ASIG');
+  const { cosaId, auth } = await hojaConCosa(b, S);
+  const avisos = () => db.prepare("SELECT COUNT(*) n FROM notificacion WHERE persona_id = ? AND tipo = 'organizacion'").get(S.feligresId).n;
+
+  // Asignar a un feligres de la iglesia: 200 + aviso + asignada_en
+  let res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: S.feligresId }) });
+  assert.equal(res.status, 200);
+  const fila = db.prepare('SELECT responsable_id, asignada_en FROM evento_org_cosa WHERE id = ?').get(cosaId);
+  assert.equal(fila.responsable_id, S.feligresId);
+  assert.ok(fila.asignada_en, 'debe registrar cuando se asigno');
+  assert.equal(avisos(), 1);
+
+  // Re-mandar el MISMO responsable no vuelve a avisar (el lider edita la lista
+  // muchas veces mientras la arma; no se puede bombardear a la gente).
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: S.feligresId }) });
+  assert.equal(res.status, 200);
+  assert.equal(avisos(), 1);
+
+  // Cambiar el nombre de la cosa tampoco avisa, ni desasigna.
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ nombre: 'Jugos de naranja' }) });
+  assert.equal(res.status, 200);
+  assert.equal(avisos(), 1);
+  assert.equal(db.prepare('SELECT responsable_id FROM evento_org_cosa WHERE id = ?').get(cosaId).responsable_id, S.feligresId,
+    'un PATCH que no menciona responsable_id no debe desasignar');
+
+  // Desasignar con null explicito.
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: null }) });
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT responsable_id FROM evento_org_cosa WHERE id = ?').get(cosaId).responsable_id, null);
+});
+
+test('asignar responsable: rechaza personas de otra iglesia, inactivas o inexistentes', async () => {
+  const b = await servidor();
+  const A = sembrar('ASGA');
+  const B = sembrar('ASGB');
+  const { cosaId, auth } = await hojaConCosa(b, A);
+
+  // Persona de OTRA iglesia -> 400
+  let res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: B.feligresId }) });
+  assert.equal(res.status, 400);
+
+  // Persona inexistente -> 400
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: 999999 }) });
+  assert.equal(res.status, 400);
+
+  // Persona desactivada -> 400 (no se asigna a quien no puede entrar)
+  db.prepare('UPDATE persona SET activo = 0 WHERE id = ?').run(A.feligresId);
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: A.feligresId }) });
+  assert.equal(res.status, 400);
+  db.prepare('UPDATE persona SET activo = 1 WHERE id = ?').run(A.feligresId);
+
+  // Y la cosa quedo intacta
+  assert.equal(db.prepare('SELECT responsable_id FROM evento_org_cosa WHERE id = ?').get(cosaId).responsable_id, null);
+});

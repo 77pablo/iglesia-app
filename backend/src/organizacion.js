@@ -8,6 +8,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, esLiderOAdmin, auditar } from './auth.js';
+import { enviarPush } from './push.js';
 import { validar } from './seguridad.js';
 
 const r = Router();
@@ -173,20 +174,50 @@ r.post('/:id/cosas', validar(cosaSchema), (req, res) => {
 const editarCosaSchema = z.object({
   nombre: z.string().trim().min(1).optional(),
   cantidad: z.coerce.number().int().min(1).optional(),
-  listo: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional()
+  listo: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  // null explicito = desasignar. Ausente = no tocar (PATCH parcial de v1).
+  responsable_id: z.coerce.number().int().positive().nullable().optional()
 });
 r.patch('/cosas/:cosaId', validar(editarCosaSchema), (req, res) => {
   const cosa = db.prepare('SELECT * FROM evento_org_cosa WHERE id = ?').get(Number(req.params.cosaId));
   if (!cosa) return res.status(404).json({ error: 'Cosa no encontrada' });
   const org = hojaEditable(req, res, cosa.org_id);   // valida iglesia (404) y permiso (403)
   if (!org) return;
-  const { nombre, cantidad, listo } = req.body;
-  db.prepare('UPDATE evento_org_cosa SET nombre=?, cantidad=?, listo=? WHERE id=?').run(
+  const { nombre, cantidad, listo, responsable_id } = req.body;
+
+  // El responsable puede ser CUALQUIER persona activa de la iglesia: media hoja
+  // es suelta y no cuelga de ningun grupo, y quien trae la torta a veces no
+  // esta en el grupo.
+  if (responsable_id != null) {
+    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1')
+      .get(responsable_id, req.user.iglesia_id);
+    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
+  }
+
+  const cambiaResponsable = responsable_id !== undefined && responsable_id !== cosa.responsable_id;
+  db.prepare('UPDATE evento_org_cosa SET nombre=?, cantidad=?, listo=?, responsable_id=?, asignada_en=? WHERE id=?').run(
     nombre ?? cosa.nombre,
     cantidad ?? cosa.cantidad,
     listo === undefined ? cosa.listo : (listo ? 1 : 0),
+    responsable_id === undefined ? cosa.responsable_id : responsable_id,
+    cambiaResponsable && responsable_id != null
+      ? new Date().toISOString().slice(0, 19).replace('T', ' ')
+      : cosa.asignada_en,
     cosa.id
   );
+
+  // Avisar SOLO cuando el responsable cambia de verdad: el lider edita la lista
+  // muchas veces mientras la arma y no puede bombardear a la gente.
+  if (cambiaResponsable && responsable_id != null) {
+    const nom = nombre ?? cosa.nombre;
+    const cant = cantidad ?? cosa.cantidad;
+    const titulo = `📦 Traer: ${nom} x${cant}`;
+    const donde = org.titulo || 'un evento';
+    const texto = `Para "${donde}"` + (org.hora_llegada ? ` · llegar ${org.hora_llegada}` : '');
+    db.prepare('INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?,?,?,?)')
+      .run(responsable_id, 'organizacion', titulo, texto);
+    enviarPush([responsable_id], { titulo, texto }).catch(() => {});
+  }
   res.json({ ok: true });
 });
 
