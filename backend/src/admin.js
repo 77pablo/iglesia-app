@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware, esPastor, hashPassword, auditar } from './auth.js';
+import { authMiddleware, esPastor, hashPassword, auditar, generarPasswordTemporal } from './auth.js';
 import { validar } from './seguridad.js';
 
 const r = Router();
@@ -37,7 +37,9 @@ const ROLES_GRUPO = ['admin', 'lider_musica', 'musico', 'lider_ed', 'tesorero', 
 r.get('/datos', (req, res) => {
   const ig = req.user.iglesia_id;
   const usuarios = db.prepare(
-    'SELECT id, nombre, usuario, email, es_pastor, activo FROM persona WHERE iglesia_id = ? ORDER BY nombre'
+    // rol_global viaja para que la vista sepa que cuentas NO administra el
+    // pastor (super-admin / obispo): no les ofrece restablecer la contrasena.
+    'SELECT id, nombre, usuario, email, es_pastor, activo, rol_global FROM persona WHERE iglesia_id = ? ORDER BY nombre'
   ).all(ig);
   const roles = db.prepare(
     `SELECT pe.id AS pertenencia_id, pe.persona_id, pe.grupo_id, pe.rol, g.nombre AS grupo
@@ -98,6 +100,47 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   }
   auditar(ig, yo, 'editar_usuario', 'admin', `${p.nombre}`);
   res.json({ ok: true });
+});
+
+// --- Restablecer la contrasena de un miembro (clave TEMPORAL) ---
+// Sin SMTP configurado, quien olvida su clave queda fuera de la app para
+// siempre: la recuperacion por correo (cuenta.js) no puede funcionar. Aqui el
+// pastor genera una clave temporal ALEATORIA, se la dicta al miembro, y la
+// cuenta queda con debe_cambiar_pass=1 para obligarlo a cambiarla al entrar.
+// La clave se devuelve UNA sola vez: no se guarda en claro ni se puede volver
+// a consultar (en la BD solo queda el hash, y en la auditoria solo el nombre).
+const idParamSchema = z.object({
+  id: z.coerce.number().int().positive('usuario invalido')
+});
+r.post('/usuarios/:id/clave', validar(idParamSchema, 'params'), (req, res) => {
+  const ig = req.user.iglesia_id;
+  const yo = req.user.persona_id;
+  // Acotado por iglesia_id: alguien de otra congregacion da 404, NO 403
+  // (un 403 confirmaria que esa cuenta existe).
+  const p = personaDeIglesia(req.params.id, ig);
+  if (!p) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  // Para la propia clave esta "Cambiar mi contraseña" (cuenta.js), que exige la
+  // actual. Si el pastor pudiera resetearse por aqui, cualquiera con su sesion
+  // abierta (telefono desbloqueado) se la cambiaria sin conocer la anterior.
+  if (p.id === yo)
+    return res.status(400).json({ error: 'Para cambiar tu propia contraseña usa "Cambiar mi contraseña" en Ajustes' });
+
+  // El super-admin y el obispo NO son miembros de la congregacion: sus cuentas
+  // estan por encima del pastor y no se administran desde aqui.
+  if (p.rol_global === 'super_admin' || p.rol_global === 'obispo')
+    return res.status(403).json({ error: 'Esta cuenta no se administra desde la iglesia' });
+
+  const temporal = generarPasswordTemporal();
+  db.prepare('UPDATE persona SET password_hash = ?, debe_cambiar_pass = 1 WHERE id = ?')
+    .run(hashPassword(temporal), p.id);
+  // La auditoria NUNCA registra la clave, solo a quien se le restablecio.
+  auditar(ig, yo, 'reset_password_usuario', 'admin', `${p.nombre} (${p.usuario})`);
+  res.json({
+    ok: true,
+    usuario: { id: p.id, nombre: p.nombre, usuario: p.usuario },
+    password_temporal: temporal
+  });
 });
 
 // --- Asignar un rol (en un grupo) a un usuario ---

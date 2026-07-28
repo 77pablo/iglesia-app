@@ -2596,6 +2596,10 @@ function renderAdmin(){
           <a href="javascript:adminQuitarRol(${r.pertenencia_id})" style="color:var(--red-tx);margin-left:4px" title="Quitar">✕</a></span>`).join('')
       : '<span class="muted small">Sin roles</span>';
     const badges=`${u.es_pastor?'<span class="estado-chip estado-aceptado">⛪ Pastor</span> ':''}${!u.activo?'<span class="estado-chip estado-rechazado">Inactivo</span>':''}`;
+    // "Restablecer contraseña": no se ofrece en cuentas que el backend rechaza
+    // (uno mismo -> usa Ajustes; super-admin/obispo -> no los administra el pastor).
+    const yo = ME && ME.persona && ME.persona.id;
+    const puedeResetear = u.id!==yo && u.rol_global!=='super_admin' && u.rol_global!=='obispo';
     return `<div class="item-card" style="margin-top:10px">
       <div class="flex" style="align-items:flex-start">
         <div style="flex:1">
@@ -2606,6 +2610,7 @@ function renderAdmin(){
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
           <button class="btn ghost small-btn" onclick="adminFormRol(${u.id})">+ Rol</button>
           <button class="link" onclick="adminTogglePastor(${u.id},${u.es_pastor})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
+          ${puedeResetear?`<button class="link" onclick="adminResetClave(${u.id})">🔑 Restablecer contraseña</button>`:''}
           <button class="link" style="color:${u.activo?'var(--red)':'var(--green)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>
         </div>
       </div>
@@ -2696,6 +2701,42 @@ function adminTogglePastor(id, actual){
 function adminToggleActivo(id, actual){
   modalConfirm(actual?'¿Desactivar esta cuenta? No podrá iniciar sesión.':'¿Reactivar esta cuenta?', async()=>{
     try{ await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({activo:!actual})}); toast('Listo'); vistaAdmin(); }catch(e){ toast(e.message); } });
+}
+
+// --- Restablecer la contraseña de un miembro (clave temporal) ---
+// El que olvida su contraseña no puede recuperarla solo (el envío de correo
+// puede no estar configurado): el pastor le genera una clave temporal y se la
+// dicta. La clave se muestra en un MODAL, no en un toast: tiene que quedar en
+// pantalla para copiarla o leerla en voz alta, y no se puede volver a consultar.
+function adminResetClave(id){
+  const d=window._admin; const u=(d&&d.usuarios||[]).find(x=>x.id===id); if(!u) return;
+  const btn=botonActual();   // se captura ANTES de abrir el modal (luego ya no hay evento)
+  modalConfirm(
+    'Se generará una <b>contraseña temporal</b> para <b>'+escHtml(u.nombre)+'</b>. Su contraseña actual dejará de funcionar y tendrá que cambiarla al entrar. ¿Continuar?',
+    async()=>{
+      await conBoton(btn, async()=>{
+        try{
+          const r=await api('/admin/usuarios/'+id+'/clave',{method:'POST'});
+          adminMostrarClaveTemporal(u, (r&&r.password_temporal)||'');
+        }catch(e){ toast((e&&e.message)||'No se pudo restablecer la contraseña'); }
+      });
+    }
+  );
+}
+function adminMostrarClaveTemporal(u, pass){
+  const root=$('modal-root');
+  root.innerHTML=`<div class="modal-bg"><div class="modal">
+    <h3>🔑 Contraseña temporal</h3>
+    <p class="muted small" style="margin:8px 0 12px">Para <b>${escHtml(u.nombre)}</b> (usuario: <b>${escHtml(u.usuario)}</b>).
+      Anótala o cópiala ahora: por seguridad <b>no se puede volver a ver</b>.</p>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
+      <p class="muted small" style="margin-bottom:6px">Entrégasela — la app le pedirá cambiarla al entrar:</p>
+      <div id="adm-pass-temporal" style="font-size:1.6rem;font-weight:800;letter-spacing:.08em;color:var(--primary);word-break:break-all">${escHtml(pass)}</div>
+      <button class="btn small-btn" style="margin-top:10px" onclick="saCopiar($('adm-pass-temporal').textContent)">📋 Copiar contraseña</button>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="btn ghost" style="width:100%" onclick="cerrarModal()">Cerrar</button></div>
+  </div></div>`;
+  root.classList.add('show');
 }
 
 // --- Crear / editar grupo ---
