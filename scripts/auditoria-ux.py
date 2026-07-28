@@ -63,7 +63,11 @@ JS_CHEQUEOS = r"""
   //    - baja: por debajo de 44x44, el objetivo comodo de WCAG 2.5.5 (AAA)
   //      y de las guias de Apple. Un item de menu de 42px de alto cae aqui y
   //      en la practica se toca sin problema: es un aviso, no un defecto.
-  const clickables = [...document.querySelectorAll('button, .btn, .link, .nav-item, a[onclick], [role=button], input[type=checkbox]')];
+  // Incluye los div con onclick (casillas del calendario, tarjetas de lista):
+  // en esta app son blancos de toque de pleno derecho, y sin esto el chequeo
+  // no los veia. Se excluyen los que no reciben el toque (pointer-events:none).
+  const clickables = [...document.querySelectorAll('button, .btn, .link, .nav-item, [onclick], [role=button], input[type=checkbox]')]
+    .filter(el => getComputedStyle(el).pointerEvents !== 'none');
   for (const el of clickables) {
     if (!visible(el)) continue;
     const r = el.getBoundingClientRect();

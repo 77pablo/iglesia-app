@@ -38,11 +38,11 @@ La última fila no es un defecto: son ítems de menú de 42px de alto y botones 
 
 **Organización (el módulo nuevo, y los tres eran míos):** los botones ✕ medían 11×31 px y no tenían nombre accesible (un lector de pantalla los anunciaba solo como "botón"); ahora usan `.link.icon-only` con `aria-label` que nombra la cosa o el gasto. El checkbox de "cosas a llevar" medía 13×13 px, el tamaño nativo; ahora mide 24×24.
 
+**El calendario en móvil escondía el fin de semana** (arreglado el 28 de julio). A 390px la grilla tenía un ancho mínimo de 480px con scroll lateral, así que se veía de LUN a VIE: sábado y domingo quedaban fuera, justo los dos días que más importan en una app de iglesia. Ningún chequeo automático lo marcaba —no hay desborde de página, la grilla tenía su propio scroll— pero saltaba a la vista en la captura. Ahora las 7 columnas entran en pantalla y cada evento se muestra como un punto del color de su grupo, igual que en los calendarios de iOS y Android; el toque va a la casilla y abre el detalle del día con títulos, horas y lugares. En escritorio no cambia nada: los eventos siguen con su texto.
+
 ## Lo que queda abierto (decisión de producto, no se tocó)
 
 **El límite de peticiones es demasiado bajo para una red compartida.** `limiterGeneral` permite **100 peticiones cada 15 minutos por IP**, y cada vista de la app hace entre 1 y 6 llamadas. Toda la congregación conectada al wifi del templo sale por una sola IP pública: entre todos agotan la cuota en minutos y la app empieza a responder "Demasiadas peticiones" a gente que no hizo nada raro. Lo mismo con `limiterLogin` (5 intentos por IP cada 15 min) si varias personas entran seguidas desde el mismo lugar. Esto no es teórico: bloqueó la propia auditoría dos veces. La corrección natural es contar por persona autenticada cuando hay token, y dejar el conteo por IP solo para el tráfico anónimo.
-
-**En móvil el calendario esconde el fin de semana.** A 390px la grilla del mes muestra LUN a VIE; sábado y domingo exigen arrastrar el mes de lado. En una app de iglesia el domingo es el día más importante de la semana. Ningún chequeo automático lo marca —no hay desborde, la grilla tiene su propio scroll— pero salta a la vista en la captura.
 
 **Botones por debajo de lo recomendado.** Menú lateral a 42px de alto y botones `small-btn` a 36px. Cumplen el mínimo AA; quedan cortos frente a los 44px recomendados.
 

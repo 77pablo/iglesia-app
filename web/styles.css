@@ -441,6 +441,9 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
 .cal-cell.tiene{background:var(--primary-50);}
 .cal-cell.sel{box-shadow:inset 0 0 0 2px var(--primary-600);border-color:var(--primary-600);}
 .cal-daynum{font-size:0.7813rem;font-weight:700;color:var(--muted);}
+/* Contenedor de los eventos del día: apilados en escritorio, en fila de puntos
+   en móvil (ver la media query de 520px). */
+.cal-puntos{display:flex;flex-direction:column;gap:3px;min-width:0;}
 .cal-ev{font-size:0.6875rem;line-height:1.35;padding:4px 6px;border-radius:6px;background:var(--surface);
   border:1px solid var(--border);border-left:3px solid var(--primary);color:var(--text);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -455,10 +458,28 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
   .cal-ev{font-size:0.625rem;padding:3px 5px;}
   .cal-wrap{padding:10px;}
 }
+/* En pantalla angosta las 7 columnas SÍ entran: antes la grilla tenía un ancho
+   mínimo de 480px con scroll lateral, y en un móvil de 390px el sábado y el
+   domingo quedaban fuera de la vista — en una app de iglesia, justo los dos
+   días que más importan. El texto de cada evento no cabe en una celda de ~48px,
+   así que se muestra como un punto del color de su grupo (igual que los
+   calendarios de iOS y Android): al tocar el día se abre el detalle completo. */
 @media(max-width:520px){
-  .cal-wrap{overflow-x:auto;}          /* scroll local, no rompe la página */
-  .cal-grid{min-width:480px;}          /* mantiene celdas legibles */
-  .cal-ev{font-size:0.6875rem;}        /* el mes ya hace scroll: no hace falta encoger */
+  .cal-wrap{overflow-x:visible;padding:8px;}
+  .cal-grid{min-width:0;gap:3px;}
+  .cal-cell{min-height:52px;padding:4px 2px;align-items:center;gap:2px;}
+  .cal-dow{font-size:0.625rem;padding:2px 0 6px;letter-spacing:0;}
+  .cal-daynum{font-size:0.75rem;}
+  /* El color del grupo llega como border-left-color en línea: se convierte en
+     un círculo de ese color dándole ancho 0 y un borde izquierdo grueso. */
+  /* pointer-events:none a propósito: un punto de 9px es un blanco de toque
+     imposible. En móvil el toque va siempre a la casilla, que abre el detalle
+     del día con todos sus eventos. */
+  .cal-ev{width:0;height:9px;padding:0;border-radius:50%;background:none;pointer-events:none;
+    border:none;border-left:9px solid var(--primary);font-size:0;line-height:0;overflow:visible;}
+  .cal-ev.pend{opacity:.5;}
+  .cal-puntos{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:3px;}
+  .cal-mas{font-size:0.5625rem;padding:0;line-height:1;}
 }
 
 /* ---------- Modal del Himnario (buscador + transpositor) ---------- */

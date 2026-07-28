@@ -713,7 +713,7 @@ function renderCalendario(){
     }).join('');
     const mas=delDia.length>3?`<div class="cal-mas">+${delDia.length-3} más</div>`:'';
     celdas+=`<div class="cal-cell${esHoy?' today':''}${finde?' finde':''}${sel?' sel':''}${delDia.length?' tiene':''}" onclick="verDia('${fecha}')">
-      <div class="cal-daynum">${dia}</div>${chips}${mas}</div>`;
+      <div class="cal-daynum">${dia}</div>${chips?`<div class="cal-puntos">${chips}</div>`:''}${mas}</div>`;
   }
   const resto=(7-((offset+dias)%7))%7;
   for(let i=0;i<resto;i++) celdas+=`<div class="cal-cell empty"></div>`;
