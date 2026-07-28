@@ -8,9 +8,8 @@
 // ============================================================
 import { Router } from 'express';
 import { z } from 'zod';
-import crypto from 'node:crypto';
 import db from './db.js';
-import { authMiddleware, hashPassword, auditar } from './auth.js';
+import { authMiddleware, hashPassword, auditar, generarPasswordTemporal } from './auth.js';
 import { validar } from './seguridad.js';
 import { eliminarIglesiaCompleta } from './eliminarIglesia.js';
 
@@ -147,17 +146,8 @@ r.patch('/iglesias/:id', validar(editarIglesiaSchema), (req, res) => {
   res.json(actualizada);
 });
 
-// Genera una contrasena temporal legible (8-10 caracteres, sin ambiguos: sin 0/O/1/l/I).
-function generarPasswordTemporal() {
-  const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  const largo = 9;
-  let pass = '';
-  const bytes = crypto.randomBytes(largo);
-  for (let i = 0; i < largo; i++) pass += alfabeto[bytes[i] % alfabeto.length];
-  return pass;
-}
-
 // --- Resetea la contrasena del pastor de una iglesia (contrasena temporal) ---
+// (generarPasswordTemporal vive en auth.js: la comparte con admin.js.)
 r.post('/iglesias/:id/reset-pastor', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id de iglesia no válido' });

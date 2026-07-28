@@ -5,6 +5,7 @@
 // ============================================================
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import db from './db.js';
 
 // Variables de entorno REQUERIDAS en produccion. Si falta alguna, la app
@@ -27,6 +28,19 @@ export function hashPassword(plano) {
 }
 export function verifyPassword(plano, hash) {
   return bcrypt.compareSync(plano, hash);
+}
+
+// Genera una contrasena TEMPORAL legible (9 caracteres, sin ambiguos: sin 0/O/1/l/I),
+// para dictarla por telefono o en persona. Usa crypto.randomBytes (CSPRNG): nunca
+// Math.random(), que es predecible. La usan superadmin.js (resetear al pastor) y
+// admin.js (el pastor resetea a un miembro); vive aqui para tener UNA sola fuente.
+export function generarPasswordTemporal() {
+  const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const largo = 9;
+  let pass = '';
+  const bytes = crypto.randomBytes(largo);
+  for (let i = 0; i < largo; i++) pass += alfabeto[bytes[i] % alfabeto.length];
+  return pass;
 }
 
 // --- LOGIN EN 3 PASOS ---
