@@ -1,28 +1,30 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 20 de julio de 2026 (sesión auditoría + blindaje)*
+*Última actualización: 28 de julio de 2026 (organización de eventos + auditoría UX medible)*
 
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
 
 ---
 
-## 🔎 SESIÓN AUDITORÍA + BLINDAJE (commiteado LOCAL, **NO desplegado todavía**)
+## 🔎 BLOQUEANTES DE LA AUDITORÍA DEL 20 DE JULIO — estado al 28 de julio
 
-Se corrió una auditoría honesta con 4 agentes (seguridad, fiabilidad, funcional/UX, legal+interfaz). **Veredicto: la app NO es lanzable hoy**, pero la brecha es corta. Los 5 bloqueantes reales:
-1. **`superadmin/1234` público** → ✅ ARREGLADO (código, sin desplegar). `SEED_ON_EMPTY=0`, clave del super-admin ahora viene de la var `SUPERADMIN_PASSWORD` (Render), y el super-admin es cuenta de sistema (`iglesia_id=NULL`).
-2. **XSS almacenado** (campos sin escapar en innerHTML) → ✅ ARREGLADO. `escHtml()`/`safeUrl()` en ~40 campos.
-3. **Pérdida de datos en persistencia** (restore que traga errores, rclone sync destructivo, degradación silenciosa) → ❌ PENDIENTE. Arreglo real = disco de pago Render (~US$7/mes) o endurecer scripts.
-4. **Recuperación de contraseña muerta** (SMTP sin config; pastor no puede resetear clave de miembros) → ❌ PENDIENTE.
-5. **Legal sin implementar** (docs marcados "borrador", sin responsable/ARCO, sin checkboxes de consentimiento: general, parental, biométrico) → 🟡 **PARCIALMENTE CERRADO** (rama `feat/consentimiento-legal-arco`, ver nota abajo). Falta: abogado revise `web/legal/*` y el dueño defina `LEGAL_CONTACT_EMAIL`.
+Aquella auditoría (4 agentes: seguridad, fiabilidad, funcional/UX, legal+interfaz) listó 5 bloqueantes. **Ya están desplegados los arreglos de código**; lo que queda depende de configuración o de terceros:
 
-También hecho esta sesión: **login del super-admin SIN iglesia** (enlace "Soy administrador del sistema"), `trust proxy` (rate-limit ya no es colectivo), mínimo de contraseña unificado a 8, y **pulido de interfaz** (touch targets 44px, emojis→SVG, utilidad `.form-panel`).
+1. **`superadmin/1234` público** → ✅ CERRADO Y DESPLEGADO. `SEED_ON_EMPTY=0` en `render.yaml`, la clave del super-admin viene de `SUPERADMIN_PASSWORD`, y el super-admin es cuenta de sistema (`iglesia_id=NULL`).
+2. **XSS almacenado** → ✅ CERRADO Y DESPLEGADO. `escHtml()`/`safeUrl()` en ~40 campos.
+3. **Pérdida de datos en persistencia** → 🟡 **RESUELTO EN CÓDIGO, FALTA CONFIRMAR EN RENDER.** No hizo falta disco de pago: `docker-entrypoint.sh` restaura la BD desde **Cloudflare R2** al arrancar y la replica en continuo con **Litestream** (`litestream.yml`). Se activa solo si están definidas `R2_ENDPOINT`, `R2_BUCKET`, `LITESTREAM_ACCESS_KEY_ID` y `LITESTREAM_SECRET_ACCESS_KEY`; si faltan, el arranque avisa por log y los datos vuelven a ser efímeros. **Acción del dueño:** confirmar que esas 4 variables están puestas en Render.
+4. **Recuperación de contraseña muerta** (SMTP sin configurar) → ❌ **SIGUE PENDIENTE.** El código de recuperación existe (`cuenta.js`, maneja correctamente el caso de dos personas con el mismo correo), pero sin `SMTP_USER`/`SMTP_PASS` no sale ningún correo.
+5. **Legal** → 🟡 **PARCIALMENTE CERRADO Y DESPLEGADO.** El consentimiento general y el ejercicio ARCO autoservicio funcionan en producción. Falta que un abogado limpie los placeholders `[…]` de `web/legal/*.html` y que el dueño defina `LEGAL_CONTACT_EMAIL` — en ese orden (ver detalle abajo).
 
-### ⚠️ ANTES DE DESPLEGAR — nada de esto está en producción aún
-- ✅ **Pasada visual del frontend hecha (23 jul):** Fase 7 (Directorio) y los 26 módulos verificados en navegador real (Playwright) — sin `&lt;` literales, sin errores de consola. Ver Fase 7.
-- **Verificar en smoke el arreglo del super-admin de sistema** (`iglesia_id=NULL`): BD vacía → se crea → login sin iglesia → `/me` → crear primera iglesia. Commit `3b5beae`. *(Los tests de superadmin pasan; falta el smoke end-to-end contra un arranque limpio.)*
-- **Un solo `push` de `main` despliega TODO** (23 commits locales por delante de origin): el **blindaje de seguridad** (adiós `superadmin/1234` público, XSS, `SEED_ON_EMPTY=0`, trust proxy) **+** la feature de **consentimiento legal + ARCO** (ya integrada a `main`, 123/123 tests). Lo sube el dueño con **GitHub Desktop**.
-- 👉 Tras desplegar, en Render → Environment: definir **`SUPERADMIN_PASSWORD`** (rota la `1234` del super-admin). Y ver el bloqueante legal abajo antes de definir `LEGAL_CONTACT_EMAIL`.
+Los hallazgos **B1–B7** de aquella auditoría (obispo con permisos de admin, fugas entre iglesias, `PATCH` destructivos, borrado cruzado de notificaciones, validación de `presentes`) están **todos cerrados**: verificados uno por uno contra el código el 27 de julio.
 
-### 🟡 Bloqueante legal #5 — parcialmente cerrado (✅ integrado a `main` 23 jul, sin desplegar aún)
+### 👉 ACCIONES DEL DUEÑO EN RENDER (las que siguen abiertas)
+- **`SUPERADMIN_PASSWORD`** — si no está definida, la clave vieja del super-admin sigue vigente.
+- **`R2_*` y `LITESTREAM_*`** (4 variables) — sin ellas **no hay persistencia**: la BD se pierde en cada reinicio.
+- **`SMTP_USER` / `SMTP_PASS`** — sin ellas nadie puede recuperar su contraseña por correo.
+- **`LEGAL_CONTACT_EMAIL`** — solo *después* de que el abogado limpie los placeholders del texto legal.
+- **`VAPID_*`** (3 variables) — sin ellas el push queda desactivado (las notificaciones siguen en la campana).
+
+### 🟡 Bloqueante legal #5 — parcialmente cerrado (✅ desplegado; falta el trabajo del abogado)
 - ✅ **IMPLEMENTADO:** consentimiento general (checkbox al registrarse + puerta para cuentas existentes vía `/me`) y ejercicio de derechos **ARCO autoservicio** (ver/editar/eliminar mis datos desde la cuenta).
 - ✅ **IMPLEMENTADO:** correo de contacto legal (ARCO) configurable por variable de entorno `LEGAL_CONTACT_EMAIL` — endpoint público `GET /api/legal/contacto`, inyectado en las 5 páginas de `web/legal/` (se muestra solo si la variable está definida).
 - ❌ **PENDIENTE del dueño:**
@@ -34,25 +36,51 @@ También hecho esta sesión: **login del super-admin SIN iglesia** (enlace "Soy 
 
 ---
 
-## 🚀 EN PRODUCCIÓN (20 jul 2026 — migrado a Render)
-- **URL pública:** https://iglesia-app-r9ay.onrender.com  (verificada 20 jul: API `/api/health` 200, login `pastor/1234` OK, frontend OK)
+## 🚀 EN PRODUCCIÓN (verificado el 28 jul 2026)
+- **URL pública:** https://iglesia-app-r9ay.onrender.com
+- **Deploy vivo:** commit `a15c397`. Verificado el 28 jul desde fuera: `/api/health` → 200; `/api/organizacion` → 401 (el router existe y exige sesión); el `styles.css` servido trae `--primary-tx` y `.cal-puntos`; el `app.js` servido trae `toLocaleString('es-CL')`.
 - **Repositorio GitHub:** https://github.com/77pablo/iglesia-app  (rama `main`; se sube con **GitHub Desktop**)
-- **Host:** **Render** (Docker, **Blueprint** desde `render.yaml`, plan **Free**), servicio `iglesia-app` (ID `srv-d9f23vrbc2fs738v1hu0`). Cada `push` a `main` en GitHub → **redeploy automático**. Deploy vivo del commit `07ec0a7`.
-- **Variables en Render:** `JWT_SECRET` (autogenerado por Render), `SEED_ON_EMPTY=1`, `DB_PATH=/data/iglesia.db`, `UPLOADS_DIR=/data/uploads`, `NODE_ENV=production`.
-- ⚠️ **Plan free = SIN disco persistente:** `/data` es **efímero** → la BD y los uploads **se reinician** en cada redeploy/reinicio y `SEED_ON_EMPTY` los vuelve a sembrar (datos demo, contraseñas `1234`). El servicio se **duerme** tras ~15 min de inactividad (primera visita ~30-50 s).
+- **Host:** **Render** (Docker, **Blueprint** desde `render.yaml`, plan **Free**), servicio `iglesia-app` (ID `srv-d9f23vrbc2fs738v1hu0`). Cada `push` a `main` en GitHub → **redeploy automático**.
+- **Variables en `render.yaml`:** `NODE_ENV=production`, `JWT_SECRET` (autogenerado), **`SEED_ON_EMPTY=0`** (nunca sembrar demo en producción), `DB_PATH=/data/iglesia.db`, `UPLOADS_DIR=/data/uploads`, más los huecos de `SUPERADMIN_PASSWORD`, `R2_*`/`LITESTREAM_*` y `VAPID_*` que el dueño define en el panel.
+- ⚠️ **Persistencia:** `/data` es efímero en el plan free. La BD sobrevive **solo si Litestream está configurado** (ver bloqueante #3 arriba). El servicio se **duerme** tras ~15 min de inactividad (primera visita ~30-50 s).
 - Archivos de deploy en `app/`: `Dockerfile`, `.dockerignore`, `.gitignore`, `render.yaml` (bloque `disk:` retirado para free; instrucciones para re-activarlo), `DEPLOY.md`.
 - *(Railway anterior descontinuado: se acabó el crédito.)*
 
 ### ⏳ Pendientes para uso real (no demo)
-1. **Persistencia:** en free los datos se borran al reiniciar. Para datos reales, subir a un plan de Render con disco y re-activar el bloque `disk:` (mountPath `/data`) en `render.yaml`.
-2. **Cambiar contraseñas** de los usuarios (hoy todas `1234`) y poner `SEED_ON_EMPTY=0` (solo tiene sentido con disco persistente).
-3. **Push real (VAPID):** añadir `VAPID_PUBLIC`, `VAPID_PRIVATE`, `VAPID_SUBJECT` en Render → Environment (ver Fase 5). Sin ellas el push queda desactivado (las notificaciones siguen en la campana).
+1. **Confirmar Litestream en Render** (4 variables `R2_*`/`LITESTREAM_*`): es lo único que separa la BD de ser efímera. Sin eso, cada reinicio borra todo.
+2. **SMTP** (`SMTP_USER`/`SMTP_PASS`): sin ellas la recuperación de contraseña no envía nada.
+3. **Push real (VAPID):** añadir `VAPID_PUBLIC`, `VAPID_PRIVATE`, `VAPID_SUBJECT` en Render → Environment (ver Fase 5).
 4. **Reconocimiento facial** (Python, carpeta `facial/`) NO está en el contenedor → desplegar aparte si se quiere usar `/inscribir.html` y `/kiosko.html`.
 5. Considerar **OAuth de Google Drive** (hoy es vinculación por enlace de carpeta).
 
 ### ✅ Integrado a `main` (20 jul 2026)
-- **Seguridad** (`feat/seguridad`): `helmet` (CSP con `connect-src 'self'`), `express-rate-limit` (100/15min general · 5/15min login · 10/15min admin/tesorería/upload), validación `zod` en login/admin/tesorería/cuenta, validación de env al arrancar + `.env.example`, logging `[seguridad]`. Detalle en `INFORME-SEGURIDAD.md`. Pendiente: `zod` en el resto de routers.
+- **Seguridad** (`feat/seguridad`): `helmet` (CSP con `connect-src 'self'`), `express-rate-limit`, validación `zod` en login/admin/tesorería/cuenta, validación de env al arrancar + `.env.example`, logging `[seguridad]`. Detalle en `INFORME-SEGURIDAD.md`. Pendiente: `zod` en el resto de routers. *(Los límites se cuentan **por persona** desde el 28 jul — ver Fase 9.)*
 - **Chat interno** (`feat/mensajeria-chat`): ver **Fase 6** abajo.
+
+---
+
+## 🆕 FASE 8 (28 jul 2026): Organización de eventos — DESPLEGADO
+
+Apartado para organizar un evento: **qué llevar** (con cantidad y visto bueno) y **cuánto se gastó** (lista de gastos que se suma sola). Funciona pegado a un evento del calendario o como lista suelta.
+
+- Backend nuevo `organizacion.js` (`/api/organizacion`, 11 rutas); tablas `evento_org`, `evento_org_cosa`, `evento_org_gasto` con índice único parcial (una hoja por evento, pero varias listas sueltas).
+- **Ver:** líderes y pastor (`esLiderOAdmin`). **Editar:** solo quien creó la lista o el pastor. Todo acotado por `iglesia_id`: una hoja de otra iglesia devuelve 404, ni siquiera confirma que exista.
+- `total_gastado` **nunca se guarda**: se recalcula al leer, así no queda descuadrado.
+- La hoja de un evento **se crea sola** la primera vez que se abre. Si el `INSERT` choca con el índice único (otra iglesia, o dos procesos a la vez), se relee acotado a la iglesia en vez de reventar con 500.
+- Borrar un evento borra su hoja con cosas y gastos, en la misma transacción.
+- Frontend: apartado **🗒️ Organización** en el menú (solo líderes) y botón dentro de cada evento del calendario.
+- **12 tests** del módulo. Spec y plan en `docs/superpowers/`.
+
+## 🆕 FASE 9 (28 jul 2026): Auditoría UX medible + límite de peticiones por persona — DESPLEGADO
+
+**`scripts/auditoria-ux.py`** — la lista de deuda de UX ya no se vence, porque se vuelve a generar. Recorre 11 vistas × 3 anchos (390/768/1280) × 2 temas y **mide**: área táctil, nombre accesible de los botones de ícono, contraste y desborde horizontal. Cómo correrlo y qué arrojó: `docs/AUDITORIA-UX-2026-07-27.md`.
+
+Resultado: **nombres accesibles 36 → 0 · área táctil bajo el mínimo AA 54 → 0 · contraste bajo AA 75 → 0**. Lo arreglado:
+- **Contraste en tema oscuro.** `aplicarAjustes()` fijaba los colores del acento iguales en ambos temas; el número del día del calendario quedaba en 1.78:1, ilegible. Se separó el acento **como texto** (`--primary-tx`, aclarado con `color-mix` solo en oscuro) del acento **como fondo**. 23 estilos que usaban `var(--red)`/`var(--green)` para texto pasaron a `--red-tx`/`--green-tx`.
+- **Moneda unificada en CLP.** Convivían `es-MX` en Tesorería (`$1,250,000`) y `es-CL` en Organización. Ahora hay un solo `money()`.
+- **Calendario en móvil.** La grilla tenía ancho mínimo de 480px con scroll lateral: a 390px se veía de LUN a VIE y **el domingo quedaba fuera**. Ahora entran las 7 columnas y cada evento es un punto del color de su grupo; el toque abre el detalle del día. En escritorio no cambia nada.
+
+**Límite de peticiones por persona** (`seguridad.js`). Contaba **por IP**: toda la congregación en el wifi del templo compartía una sola cuota de 100 peticiones cada 15 min y se bloqueaban entre sí. Ahora, con sesión iniciada, la cuota es **por persona**; el tráfico anónimo se sigue contando por IP, y el **login sigue por IP** a propósito (es la protección contra fuerza bruta). El token **se verifica**, no solo se lee: si bastara con leerlo, cualquiera inventaría `persona_id` para saltarse el límite.
 
 ## 🆕 FASE 6 (20 jul 2026): Mensajería interna (chat) — PROBADO
 - Chat **1:1**, **por grupo** (auto-provisionado) y **a medida**; tiempo real por **SSE** (`sse.js` hub + `GET /api/mensajes/stream?token=`), adjuntos (reusa `/api/upload`), **leído/no-leídos** (por `ultimo_leido_mensaje_id`), **"escribiendo…"** y **moderación del pastor** (soft-delete en grupo/custom, nunca 1:1; borra también el adjunto y poda a quien sale del grupo).
@@ -68,9 +96,11 @@ Sidebar verde azulado oscuro (`#113438`), fondo crema (`#f4f3f0`), hero degradad
 
 ---
 
-## 🆕 FASE 7 (20 jul 2026): Directorio de miembros + cumpleaños — EN CONSTRUCCIÓN
+## 🆕 FASE 7 (20 jul 2026): Directorio de miembros + cumpleaños — DESPLEGADO
 
-Nuevo módulo **Directorio** para que la congregación se conozca y se contacte entre sí, cuidando la privacidad de cada persona.
+*(Estaba marcado "EN CONSTRUCCIÓN" hasta el 28 jul; en realidad ya estaba terminado: `directorio.js` con 4 rutas, `directorio.test.js` en verde y `/api/directorio` respondiendo 401 en producción.)*
+
+Módulo **Directorio** para que la congregación se conozca y se contacte entre sí, cuidando la privacidad de cada persona.
 
 - **Perfiles del directorio:** cada miembro tiene una ficha con **foto**, nombre, grupo(s) a los que pertenece y datos de contacto (teléfono, correo). La foto reutiliza el mecanismo de subida existente (`/api/upload`).
 - **Contacto oculto por defecto, sin excepciones:** el teléfono y el correo de cada persona aparecen **ocultos** en el directorio hasta que **la propia persona** decide mostrarlos. No hay atajo para pastor ni líderes: **cada quien activa su propia visibilidad**, igual que cualquier feligrés — coherente con el principio ya aplicado en otros módulos ("el pastor ve, pero no administra lo ajeno").
@@ -267,10 +297,14 @@ node src/server.js
 - ❤️ Cuidado pastoral (casos, historial)
 - 💰 Tesorería (ingresos/gastos, campañas, transparencia)
 - 👶 Niños / Escuela Dominical (clases, material con **subida de archivos**, niños, asistencia)
+- 🗒️ Organización de eventos (cosas a llevar + gastos con total) — Fase 8
+- 💬 Mensajería interna con SSE — Fase 6 · 👤 Directorio + cumpleaños — Fase 7
 - 📷 **Reconocimiento facial** (Python InsightFace + Node + páginas `/inscribir.html` y `/kiosko.html`) — PROBADO: inscribir + reconocer con confianza 1.0
 
 ### Calidad
 - Diseño profesional (sidebar, dashboard, toasts, modales, iconos SVG)
+- **177 tests** en verde (`cd backend && node --test`), incluidos los de aislamiento multi-iglesia, permisos por rol y límite de peticiones.
+- Accesibilidad medida, no supuesta: contraste AA y área táctil verificados con `scripts/auditoria-ux.py` (ver Fase 9).
 - 8 bugs del QA corregidos (validaciones, aislamiento entre iglesias, JWT, multer, rate-limit, CORS, manejo de errores global)
 
 ---
@@ -327,5 +361,10 @@ app/
 - ✅ ~~Extender "pastor solo observa" a más módulos (coherencia total)~~ — hecho (26 jun)
 - ✅ ~~Exportar asistencia / reportes~~ — hecho como CSV (26 jun)
 - ✅ ~~Filtrar asistencia por grupo~~ — hecho (26 jun)
-- Subir comprobante en Tesorería (reusar subida de archivos)
-- (En curso, otro agente) Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas inteligentes del sermón · Recordatorios automáticos
+- ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
+- ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
+
+### Abierto de verdad (28 jul 2026)
+- **Botones por debajo de lo recomendado:** menú lateral a 42px de alto y `small-btn` a 36px. Cumplen el mínimo exigible (24px), quedan cortos frente a los 44px recomendados. Subirlos mueve el ritmo visual de toda la app → decisión de diseño, no deuda.
+- **Organización v2** (fuera del alcance de la Fase 8, por decisión del spec): responsable y costo por línea, plantillas de listas, export a PDF, notificaciones "trae tu parte", integración con Tesorería.
+- **`zod` en el resto de los routers** (hoy está en login/admin/tesorería/cuenta/eventos/organización).
