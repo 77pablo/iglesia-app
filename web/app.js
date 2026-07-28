@@ -2848,7 +2848,7 @@ async function saCargarLista(){
 // (ambar) no es lo mismo que "esta mal" (rojo), y "esta instancia no replica"
 // (gris) es lo normal en desarrollo, no una alarma.
 const PERS_PINTA={ok:['✅','--green-tx','Respaldando'],mal:['⛔','--red-tx','SIN RESPALDO'],
-  desconocido:['⚠️','--muted','No se pudo comprobar'],no_aplica:['—','--muted','Esta instancia no replica']};
+  desconocido:['⚠️','--amber-tx','No se pudo comprobar'],no_aplica:['—','--muted','Esta instancia no replica']};
 const PERS_MOTIVO={sin_generaciones:'nunca se ha replicado nada',retraso_alto:'el respaldo va muy atrasado',
   formato_no_reconocido:'respuesta inesperada de Litestream',comando_fallo:'Litestream devolvió un error',
   tiempo_agotado:'Litestream no respondió a tiempo',binario_ausente:'no hay Litestream en esta máquina',
@@ -2858,7 +2858,7 @@ const PERS_MOTIVO={sin_generaciones:'nunca se ha replicado nada',retraso_alto:'e
 function _persFila(etiqueta,b){
   const [ico,varColor,texto]=PERS_PINTA[b.estado]||PERS_PINTA.desconocido;
   const motivo=b.motivo?` · ${escHtml(PERS_MOTIVO[b.motivo]||b.motivo)}`:'';
-  const cuando=b.ultimo?` · último: ${new Date(b.ultimo).toLocaleString('es-CL')}`:'';
+  const cuando=b.ultimo?` · último: ${escHtml(new Date(b.ultimo).toLocaleString('es-CL'))}`:'';
   return `<div class="row" style="justify-content:space-between;gap:10px;margin:6px 0">
     <span>${escHtml(etiqueta)}</span>
     <span style="color:var(${varColor});text-align:right">${ico} ${escHtml(texto)}<span class="muted small">${motivo}${cuando}</span></span>
