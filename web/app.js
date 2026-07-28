@@ -1562,7 +1562,7 @@ async function cargarMaterialMusica(){
       const esHimnario = m.archivo_url==='/assets/himnario-nuevo.pdf';
       const puedeBorrar = !permanente && (lider || m.creado_por===ME.persona.id);
       const titulo = esHimnario
-        ? `<b style="cursor:pointer;color:var(--primary)" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</b>`
+        ? `<b class="mus-himnario" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</b>`
         : `<b>${escHtml(m.titulo)}</b>`;
       const sub = esHimnario
         ? `<div class="muted small"><a href="javascript:abrirHimnario()">🔎 Abrir cancionero (buscar y transponer)</a> · <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">descargar PDF</a></div>`
@@ -3518,7 +3518,9 @@ const Org = {
 
     $('content').innerHTML=`
       <div class="head-row"><h2>🗒️ ${escHtml(titulo)}</h2>
-        <div class="row no-print" style="width:auto;gap:6px">
+        <!-- btn-fila, no row: .row reparte a lo ancho sin permitir salto de linea y a
+             390px estos cuatro botones desbordaban la pagina (405px de contenido). -->
+        <div class="btn-fila no-print" style="width:auto;gap:6px">
           <button class="btn ghost small-btn" onclick="Org.duplicar()">⧉ Duplicar</button>
           <button class="btn ghost small-btn" onclick="Org.copiarParaWhatsapp()">📋 Copiar</button>
           <button class="btn ghost small-btn" onclick="window.print()">🖨️ Imprimir</button>

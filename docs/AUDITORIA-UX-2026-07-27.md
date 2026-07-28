@@ -1,5 +1,7 @@
 # Auditoría UX medible — 27 de julio de 2026
 
+> ⚠️ **Superado en parte por [`AUDITORIA-UX-2026-07-28.md`](AUDITORIA-UX-2026-07-28.md)**, que amplía el recorrido de 11 a 20 vistas (entran Administración, Panel del Pastor, Reportes, Música, Niños, Cuidado pastoral y Mi Servicio), lo hace con **cuatro usuarios** en vez de uno y cambia el comando de invocación (ya no se pasa `--usuario`). Para correr la auditoría hoy, sigue ese documento. Este se conserva por lo que explica de los arreglos de la Fase 9.
+
 Reemplaza la tabla F3–F14 de `AUDITORIA-2026-07-20.md`, que quedó desactualizada: al verificarla contra el código, 6 de 7 hallazgos revisados ya estaban cerrados y el informe que la respaldaba había desaparecido del repo.
 
 **Cómo se repite esta auditoría** (esta vez la lista no se vence, porque se vuelve a generar):
