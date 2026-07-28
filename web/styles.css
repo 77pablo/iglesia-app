@@ -630,6 +630,22 @@ body{transition:background-color .3s ease,color .3s ease;}
   body,#app,.layout,.main-area,#content{all:unset;display:block;width:100%;background:#fff;color:#000;}
   .card,.widget{box-shadow:none;border:1px solid #ccc;break-inside:avoid;}
   a{color:#000;text-decoration:none;}
+  /* Hoja de organización impresa: se pega en la puerta de la iglesia, así que
+     va SIN gastos (la card los lleva marcados .no-print) y sin los botones de
+     asignar. Las casillas quedan grandes para marcar a mano lo que ya llegó. */
+  .org-row{padding:10px 0;border-bottom:1px solid #ddd;}
+  /* Se oculta el ✕ y el botón "Asignar", pero NUNCA el nombre: una hoja impresa
+     sin nombres no sirve para repartir nada. Lo que falta por asignar deja una
+     línea en blanco para anotarlo a mano. */
+  .org-row .icon-only,.org-sin-asignar{display:none;}
+  .org-quien{color:#000;font-size:1rem;}
+  .org-asignado{color:#000;font-weight:600;}
+  .org-quien .org-firma{display:inline-block;width:150px;border-bottom:1px solid #333;height:1.1em;}
+  input[type=time]{border:none;padding:0;font-weight:700;color:#000;background:none;}
+  .org-check input[type=checkbox]{width:20px;height:20px;-webkit-appearance:none;appearance:none;
+    border:2px solid #333;border-radius:3px;background:#fff;}
+  .org-check input[type=checkbox]:checked{background:#333;}
+  .org-listo{text-decoration:line-through;color:#555;}
 }
 
 /* Organización de eventos */
@@ -647,4 +663,5 @@ body{transition:background-color .3s ease,color .3s ease;}
 .org-aportes .org-row{padding:5px 0;border-bottom:none;font-size:0.875rem;}
 /* Quién trae cada cosa: a la derecha en escritorio, en su propia línea en móvil. */
 .org-quien{font-size:0.8125rem;flex-shrink:0;max-width:45%;text-align:right;}
+.org-firma{display:none;}   /* solo aparece en la hoja impresa */
 @media(max-width:520px){ .org-row{flex-wrap:wrap;} .org-quien{max-width:100%;text-align:left;} }

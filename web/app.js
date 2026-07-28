@@ -3487,9 +3487,11 @@ const Org = {
     const cosas=h.cosas.map(x=>{
       // La cuenta desactivada no borra el dato: se avisa para que el líder reasigne.
       const inactivo = x.responsable_id && !x.responsable_activo;
+      // Al imprimir: el nombre se conserva (una hoja sin nombres no sirve) y lo
+      // que aún no tiene responsable deja una línea para anotarlo a mano.
       const quien = x.responsable_id
-        ? `<button class="link" onclick="Org.asignar(${x.id})" title="Reasignar">👤 ${escHtml(x.responsable_nombre||'')}${inactivo?' <span style="color:var(--red-tx)">(cuenta inactiva — reasignar)</span>':''}</button>`
-        : `<button class="link" onclick="Org.asignar(${x.id})">👤 Asignar</button>`;
+        ? `<button class="link org-asignado" onclick="Org.asignar(${x.id})" title="Reasignar">👤 ${escHtml(x.responsable_nombre||'')}${inactivo?' <span style="color:var(--red-tx)">(cuenta inactiva — reasignar)</span>':''}</button>`
+        : `<button class="link org-sin-asignar" onclick="Org.asignar(${x.id})">👤 Asignar</button><span class="org-firma"></span>`;
       return `<div class="org-row">
         <label class="org-check"><input type="checkbox" ${x.listo?'checked':''} ${ed?'':'disabled'} onchange="Org.toggleCosa(${x.id}, this.checked)">
           <span class="${x.listo?'org-listo':''}">${escHtml(x.nombre)} <b>×${x.cantidad}</b></span></label>
@@ -3516,7 +3518,10 @@ const Org = {
 
     $('content').innerHTML=`
       <div class="head-row"><h2>🗒️ ${escHtml(titulo)}</h2>
-        <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div>
+        <div class="row no-print" style="width:auto;gap:6px">
+          <button class="btn ghost small-btn" onclick="Org.copiarParaWhatsapp()">📋 Copiar</button>
+          <button class="btn ghost small-btn" onclick="window.print()">🖨️ Imprimir</button>
+          <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div></div>
       <div class="card">
         <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''}</div>
         <div style="margin-top:10px"><b>🕐 Hora de llegada:</b>
@@ -3525,12 +3530,12 @@ const Org = {
       </div>
       <div class="card" style="margin-top:14px"><h3 style="font-size:16px">📦 Cosas a llevar</h3>
         <div id="org-cosas">${cosas}</div>
-        ${ed?`<div class="row" style="gap:6px;margin-top:10px">
+        ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px">
           <input id="org-cosa-nombre" placeholder="Ej. Jugos nectar">
           <input id="org-cosa-cant" type="number" min="1" value="1" style="max-width:80px">
           <button class="btn small-btn" onclick="Org.addCosa()">Añadir</button></div>`:''}
       </div>
-      <div class="card" style="margin-top:14px"><h3 style="font-size:16px">💵 Gastos</h3>
+      <div class="card no-print" style="margin-top:14px"><h3 style="font-size:16px">💵 Gastos</h3>
         <div id="org-gastos">${gastos}</div>
         <div class="org-total">Total gastado: <b>${money(h.total_gastado)}</b></div>
         ${aportes}
@@ -3591,6 +3596,33 @@ const Org = {
       try{ await api('/organizacion/gastos/'+id,{method:'DELETE'}); Org._recargar(); }
       catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
     });
+  },
+  // Texto plano para pegar en el grupo de WhatsApp, que es por donde la iglesia
+  // realmente comparte esto. SIN gastos a propósito: se pega en un grupo donde
+  // hay feligreses, y las cuentas son cosa de líderes (misma decisión que la
+  // hoja impresa, que termina en la puerta de la iglesia).
+  async copiarParaWhatsapp(){
+    const h=Org._hoja; if(!h) return;
+    const titulo=(h.evento&&h.evento.titulo)||h.titulo||'Lista';
+    const fecha=(h.evento&&h.evento.fecha)||h.fecha;
+    let txt=`*${titulo}*`;
+    if(fecha) txt+=` — ${fechaTxt(fecha)}`;
+    if(h.hora_llegada) txt+=`, llegar ${h.hora_llegada}`;
+    const lugar=h.evento&&h.evento.lugar;
+    if(lugar) txt+=`\n📍 ${lugar}`;
+    txt+='\n';
+    txt+=(h.cosas||[]).map(c=>{
+      const quien=c.responsable_nombre ? ` — ${c.responsable_nombre}` : ' — *pendiente*';
+      return `${c.listo?'✅':'•'} ${c.nombre} ×${c.cantidad}${quien}`;
+    }).join('\n') || '(sin cosas todavía)';
+    try{
+      await navigator.clipboard.writeText(txt);
+      toast('📋 Copiado, pégalo en el grupo');
+    }catch{
+      // Sin permiso de portapapeles (o sin HTTPS): se muestra para copiar a mano.
+      modalConfirm('<b>Copia este texto:</b><br><textarea readonly rows="8" style="margin-top:8px">'+escHtml(txt)+'</textarea>',
+        ()=>{}, { okLabel:'Listo' });
+    }
   },
   // Selector de responsable: cualquier persona activa de la iglesia (decisión del
   // dueño). GET /directorio ya devuelve un array plano de activos, ordenado por
