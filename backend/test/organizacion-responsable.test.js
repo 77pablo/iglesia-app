@@ -130,3 +130,66 @@ test('asignar responsable: rechaza personas de otra iglesia, inactivas o inexist
   // Y la cosa quedo intacta
   assert.equal(db.prepare('SELECT responsable_id FROM evento_org_cosa WHERE id = ?').get(cosaId).responsable_id, null);
 });
+
+test('mis-cosas: el feligres ve SOLO su linea, sin gastos ni cosas de otros', async () => {
+  const b = await servidor();
+  const S = sembrar('MIAS');
+  const { hojaId, cosaId, auth } = await hojaConCosa(b, S, 'Almuerzo de jovenes');
+  const authFel = { Authorization: 'Bearer ' + tok(S.feligresId, S.iglesiaId), 'Content-Type': 'application/json' };
+
+  // Una segunda cosa que NO es suya, y un gasto en la misma hoja.
+  let res = await fetch(b + `/api/organizacion/${hojaId}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: 'Pan', cantidad: 3 }) });
+  const cosaAjena = (await res.json()).id;
+  await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Carbon', monto: 12000 }) });
+  await fetch(b + '/api/organizacion/' + hojaId, { method: 'PATCH', headers: auth, body: JSON.stringify({ hora_llegada: '12:30' }) });
+  await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: S.feligresId }) });
+
+  // El feligres SIGUE sin poder entrar al modulo por la puerta grande.
+  assert.equal((await fetch(b + '/api/organizacion', { headers: authFel })).status, 403);
+  assert.equal((await fetch(b + '/api/organizacion/' + hojaId, { headers: authFel })).status, 403);
+
+  // Pero ve lo suyo por la rendija.
+  res = await fetch(b + '/api/organizacion/mis-cosas', { headers: authFel });
+  assert.equal(res.status, 200);
+  const mias = await res.json();
+  assert.equal(mias.length, 1, 'solo la linea asignada a el');
+  assert.equal(mias[0].id, cosaId);
+  assert.equal(mias[0].nombre, 'Jugos nectar');
+  assert.equal(mias[0].cantidad, 5);
+  assert.equal(mias[0].hoja_titulo, 'Almuerzo de jovenes');
+  assert.equal(mias[0].hora_llegada, '12:30');
+  // Nada de dinero ni de cosas ajenas en la respuesta.
+  const crudo = JSON.stringify(mias);
+  assert.ok(!crudo.includes('12000') && !crudo.toLowerCase().includes('gasto'), 'no puede filtrarse ningun gasto');
+  assert.ok(!crudo.includes('Pan'), 'no puede ver las cosas de otros');
+  assert.ok(!crudo.includes('total'), 'no puede ver totales');
+
+  // Marca "ya lo tengo".
+  res = await fetch(b + `/api/organizacion/mis-cosas/${cosaId}`, { method: 'PATCH', headers: authFel, body: JSON.stringify({ listo: true }) });
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT listo FROM evento_org_cosa WHERE id = ?').get(cosaId).listo, 1);
+
+  // NO puede tocar la linea de otro (403), ni renombrar la suya.
+  res = await fetch(b + `/api/organizacion/mis-cosas/${cosaAjena}`, { method: 'PATCH', headers: authFel, body: JSON.stringify({ listo: true }) });
+  assert.equal(res.status, 403);
+  assert.equal(db.prepare('SELECT listo FROM evento_org_cosa WHERE id = ?').get(cosaAjena).listo, 0);
+  await fetch(b + `/api/organizacion/mis-cosas/${cosaId}`, { method: 'PATCH', headers: authFel, body: JSON.stringify({ nombre: 'Otra cosa', listo: true }) });
+  assert.equal(db.prepare('SELECT nombre FROM evento_org_cosa WHERE id = ?').get(cosaId).nombre, 'Jugos nectar');
+});
+
+test('mis-cosas: exige sesion y no cruza iglesias', async () => {
+  const b = await servidor();
+  const A = sembrar('MIAA');
+  const B = sembrar('MIAB');
+  const { cosaId, auth } = await hojaConCosa(b, A);
+  await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: A.feligresId }) });
+
+  // Sin token -> 401 (la ruta va DESPUES de authMiddleware, no antes)
+  assert.equal((await fetch(b + '/api/organizacion/mis-cosas')).status, 401);
+
+  // Un feligres de otra iglesia no ve nada y no puede marcar la cosa ajena.
+  const authB = { Authorization: 'Bearer ' + tok(B.feligresId, B.iglesiaId), 'Content-Type': 'application/json' };
+  assert.deepEqual(await (await fetch(b + '/api/organizacion/mis-cosas', { headers: authB })).json(), []);
+  const res = await fetch(b + `/api/organizacion/mis-cosas/${cosaId}`, { method: 'PATCH', headers: authB, body: JSON.stringify({ listo: true }) });
+  assert.equal(res.status, 403);
+});

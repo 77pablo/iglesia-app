@@ -14,7 +14,43 @@ import { validar } from './seguridad.js';
 const r = Router();
 r.use(authMiddleware);
 
-// Gate de visibilidad: la organización es cosa de líderes/pastor.
+// ---------- La rendija del feligres ----------
+// Estas DOS rutas van a proposito AQUI: despues de r.use(authMiddleware) (asi
+// siguen exigiendo sesion) y ANTES del gate de lideres. Quien se comprometio a
+// traer algo tiene que poder ver SU linea sin que se le abra la hoja, que
+// contiene los gastos. Devuelven solo lo asignado a quien pregunta: nunca
+// gastos, nunca totales, nunca las cosas de otros.
+r.get('/mis-cosas', (req, res) => {
+  const filas = db.prepare(
+    `SELECT c.id, c.nombre, c.cantidad, c.listo,
+            o.titulo AS hoja_titulo, o.fecha, o.hora_llegada,
+            e.titulo AS evento_titulo, e.fecha AS evento_fecha, e.lugar
+       FROM evento_org_cosa c
+       JOIN evento_org o ON o.id = c.org_id
+       LEFT JOIN evento e ON e.id = o.evento_id
+      WHERE c.responsable_id = ? AND o.iglesia_id = ?
+      ORDER BY COALESCE(e.fecha, o.fecha), c.id`
+  ).all(req.user.persona_id, req.user.iglesia_id);
+  res.json(filas);
+});
+
+// Solo el interruptor "ya lo tengo", y solo sobre lo propio. La autorizacion es
+// responsable_id === persona_id, NO hojaEditable: el feligres no edita la hoja.
+const misCosasSchema = z.object({ listo: z.union([z.boolean(), z.literal(0), z.literal(1)]) });
+r.patch('/mis-cosas/:cosaId', validar(misCosasSchema), (req, res) => {
+  const cosa = db.prepare(
+    `SELECT c.id, c.responsable_id FROM evento_org_cosa c
+       JOIN evento_org o ON o.id = c.org_id
+      WHERE c.id = ? AND o.iglesia_id = ?`
+  ).get(Number(req.params.cosaId), req.user.iglesia_id);
+  if (!cosa || cosa.responsable_id !== req.user.persona_id)
+    return res.status(403).json({ error: 'Esa no es una de tus cosas' });
+  db.prepare('UPDATE evento_org_cosa SET listo = ? WHERE id = ?').run(req.body.listo ? 1 : 0, cosa.id);
+  res.json({ ok: true });
+});
+
+// Gate de visibilidad: la organización es cosa de líderes/pastor. Todo lo que va
+// DEBAJO de esta linea lo exige; la rendija de arriba queda deliberadamente fuera.
 r.use((req, res, next) => {
   if (!esLiderOAdmin(req.user.persona_id)) return res.status(403).json({ error: 'Solo lideres o el pastor' });
   next();
