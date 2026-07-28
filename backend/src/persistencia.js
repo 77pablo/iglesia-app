@@ -238,6 +238,14 @@ export function avisarSiMal(estado, hoy = new Date().toISOString().slice(0, 10))
   if (!estado) return 0;
   if (estado.bd.estado !== 'mal' && estado.uploads.estado !== 'mal') return 0;
 
+  // Primero se mira A QUIEN avisar, y solo si hay alguien se consume la clave
+  // del dia. Al reves (consumir la clave antes de mirar admins) es justo el
+  // defecto que se arregla aqui: si hoy no hay ningun super-admin activo, la
+  // clave se gastaria sin crear ningun aviso, y si mas tarde ese mismo dia se
+  // reactiva un super-admin, nunca se enteraria de que el respaldo esta caido.
+  const admins = db.prepare("SELECT id FROM persona WHERE rol_global = 'super_admin' AND activo = 1").all();
+  if (admins.length === 0) return 0;   // nadie a quien avisar: el dia sigue disponible
+
   const ins = db.prepare('INSERT OR IGNORE INTO aviso_sistema (clave) VALUES (?)')
     .run('persistencia:mal:' + hoy);
   if (ins.changes === 0) return 0;   // ya se aviso hoy
@@ -249,7 +257,6 @@ export function avisarSiMal(estado, hoy = new Date().toISOString().slice(0, 10))
     + 'Si el servicio se reinicia ahora, esos datos se pierden. '
     + 'Revisa las variables R2_* y LITESTREAM_* en Render.';
 
-  const admins = db.prepare("SELECT id FROM persona WHERE rol_global = 'super_admin' AND activo = 1").all();
   const st = db.prepare("INSERT INTO notificacion (persona_id, tipo, titulo, texto) VALUES (?, 'sistema', ?, ?)");
   for (const a of admins) st.run(a.id, '⚠️ El respaldo no está funcionando', texto);
   return admins.length;

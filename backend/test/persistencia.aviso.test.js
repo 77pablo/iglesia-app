@@ -66,3 +66,39 @@ test('"no pude comprobarlo" NO avisa: un corte de red no es perdida de datos', (
   assert.equal(avisarSiMal(GRIS, '2026-08-04'), 0);
   assert.equal(avisos(), antes);
 });
+
+test('sin ningun super-admin activo no avisa y NO consume la clave del dia', () => {
+  const dia = '2026-08-05';
+  db.prepare('UPDATE persona SET activo = 0 WHERE id = ?').run(superId);
+  try {
+    assert.equal(avisarSiMal(MAL, dia), 0);
+    const clave = db.prepare('SELECT * FROM aviso_sistema WHERE clave = ?').get('persistencia:mal:' + dia);
+    assert.equal(clave, undefined, 'sin admins, la clave del dia debe seguir libre');
+  } finally {
+    db.prepare('UPDATE persona SET activo = 1 WHERE id = ?').run(superId);
+  }
+
+  // Reactivado el super-admin, el mismo dia si debe avisar: la clave no se gasto arriba.
+  const antes = avisos();
+  assert.equal(avisarSiMal(MAL, dia), 1);
+  assert.equal(avisos(), antes + 1);
+});
+
+test('con dos super-admins activos, un aviso crea una notificacion por cada uno', () => {
+  const r = db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, rol_global, activo) VALUES (NULL,'super2','Super Dos','x','super_admin',1)"
+  ).run();
+  const super2Id = Number(r.lastInsertRowid);
+  try {
+    const avisos2 = () => db.prepare("SELECT COUNT(*) n FROM notificacion WHERE persona_id = ? AND tipo = 'sistema'").get(super2Id).n;
+    const antes1 = avisos();
+    const antes2 = avisos2();
+    assert.equal(avisarSiMal(MAL, '2026-08-06'), 2);
+    assert.equal(avisos(), antes1 + 1);
+    assert.equal(avisos2(), antes2 + 1);
+  } finally {
+    // Primero las notificaciones que le llegaron (FK persona_id NOT NULL), luego la persona.
+    db.prepare('DELETE FROM notificacion WHERE persona_id = ?').run(super2Id);
+    db.prepare('DELETE FROM persona WHERE id = ?').run(super2Id);
+  }
+});
