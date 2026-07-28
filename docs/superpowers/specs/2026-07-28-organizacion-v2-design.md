@@ -57,10 +57,18 @@ que devuelven exclusivamente lo asignado a quien pregunta:
 | GET | `/api/organizacion/mis-cosas` | Solo las cosas donde `responsable_id = yo`. Devuelve `nombre, cantidad, listo` + el título/fecha/`hora_llegada` de la hoja + título y lugar del evento. **Nunca** gastos, totales ni las cosas de otros. |
 | PATCH | `/api/organizacion/mis-cosas/:cosaId` | Solo `{ listo }`. Autoriza por `responsable_id === persona_id`, no por `hojaEditable`. |
 
-Detalle de implementación que hay que respetar: en Express el `r.use` del gate
-corre por orden de registro, así que estas dos rutas van **arriba del archivo**,
-antes del middleware de visibilidad y antes de `GET /:id` (que hoy haría
-`Number('mis-cosas') → NaN` y respondería 404, pero conviene no depender de eso).
+Detalle de implementación que hay que respetar, y que se presta a un error grave:
+en Express el `r.use` corre por orden de registro, así que estas dos rutas van
+**entre los dos middlewares del principio del archivo** — después de
+`r.use(authMiddleware)` (línea 14) y antes del gate de visibilidad (línea 17).
+
+> ⚠️ **No "arriba del archivo" a secas.** Si quedan por encima de
+> `r.use(authMiddleware)`, `req.user` es `undefined`: las rutas dejan de exigir
+> sesión y revientan (o peor, quedan abiertas). Van después de la autenticación
+> y antes del gate de líderes.
+
+También deben ir antes de `GET /:id` (que hoy haría `Number('mis-cosas') → NaN` y
+respondería 404, pero conviene no depender de eso).
 
 Con esto, el feligrés sigue sin poder listar hojas, abrir hojas ajenas ni ver un
 peso de gastos. Solo ve su línea.

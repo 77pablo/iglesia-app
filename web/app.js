@@ -532,7 +532,7 @@ async function renderDashboard(){
     </div>
     <div class="widget" style="cursor:pointer" onclick="navTo('mi_servicio')">
       <div class="widget-head">🙌 Servicios por confirmar</div>
-      <div class="stat-num" style="color:${pendientes.length?'var(--amber)':'var(--green)'}">${pendientes.length}</div>
+      <div class="stat-num" style="color:${pendientes.length?'var(--amber-tx)':'var(--green-tx)'}">${pendientes.length}</div>
     </div>
     <div class="widget" style="cursor:pointer" onclick="verNotificaciones()">
       <div class="widget-head">🔔 Notificaciones sin leer</div>
@@ -979,8 +979,8 @@ async function asignar(){
   const body={evento_id:$('sv-ev').value,persona_id:$('sv-persona').value,tipo:$('sv-tipo').value};
   const m=$('sv-msg');
   try{ const r=await api('/asignaciones',{method:'POST',body:JSON.stringify(body)});
-    m.style.color='var(--green)'; m.textContent='✅ Asignado y avisado.'+(r.aviso?'  ⚠️ '+r.aviso:'');
-  }catch(e){ m.style.color='var(--red)'; m.textContent=e.message; }
+    m.style.color='var(--green-tx)'; m.textContent='✅ Asignado y avisado.'+(r.aviso?'  ⚠️ '+r.aviso:'');
+  }catch(e){ m.style.color='var(--red-tx)'; m.textContent=e.message; }
 }
 
 // ============================================================
@@ -2358,7 +2358,7 @@ async function verIglesiaObispo(id, mes){
     <div class="widgets" style="margin-bottom:18px">
       <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${d.miembros}</div></div>
       <div class="widget" style="cursor:pointer" onclick="obAsistencia(${id})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></div>
-      <div class="widget" style="cursor:pointer" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green)':'var(--red)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></div>
+      <div class="widget" style="cursor:pointer" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></div>
     </div>
     ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green-tx)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red-tx)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${id})">Ver movimientos ›</button>`)}
     ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${escHtml(e.grupo||'')} · ${escHtml(e.estado)}</div></div><span class="estado-chip">✅ ${e.asistencia}</span></div>`, 'Sin eventos este mes.'))}
@@ -2385,7 +2385,7 @@ async function obTesoreria(id){
   try{ const m=await api('/obispo/iglesia/'+id+'/tesoreria'+_qmes());
     const ing=m.filter(x=>x.tipo==='ingreso').reduce((a,b)=>a+b.monto,0), gas=m.filter(x=>x.tipo==='gasto').reduce((a,b)=>a+b.monto,0);
     modalDetalle('💰 Movimientos · '+_obMes, m.length
-      ? `<div class="muted small" style="margin-bottom:10px">↑ ${money(ing)} · ↓ ${money(gas)} · balance ${money(ing-gas)}</div><div class="list">`+m.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.tipo==='ingreso'?'↑':'↓'} ${cap(x.categoria||x.tipo)}</b><div class="muted small">${escHtml(x.descripcion||'')} · ${escHtml(x.fecha)}${x.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(x.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div><b style="color:${x.tipo==='ingreso'?'var(--green)':'var(--red)'}">${x.tipo==='ingreso'?'+':'−'}${money(x.monto)}</b></div>`).join('')+'</div>'
+      ? `<div class="muted small" style="margin-bottom:10px">↑ ${money(ing)} · ↓ ${money(gas)} · balance ${money(ing-gas)}</div><div class="list">`+m.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.tipo==='ingreso'?'↑':'↓'} ${cap(x.categoria||x.tipo)}</b><div class="muted small">${escHtml(x.descripcion||'')} · ${escHtml(x.fecha)}${x.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(x.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div><b style="color:${x.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${x.tipo==='ingreso'?'+':'−'}${money(x.monto)}</b></div>`).join('')+'</div>'
       : '<p class="muted small">Sin movimientos este mes.</p>');
   }catch(e){ toast(e.message); }
 }
@@ -2611,7 +2611,7 @@ function renderAdmin(){
           <button class="btn ghost small-btn" onclick="adminFormRol(${u.id})">+ Rol</button>
           <button class="link" onclick="adminTogglePastor(${u.id},${u.es_pastor})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
           ${puedeResetear?`<button class="link" onclick="adminResetClave(${u.id})">🔑 Restablecer contraseña</button>`:''}
-          <button class="link" style="color:${u.activo?'var(--red)':'var(--green)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>
+          <button class="link" style="color:${u.activo?'var(--red-tx)':'var(--green-tx)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>
         </div>
       </div>
       <div id="adm-rolform-${u.id}"></div>
