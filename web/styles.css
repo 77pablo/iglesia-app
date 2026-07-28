@@ -603,3 +603,12 @@ body{transition:background-color .3s ease,color .3s ease;}
   .card,.widget{box-shadow:none;border:1px solid #ccc;break-inside:avoid;}
   a{color:#000;text-decoration:none;}
 }
+
+/* Organización de eventos */
+.org-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);}
+.org-row:last-child{border-bottom:none;}
+.org-check{display:flex;align-items:center;justify-content:flex-start;gap:8px;cursor:pointer;flex:1;}
+/* La regla global input{width:100%} estira el checkbox y empuja el texto: lo anclamos. */
+.org-check input[type=checkbox]{width:auto;flex:0 0 auto;margin:0;padding:0;}
+.org-listo{text-decoration:line-through;color:var(--muted);}
+.org-total{margin-top:10px;padding-top:10px;border-top:2px solid var(--border);text-align:right;font-size:1.1rem;}

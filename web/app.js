@@ -21,6 +21,7 @@ const NAV = [
   ['cuidado_pastoral','❤️','Cuidado pastoral'],
   ['ninos','👶','Niños / Esc. Dominical'],
   ['tesoreria','💰','Tesorería'],
+  ['organizacion','🗒️','Organización'],
   ['predica','📖','Predica'],
   ['panel_obispo','👑','Panel del Obispo'],
   ['superadmin','🛡️','Super-admin'],
@@ -281,6 +282,7 @@ function tieneModulo(k){
   if(k==='predica'||k==='ajustes'||k==='mensajes'||k==='directorio') return true;
   const mods = ME.modulos||[];
   if(k==='calendario') return mods.includes('calendario')||mods.includes('calendario_completo');
+  if(k==='organizacion') return puedePublicar();   // solo líderes/pastor (igual que el gate del backend)
   return mods.includes(k);
 }
 
@@ -330,6 +332,7 @@ const NAV_ICON={
   admin:_ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>'),
   mensajes:_ic('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
   directorio:_ic('<rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M8 17c.6-2.1 2.1-3 4-3s3.4.9 4 3"/><path d="M4 8h1M4 12h1M4 16h1"/>'),
+  organizacion:_ic('<rect x="8" y="4" width="8" height="4" rx="1"/><path d="M9 4H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/><path d="M8 12h8M8 16h5"/>'),
 };
 // ============================================================
 //  EMOJIS → ÍCONOS DE LÍNEA (mismo estilo del menú lateral)
@@ -485,6 +488,7 @@ function navTo(key){
   if(key==='musicos') return vistaMusica();
   if(key==='cuidado_pastoral') return vistaCuidado();
   if(key==='tesoreria') return vistaTesoreria();
+  if(key==='organizacion') return vistaOrganizacion();
   if(key==='ninos') return vistaNinos();
   if(key==='predica') return vistaPredica();
   if(key==='panel_obispo') return vistaPanelObispo();
@@ -748,7 +752,8 @@ function verDia(fecha){
       <div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
         <div class="muted small">${e.grupo?'🏷️ '+escHtml(e.grupo):''}${e.hora_inicio?' · 🕐 '+e.hora_inicio+(e.hora_fin?'–'+e.hora_fin:''):''}${e.lugar?' · 📍 '+escHtml(e.lugar):''}</div>
         <div style="margin-top:6px">${badge}</div></div>
-      ${(puede||puedeBorrar)?`<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+      ${(puede||puedeBorrar||puedePublicar())?`<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+        ${puedePublicar()?`<button class="link" onclick="Org.abrirEvento(${e.id})">🗒️ Organización</button>`:''}
         ${puede?`<button class="link" onclick="editarEvento(${e.id})">✏️ Editar</button>`:''}
         ${puedeBorrar?`<button class="link" style="color:var(--red)" onclick="borrarEvento(${e.id})">🗑️ Borrar</button>`:''}
       </div>`:''}</div>`;
@@ -3367,6 +3372,139 @@ const Chat = {
       });
     });
     this.es.onerror=()=>{ /* EventSource reconecta solo */ };
+  }
+};
+
+// ============================================================
+//  ORGANIZACIÓN DE EVENTOS: hoja de cosas a llevar + gastos (total que se suma).
+//  Ver: líderes/pastor. Editar: solo el creador o el pastor (lo dice puede_editar).
+// ============================================================
+function fmtMonto(n){ return '$'+Number(n||0).toLocaleString('es-CL'); }
+
+async function vistaOrganizacion(){
+  const c=$('content');
+  c.innerHTML=`<div class="head-row"><h2>🗒️ Organización</h2>
+    <button class="btn small-btn" onclick="Org.nuevaHoja()">➕ Nueva lista</button></div>
+    <div id="org-lista" class="muted">Cargando…</div>`;
+  try{
+    const hojas=await api('/organizacion');
+    const z=$('org-lista'); z.className='';
+    z.innerHTML = hojas.length ? hojas.map(h=>{
+      const titulo = h.evento_titulo || h.titulo || '(sin título)';
+      const fecha = h.evento_fecha || h.fecha;
+      return `<div class="item-card flex" style="margin-top:10px;cursor:pointer" onclick="Org.abrir(${h.id})">
+        <div style="flex:1"><div class="item-titulo">${escHtml(titulo)}</div>
+          <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''} · ${h.n_cosas||0} cosa(s)</div></div>
+        <div style="text-align:right"><b>${fmtMonto(h.total_gastado)}</b><div class="muted small">gastado</div></div>
+      </div>`;
+    }).join('') : '<p class="muted small">Aún no hay listas. Crea una con "Nueva lista".</p>';
+  }catch(e){ const z=$('org-lista'); z.className='error'; z.textContent=(e&&e.message)||'No se pudo cargar'; }
+}
+
+const Org = {
+  // Crea una lista suelta (pide título) y la abre.
+  async nuevaHoja(){
+    const titulo=prompt('Título de la lista (ej. "Almuerzo de jóvenes")'); if(!titulo||!titulo.trim()) return;
+    await conBoton(botonActual(), async()=>{
+      try{ const r=await api('/organizacion',{method:'POST',body:JSON.stringify({titulo:titulo.trim()})}); Org.abrir(r.id); }
+      catch(e){ toast((e&&e.message)||'No se pudo crear'); }
+    });
+  },
+  // Abre la hoja de un evento (la crea vacía la 1a vez).
+  async abrirEvento(eventoId){
+    try{ const h=await api('/organizacion/evento/'+eventoId); Org._render(h); }
+    catch(e){ toast((e&&e.message)||'No se pudo abrir'); }
+  },
+  // Abre una hoja por id.
+  async abrir(id){
+    try{ const h=await api('/organizacion/'+id); Org._render(h); }
+    catch(e){ toast((e&&e.message)||'No se pudo abrir'); }
+  },
+  _hoja:null,
+  _render(h){
+    Org._hoja=h;
+    const ed=!!h.puede_editar;
+    const titulo=(h.evento&&h.evento.titulo)||h.titulo||'(sin título)';
+    const fecha=(h.evento&&h.evento.fecha)||h.fecha;
+    const cosas=h.cosas.map(x=>`<div class="org-row">
+        <label class="org-check"><input type="checkbox" ${x.listo?'checked':''} ${ed?'':'disabled'} onchange="Org.toggleCosa(${x.id}, this.checked)">
+          <span class="${x.listo?'org-listo':''}">${escHtml(x.nombre)} <b>×${x.cantidad}</b></span></label>
+        ${ed?`<button class="link" style="color:var(--red)" onclick="Org.borrarCosa(${x.id})">✕</button>`:''}
+      </div>`).join('') || '<p class="muted small">Sin cosas todavía.</p>';
+    const gastos=h.gastos.map(g=>`<div class="org-row">
+        <span>${escHtml(g.concepto)} — <b>${fmtMonto(g.monto)}</b></span>
+        ${ed?`<button class="link" style="color:var(--red)" onclick="Org.borrarGasto(${g.id})">✕</button>`:''}
+      </div>`).join('') || '<p class="muted small">Sin gastos todavía.</p>';
+
+    $('content').innerHTML=`
+      <div class="head-row"><h2>🗒️ ${escHtml(titulo)}</h2>
+        <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div>
+      <div class="card">
+        <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''}</div>
+        <div style="margin-top:10px"><b>🕐 Hora de llegada:</b>
+          ${ed?`<input id="org-hora" type="time" value="${h.hora_llegada||''}" onchange="Org.guardarHora(this.value)" style="max-width:130px;display:inline-block">`
+              :`<span>${escHtml(h.hora_llegada||'—')}</span>`}</div>
+      </div>
+      <div class="card" style="margin-top:14px"><h3 style="font-size:16px">📦 Cosas a llevar</h3>
+        <div id="org-cosas">${cosas}</div>
+        ${ed?`<div class="row" style="gap:6px;margin-top:10px">
+          <input id="org-cosa-nombre" placeholder="Ej. Jugos nectar">
+          <input id="org-cosa-cant" type="number" min="1" value="1" style="max-width:80px">
+          <button class="btn small-btn" onclick="Org.addCosa()">Añadir</button></div>`:''}
+      </div>
+      <div class="card" style="margin-top:14px"><h3 style="font-size:16px">💵 Gastos</h3>
+        <div id="org-gastos">${gastos}</div>
+        <div class="org-total">Total gastado: <b>${fmtMonto(h.total_gastado)}</b></div>
+        ${ed?`<div class="row" style="gap:6px;margin-top:10px">
+          <input id="org-gasto-concepto" placeholder="Ej. Pan">
+          <input id="org-gasto-monto" type="number" min="1" placeholder="Monto" style="max-width:110px">
+          <button class="btn small-btn" onclick="Org.addGasto()">Añadir</button></div>`:''}
+        ${ed?`<div style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
+      </div>`;
+  },
+  _recargar(){ if(Org._hoja) Org.abrir(Org._hoja.id); },
+  async addCosa(){
+    const nombre=$('org-cosa-nombre').value.trim(); const cantidad=Number($('org-cosa-cant').value)||1;
+    if(!nombre) return toast('Escribe qué llevar');
+    await conBoton(botonActual(), async()=>{
+      try{ await api('/organizacion/'+Org._hoja.id+'/cosas',{method:'POST',body:JSON.stringify({nombre,cantidad})}); Org._recargar(); }
+      catch(e){ toast((e&&e.message)||'No se pudo añadir'); }
+    });
+  },
+  async toggleCosa(id, listo){
+    try{ await api('/organizacion/cosas/'+id,{method:'PATCH',body:JSON.stringify({listo})}); }
+    catch(e){ toast((e&&e.message)||'No se pudo actualizar'); Org._recargar(); }
+  },
+  async borrarCosa(id){
+    await conBoton(botonActual(), async()=>{
+      try{ await api('/organizacion/cosas/'+id,{method:'DELETE'}); Org._recargar(); }
+      catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
+    });
+  },
+  async addGasto(){
+    const concepto=$('org-gasto-concepto').value.trim(); const monto=Number($('org-gasto-monto').value);
+    if(!concepto) return toast('Escribe el concepto');
+    if(!(monto>0)) return toast('El monto debe ser mayor a 0');
+    await conBoton(botonActual(), async()=>{
+      try{ await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify({concepto,monto})}); Org._recargar(); }
+      catch(e){ toast((e&&e.message)||'No se pudo añadir'); }
+    });
+  },
+  async borrarGasto(id){
+    await conBoton(botonActual(), async()=>{
+      try{ await api('/organizacion/gastos/'+id,{method:'DELETE'}); Org._recargar(); }
+      catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
+    });
+  },
+  async guardarHora(v){
+    try{ await api('/organizacion/'+Org._hoja.id,{method:'PATCH',body:JSON.stringify({hora_llegada:v})}); toast('✅ Hora guardada'); }
+    catch(e){ toast((e&&e.message)||'No se pudo guardar'); }
+  },
+  borrarHoja(){
+    modalConfirm('¿Borrar esta lista con sus cosas y gastos? No se puede deshacer.', async()=>{
+      try{ await api('/organizacion/'+Org._hoja.id,{method:'DELETE'}); toast('🗑️ Lista borrada'); vistaOrganizacion(); }
+      catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
+    }, { okLabel:'Sí, borrar', danger:true });
   }
 };
 
