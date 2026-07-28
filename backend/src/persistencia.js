@@ -12,6 +12,13 @@
 // Umbrales del spec (docs/superpowers/specs/2026-07-28-indicador-persistencia-design.md).
 export const UMBRAL_RETRASO_SEG = 15 * 60;   // el retraso normal se mide en segundos
 
+export const UMBRAL_SELLO_SEG = 5 * 60;      // el bucle de rclone corre cada 30 s
+export const GRACIA_ARRANQUE_SEG = 3 * 60;   // margen para la primera vuelta del bucle
+
+// Momento en que arranco este proceso. Sirve para el periodo de gracia: al
+// despertar del sueno del plan free, /data viene vacio y el sello aun no existe.
+export const ARRANQUE_MS = Date.now();
+
 // Duracion en formato Go ("1.5s", "2m30s", "1h0m0s", "500ms"), que es como la
 // imprime litestream. Devuelve segundos, o null si no se reconoce.
 export function parsearDuracion(txt) {
@@ -61,4 +68,29 @@ export function interpretarGeneraciones(salida, ahoraMs = Date.now()) {
     ultimo,
     retraso_seg: Math.round(retraso)
   };
+}
+
+// Interpreta el sello que deja el bucle de rclone tras cada sincronizacion.
+// Dentro del periodo de gracia, la falta de sello no es un fallo: es que el
+// bucle todavia no ha dado su primera vuelta.
+export function interpretarSello(contenido, ahoraMs = Date.now(), arranqueMs = ARRANQUE_MS) {
+  const enGracia = (ahoraMs - arranqueMs) / 1000 < GRACIA_ARRANQUE_SEG;
+  const txt = String(contenido ?? '').trim();
+
+  if (!txt) {
+    return enGracia
+      ? { estado: 'desconocido', motivo: 'arrancando', ultimo: null }
+      : { estado: 'mal', motivo: 'sello_ausente', ultimo: null };
+  }
+
+  const t = Date.parse(txt);
+  if (!Number.isFinite(t)) return { estado: 'desconocido', motivo: 'formato_no_reconocido', ultimo: null };
+
+  const ultimo = new Date(t).toISOString();
+  if ((ahoraMs - t) / 1000 > UMBRAL_SELLO_SEG) {
+    return enGracia
+      ? { estado: 'desconocido', motivo: 'arrancando', ultimo }
+      : { estado: 'mal', motivo: 'sello_viejo', ultimo };
+  }
+  return { estado: 'ok', motivo: null, ultimo };
 }

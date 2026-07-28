@@ -6,7 +6,7 @@
 // ============================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsearDuracion, interpretarGeneraciones } from '../src/persistencia.js';
+import { parsearDuracion, interpretarGeneraciones, interpretarSello } from '../src/persistencia.js';
 
 // Salida real de `litestream generations` (columnas alineadas con espacios).
 const CABECERA = 'name  generation        lag     start                     end';
@@ -81,4 +81,51 @@ test('ningun motivo expone credenciales ni rutas del servidor', () => {
   assert.equal(r.estado, 'desconocido');
   assert.ok(!/cloudflarestorage|AKIA|key=/.test(JSON.stringify(r)),
     'el resultado no puede arrastrar la salida cruda de litestream');
+});
+
+// --- Sello de uploads --------------------------------------------------
+// El bucle de rclone reescribe el sello tras CADA sincronizacion correcta.
+// Si el bucle muere, muere en silencio: el sello envejeciendo es lo unico
+// que lo delata.
+const ARRANQUE_VIEJO = AHORA - 60 * 60 * 1000;   // el proceso lleva 1 hora arriba
+const ARRANQUE_RECIEN = AHORA - 30 * 1000;       // el proceso lleva 30 segundos
+
+test('sello fresco -> ok', () => {
+  const r = interpretarSello('2026-07-28T14:59:30Z', AHORA, ARRANQUE_VIEJO);
+  assert.equal(r.estado, 'ok');
+  assert.equal(r.motivo, null);
+  assert.equal(r.ultimo, '2026-07-28T14:59:30.000Z');
+});
+
+test('sello viejo (mas de 5 min) con el proceso ya asentado -> mal', () => {
+  const r = interpretarSello('2026-07-28T14:40:00Z', AHORA, ARRANQUE_VIEJO);
+  assert.equal(r.estado, 'mal');
+  assert.equal(r.motivo, 'sello_viejo');
+});
+
+test('sin sello con el proceso ya asentado -> mal', () => {
+  const r = interpretarSello('', AHORA, ARRANQUE_VIEJO);
+  assert.equal(r.estado, 'mal');
+  assert.equal(r.motivo, 'sello_ausente');
+});
+
+test('sin sello DENTRO del periodo de gracia -> desconocido, no mal', () => {
+  // Al despertar del sueno del plan free, /data viene vacio y el bucle aun no
+  // ha dado su primera vuelta. Avisar aqui seria avisar por nada, y una alarma
+  // que suena por nada se aprende a ignorar.
+  const r = interpretarSello('', AHORA, ARRANQUE_RECIEN);
+  assert.equal(r.estado, 'desconocido');
+  assert.equal(r.motivo, 'arrancando');
+});
+
+test('sello viejo dentro del periodo de gracia -> desconocido', () => {
+  const r = interpretarSello('2026-07-28T10:00:00Z', AHORA, ARRANQUE_RECIEN);
+  assert.equal(r.estado, 'desconocido');
+  assert.equal(r.motivo, 'arrancando');
+});
+
+test('sello con contenido ilegible -> desconocido', () => {
+  const r = interpretarSello('no soy una fecha', AHORA, ARRANQUE_VIEJO);
+  assert.equal(r.estado, 'desconocido');
+  assert.equal(r.motivo, 'formato_no_reconocido');
 });
