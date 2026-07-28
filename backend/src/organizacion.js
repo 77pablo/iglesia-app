@@ -201,6 +201,49 @@ r.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Duplicar una hoja ("el año pasado hicimos esta misma lista") ---
+// Reemplaza a un sistema de plantillas: para una iglesia que hace tres o cuatro
+// eventos asi al ano, un boton resuelve el 90% del caso.
+// Puede duplicar cualquiera que pueda VER la hoja (no hace falta poder editarla):
+// asi un lider se hace la suya a partir de la ajena sin tocarla.
+r.post('/:id/duplicar', (req, res) => {
+  const org = db.prepare('SELECT * FROM evento_org WHERE id = ? AND iglesia_id = ?')
+    .get(Number(req.params.id), req.user.iglesia_id);
+  if (!org) return res.status(404).json({ error: 'Hoja no encontrada' });
+
+  const titulo = 'Copia de ' + (org.titulo || nombreDeEvento(org.evento_id) || 'lista');
+  let nuevaId;
+  db.exec('BEGIN');
+  try {
+    // La copia nace SUELTA: pegarla al evento viejo chocaria con el indice unico
+    // (una hoja por evento) y ademas no es lo que se quiere: se copia para el
+    // evento que viene, que todavia no existe.
+    const info = db.prepare('INSERT INTO evento_org (iglesia_id, titulo, hora_llegada, creado_por) VALUES (?,?,?,?)')
+      .run(req.user.iglesia_id, titulo, org.hora_llegada, req.user.persona_id);
+    nuevaId = Number(info.lastInsertRowid);
+    // Las cosas se copian EN LIMPIO: sin responsable y sin marcar. Nadie hereda
+    // el compromiso del ano pasado. Los gastos no se copian nunca: son del
+    // evento que ya paso.
+    db.prepare(
+      `INSERT INTO evento_org_cosa (org_id, nombre, cantidad, orden, listo, responsable_id)
+       SELECT ?, nombre, cantidad, orden, 0, NULL FROM evento_org_cosa WHERE org_id = ?`
+    ).run(nuevaId, org.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo duplicar la lista' });
+  }
+  auditar(req.user.iglesia_id, req.user.persona_id, 'duplicar_org', 'organizacion', titulo);
+  res.json({ ok: true, id: nuevaId });
+});
+
+// Titulo del evento al que cuelga una hoja (para nombrar la copia).
+function nombreDeEvento(eventoId) {
+  if (!eventoId) return null;
+  const ev = db.prepare('SELECT titulo FROM evento WHERE id = ?').get(eventoId);
+  return ev ? ev.titulo : null;
+}
+
 // ---------- Cosas a llevar ----------
 // /:id/cosas y /cosas/:cosaId no colisionan: la primera lleva el id de la hoja
 // delante, la segunda empieza por el literal 'cosas'.

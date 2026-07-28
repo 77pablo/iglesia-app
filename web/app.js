@@ -3519,6 +3519,7 @@ const Org = {
     $('content').innerHTML=`
       <div class="head-row"><h2>🗒️ ${escHtml(titulo)}</h2>
         <div class="row no-print" style="width:auto;gap:6px">
+          <button class="btn ghost small-btn" onclick="Org.duplicar()">⧉ Duplicar</button>
           <button class="btn ghost small-btn" onclick="Org.copiarParaWhatsapp()">📋 Copiar</button>
           <button class="btn ghost small-btn" onclick="window.print()">🖨️ Imprimir</button>
           <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div></div>
@@ -3596,6 +3597,18 @@ const Org = {
       try{ await api('/organizacion/gastos/'+id,{method:'DELETE'}); Org._recargar(); }
       catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
     });
+  },
+  // Duplicar: se copia la lista de cosas en limpio para el evento que viene.
+  // No hace falta poder editar la hoja, así que un líder puede partir de la
+  // lista de otro sin tocarla — la copia queda a su nombre.
+  duplicar(){
+    modalConfirm('Se creará una lista nueva con las mismas cosas, sin marcar y sin responsables. Los gastos no se copian.', async()=>{
+      try{
+        const r=await api('/organizacion/'+Org._hoja.id+'/duplicar',{method:'POST'});
+        toast('⧉ Lista duplicada');
+        Org.abrir(r.id);
+      }catch(e){ toast((e&&e.message)||'No se pudo duplicar'); }
+    }, { okLabel:'Sí, duplicar' });
   },
   // Texto plano para pegar en el grupo de WhatsApp, que es por donde la iglesia
   // realmente comparte esto. SIN gastos a propósito: se pega en un grupo donde

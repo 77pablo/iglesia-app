@@ -296,3 +296,77 @@ test('gastos antiguos sin pagador: cuentan en el total pero no en el resumen', a
   assert.equal(hoja.aportes.length, 1, 'solo el gasto con pagador aparece en el resumen');
   assert.equal(hoja.aportes[0].total, 3000);
 });
+
+test('duplicar: copia las cosas en limpio, nunca los gastos, y queda a nombre de quien duplica', async () => {
+  const b = await servidor();
+  const S = sembrar('DUPL');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  // Hoja de un EVENTO, con cosas asignadas y marcadas, y con gastos.
+  const ev = db.prepare("INSERT INTO evento (iglesia_id, titulo, fecha, grupo_id) VALUES (?, 'Retiro 2025', '2025-08-10', ?)").run(S.iglesiaId, S.grupoId);
+  const eventoId = Number(ev.lastInsertRowid);
+  const original = await (await fetch(b + '/api/organizacion/evento/' + eventoId, { headers: auth })).json();
+  await fetch(b + '/api/organizacion/' + original.id, { method: 'PATCH', headers: auth, body: JSON.stringify({ hora_llegada: '09:30' }) });
+  let res = await fetch(b + `/api/organizacion/${original.id}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: 'Carpas', cantidad: 4 }) });
+  const cosaId = (await res.json()).id;
+  await fetch(b + `/api/organizacion/${original.id}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: 'Sacos', cantidad: 12 }) });
+  await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: S.feligresId, listo: true }) });
+  await fetch(b + `/api/organizacion/${original.id}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Bus', monto: 90000 }) });
+
+  // Duplicar
+  res = await fetch(b + `/api/organizacion/${original.id}/duplicar`, { method: 'POST', headers: auth });
+  assert.equal(res.status, 200);
+  const { id: copiaId } = await res.json();
+  assert.notEqual(copiaId, original.id);
+
+  const copia = await (await fetch(b + '/api/organizacion/' + copiaId, { headers: auth })).json();
+  assert.match(copia.titulo, /^Copia de /, 'el titulo debe decir que es una copia');
+  assert.equal(copia.hora_llegada, '09:30', 'la hora de llegada se conserva');
+  assert.equal(copia.evento_id, null, 'la copia es una lista SUELTA, no se pega al evento viejo');
+
+  // Las cosas se copian en limpio: sin responsable y sin marcar.
+  assert.equal(copia.cosas.length, 2);
+  assert.deepEqual(copia.cosas.map(c => c.nombre).sort(), ['Carpas', 'Sacos']);
+  assert.equal(copia.cosas.find(c => c.nombre === 'Carpas').cantidad, 4);
+  for (const c of copia.cosas) {
+    assert.equal(c.listo, 0, 'nada llega marcado en la copia');
+    assert.equal(c.responsable_id, null, 'nadie hereda el compromiso del ano pasado');
+  }
+  // Los gastos pertenecen al evento pasado: no se copian NUNCA.
+  assert.deepEqual(copia.gastos, []);
+  assert.equal(copia.total_gastado, 0);
+  assert.deepEqual(copia.aportes, []);
+
+  // Y el original queda intacto.
+  const revisada = await (await fetch(b + '/api/organizacion/' + original.id, { headers: auth })).json();
+  assert.equal(revisada.gastos.length, 1);
+  assert.equal(revisada.cosas.find(c => c.nombre === 'Carpas').listo, 1);
+});
+
+test('duplicar: puede hacerlo cualquier lider que VEA la hoja; otra iglesia 404; feligres 403', async () => {
+  const b = await servidor();
+  const S = sembrar('DUPP');
+  const O = sembrar('DUPO');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  const hojaId = (await (await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Once de damas' }) })).json()).id;
+  await fetch(b + `/api/organizacion/${hojaId}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: 'Te', cantidad: 1 }) });
+
+  // Otro lider de la MISMA iglesia: no puede editarla, pero si duplicarla, y la
+  // copia queda a su nombre (asi se hace la suya sin tocar la ajena).
+  const lid2 = Number(db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo) VALUES (?,?,?,'x',1)").run(S.iglesiaId, 'lid2_DUPP', 'Lider Dos').lastInsertRowid);
+  db.prepare("INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?, 'admin')").run(lid2, S.grupoId);
+  const auth2 = { Authorization: 'Bearer ' + tok(lid2, S.iglesiaId), 'Content-Type': 'application/json' };
+  assert.equal((await fetch(b + '/api/organizacion/' + hojaId, { method: 'PATCH', headers: auth2, body: JSON.stringify({ titulo: 'Mia' }) })).status, 403);
+  let res = await fetch(b + `/api/organizacion/${hojaId}/duplicar`, { method: 'POST', headers: auth2 });
+  assert.equal(res.status, 200);
+  const copiaId = (await res.json()).id;
+  assert.equal(db.prepare('SELECT creado_por FROM evento_org WHERE id = ?').get(copiaId).creado_por, lid2);
+  // Y sobre SU copia si manda.
+  assert.equal((await fetch(b + '/api/organizacion/' + copiaId, { method: 'PATCH', headers: auth2, body: JSON.stringify({ titulo: 'Once de damas 2026' }) })).status, 200);
+
+  // Un lider de otra iglesia no puede duplicar lo ajeno.
+  const authO = { Authorization: 'Bearer ' + tok(O.liderId, O.iglesiaId), 'Content-Type': 'application/json' };
+  assert.equal((await fetch(b + `/api/organizacion/${hojaId}/duplicar`, { method: 'POST', headers: authO })).status, 404);
+  // Un feligres tampoco: lo frena el gate de visibilidad.
+  const authF = { Authorization: 'Bearer ' + tok(S.feligresId, S.iglesiaId), 'Content-Type': 'application/json' };
+  assert.equal((await fetch(b + `/api/organizacion/${hojaId}/duplicar`, { method: 'POST', headers: authF })).status, 403);
+});
