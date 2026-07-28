@@ -115,8 +115,28 @@ export function _limpiarCache() { cache = null; }   // solo para pruebas
 
 // Cierto si el resultado todavia esta en el periodo de gracia (bd o uploads con
 // motivo 'arrancando'): ese resultado se cachea con TTL corto (ver arriba).
-function esArrancando(valor) {
+// Pura y exportada para poder probarla sin pasar por estadoPersistencia().
+export function esArrancando(valor) {
   return valor.bd.motivo === 'arrancando' || valor.uploads.motivo === 'arrancando';
+}
+
+// Decide el estado de la BD a partir del resultado de pedirGeneraciones().
+// Pura y exportada: solo mira la FORMA de r (si tiene 'motivo' o 'salida'),
+// no ejecuta nada. Se discrimina por la PRESENCIA de motivo (asi resuelve el
+// fallo pedirGeneraciones), no por la verdad de r.salida como cadena: un
+// comando exitoso puede imprimir una salida vacia, y eso interpretarGeneraciones
+// ya sabe leerlo (-> mal/sin_generaciones). Mirar "if (r.salida)" tomaria ese
+// caso legitimo como fallo y devolveria motivo:undefined, fuera del conjunto
+// cerrado de motivos.
+export function decidirBd(r) {
+  return r.motivo === undefined
+    ? interpretarGeneraciones(r.salida)
+    : {
+        // Sin binario no es un fallo del respaldo: es que esta instancia no es
+        // el contenedor (desarrollo local). Lo demas si es "no pude saberlo".
+        estado: r.motivo === 'binario_ausente' ? 'no_aplica' : 'desconocido',
+        motivo: r.motivo, ultimo: null, retraso_seg: null
+      };
 }
 
 // Combina bd y uploads en el 'ok' final. Pura y exportada para poder probarla
@@ -168,20 +188,9 @@ async function calcular() {
   }
 
   const r = await pedirGeneraciones();
-  // Se discrimina por la PRESENCIA de motivo (asi resuelve el fallo
-  // pedirGeneraciones), no por la verdad de r.salida como cadena: un comando
-  // exitoso puede imprimir una salida vacia, y eso interpretarGeneraciones ya
-  // sabe leerlo (-> mal/sin_generaciones). Mirar "if (r.salida)" tomaria ese
-  // caso legitimo como fallo y devolveria motivo:undefined, fuera del conjunto
-  // cerrado de motivos.
-  const bd = r.motivo === undefined
-    ? interpretarGeneraciones(r.salida)
-    : {
-        // Sin binario no es un fallo del respaldo: es que esta instancia no es
-        // el contenedor (desarrollo local). Lo demas si es "no pude saberlo".
-        estado: r.motivo === 'binario_ausente' ? 'no_aplica' : 'desconocido',
-        motivo: r.motivo, ultimo: null, retraso_seg: null
-      };
+  // La decision en si (que forma tiene 'r') vive en decidirBd, pura y
+  // exportada; aqui solo se invoca con el resultado real de ejecutar el binario.
+  const bd = decidirBd(r);
 
   let contenido = '';
   try { contenido = fs.readFileSync(rutaSello(), 'utf8'); } catch { contenido = ''; }

@@ -6,7 +6,7 @@
 // ============================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsearDuracion, interpretarGeneraciones, interpretarSello, combinarEstado, estadoPersistencia, _limpiarCache } from '../src/persistencia.js';
+import { parsearDuracion, interpretarGeneraciones, interpretarSello, combinarEstado, decidirBd, esArrancando, estadoPersistencia, _limpiarCache } from '../src/persistencia.js';
 
 // Salida real de `litestream generations` (columnas alineadas con espacios).
 const CABECERA = 'name  generation        lag     start                     end';
@@ -165,6 +165,87 @@ test('combinarEstado: no_aplica no es ni ok ni mal -> null salvo que haya un mal
   assert.equal(combinarEstado(NO_APLICA, NO_APLICA), null);
   assert.equal(combinarEstado(NO_APLICA, OK), null);
   assert.equal(combinarEstado(MAL, NO_APLICA), false);
+  assert.equal(combinarEstado(NO_APLICA, MAL), false);
+});
+
+// --- Decidir el estado de la BD a partir de pedirGeneraciones() ---------
+// decidirBd es pura: solo mira la FORMA de r (si trae 'motivo' o 'salida'),
+// asi que se construye r a mano, sin ejecutar litestream ni el binario.
+test('decidirBd: salida normal con una generacion sana -> el veredicto de interpretarGeneraciones', () => {
+  const r = decidirBd({ salida: salidaCon('1.2s', '2026-07-28T14:58:00.000Z') });
+  const esperado = interpretarGeneraciones(salidaCon('1.2s', '2026-07-28T14:58:00.000Z'));
+  assert.equal(r.estado, esperado.estado);
+  assert.equal(r.motivo, esperado.motivo);
+});
+
+test('decidirBd: salida vacia (comando exitoso) -> mal/sin_generaciones, NO la rama de fallo', () => {
+  // Este es el caso que motivo el arreglo: '' es falsy, pero r.motivo sigue
+  // siendo undefined (el comando SI tuvo exito), asi que debe llegar a
+  // interpretarGeneraciones y no colarse por la rama de r.motivo definido.
+  const r = decidirBd({ salida: '' });
+  assert.equal(r.estado, 'mal');
+  assert.equal(r.motivo, 'sin_generaciones');
+});
+
+test('decidirBd: motivo binario_ausente -> no_aplica (no hay Litestream en esta maquina)', () => {
+  const r = decidirBd({ motivo: 'binario_ausente' });
+  assert.equal(r.estado, 'no_aplica');
+  assert.equal(r.motivo, 'binario_ausente');
+});
+
+test('decidirBd: motivo tiempo_agotado o comando_fallo -> desconocido, conservando el motivo', () => {
+  const t = decidirBd({ motivo: 'tiempo_agotado' });
+  assert.equal(t.estado, 'desconocido');
+  assert.equal(t.motivo, 'tiempo_agotado');
+
+  const c = decidirBd({ motivo: 'comando_fallo' });
+  assert.equal(c.estado, 'desconocido');
+  assert.equal(c.motivo, 'comando_fallo');
+});
+
+test('decidirBd: por ningun camino sale motivo undefined', () => {
+  // El conjunto de motivos es cerrado (ver comentario junto a la constante de
+  // motivos del spec) y 'undefined' no pertenece a el: si alguna rama lo
+  // produjera, se rompe el contrato de "modo/motivo" que consume el resto del
+  // modulo y el frontend.
+  const MOTIVOS_CERRADOS = new Set([
+    'sin_generaciones', 'retraso_alto', 'formato_no_reconocido', 'comando_fallo',
+    'tiempo_agotado', 'binario_ausente', 'sello_ausente', 'sello_viejo',
+    'arrancando', 'error_interno'
+  ]);
+  const casos = [
+    { salida: salidaCon('1.2s', '2026-07-28T14:58:00.000Z') },   // ok, motivo null
+    { salida: '' },
+    { salida: 'vaya cosa mas rara\nsin columnas' },
+    { motivo: 'binario_ausente' },
+    { motivo: 'tiempo_agotado' },
+    { motivo: 'comando_fallo' }
+  ];
+  for (const r of casos) {
+    const bd = decidirBd(r);
+    assert.notEqual(bd.motivo, undefined, `decidirBd(${JSON.stringify(r)}) no debe dar motivo undefined`);
+    assert.ok(bd.motivo === null || MOTIVOS_CERRADOS.has(bd.motivo),
+      `motivo '${bd.motivo}' no pertenece al conjunto cerrado`);
+  }
+});
+
+// --- Si el resultado cachea 30s (arrancando) o 5 min (normal) -----------
+// esArrancando es pura: mira si bd o uploads tienen motivo 'arrancando'.
+test('esArrancando: motivo arrancando en bd -> true', () => {
+  assert.equal(esArrancando({ bd: DESCONOCIDO, uploads: OK }), true);
+});
+
+test('esArrancando: motivo arrancando en uploads -> true', () => {
+  assert.equal(esArrancando({ bd: OK, uploads: DESCONOCIDO }), true);
+});
+
+test('esArrancando: arrancando en ambos -> true', () => {
+  assert.equal(esArrancando({ bd: DESCONOCIDO, uploads: DESCONOCIDO }), true);
+});
+
+test('esArrancando: en ninguno -> false', () => {
+  assert.equal(esArrancando({ bd: OK, uploads: OK }), false);
+  assert.equal(esArrancando({ bd: MAL, uploads: OK }), false);
 });
 
 // --- Obtencion del estado real -----------------------------------------
