@@ -10,3 +10,6 @@ backend/.env
 
 # Bases de datos temporales de pruebas/smokes
 backend/tmp-*.db*
+
+# Worktrees temporales de los agentes (copias completas del repo)
+.claude/worktrees/
