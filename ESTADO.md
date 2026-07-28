@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 28 de julio de 2026 (organización de eventos + auditoría UX medible)*
+*Última actualización: 28 de julio de 2026 (Organización v2 completa + auditoría UX medible)*
 
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
 
@@ -70,6 +70,19 @@ Apartado para organizar un evento: **qué llevar** (con cantidad y visto bueno) 
 - Borrar un evento borra su hoja con cosas y gastos, en la misma transacción.
 - Frontend: apartado **🗒️ Organización** en el menú (solo líderes) y botón dentro de cada evento del calendario.
 - **12 tests** del módulo. Spec y plan en `docs/superpowers/`.
+
+## 🆕 FASE 10 (28 jul 2026): Organización v2 — la hoja sale del teléfono del líder — DESPLEGADO
+
+v1 dejaba la hoja como cuaderno privado del líder: el feligrés recibía 403 en todo el módulo, así que la coordinación seguía ocurriendo en WhatsApp. v2 lo cierra. Diseño en `docs/superpowers/specs/2026-07-28-organizacion-v2-design.md`, plan en `docs/superpowers/plans/2026-07-28-organizacion-v2-responsable.md`.
+
+- **Responsable por cosa** (`evento_org_cosa.responsable_id`, `asignada_en`): cualquier persona **activa de la iglesia** (decisión del dueño: media hoja es suelta y no cuelga de ningún grupo, y quien trae la torta a veces no está en el grupo). Si la cuenta se desactiva, el dato **no se borra**: la hoja avisa "cuenta inactiva — reasignar".
+- **Aviso al asignar**, notificación + push, y **solo cuando el responsable cambia de verdad**: reenviar el mismo o editar el nombre de la cosa no vuelve a notificar (el líder edita la lista muchas veces mientras la arma).
+- **La rendija**: `GET /mis-cosas` y `PATCH /mis-cosas/:id` registradas **entre `authMiddleware` y el gate de líderes**. El feligrés ve y marca SU línea sin que se le abra la hoja — nunca gastos, totales ni cosas de otros. Aparece como "📦 Mi parte" dentro de **Mi Servicio**, no como módulo aparte.
+- **Recordatorio el día antes** a quien trae algo (`recordatorios.js`, clave `org_cosa:<id>:dia-1`, con dedupe).
+- **Quién puso el dinero** (`evento_org_gasto.pagado_por`) + resumen "Quién puso qué". Los gastos anteriores a esta función no tienen pagador: suman al total pero no al resumen, y la hoja muestra la diferencia como "Sin registrar quién puso" para que las cifras cuadren.
+- **Imprimir** (`@media print`, sin gastos: la hoja se pega en la puerta) y **copiar para WhatsApp** (texto plano, sin gastos: se pega en un grupo con feligreses).
+- **Duplicar lista**, que reemplaza al sistema de plantillas: copia las cosas en limpio (sin marcar, sin responsables), nunca los gastos, y nace **suelta**. Basta con poder VER la hoja, así un líder parte de la lista de otro sin tocarla.
+- **Fuera de alcance a propósito:** presupuesto estimado por línea (el spec lo deja quinto y condicionado: si los líderes no presupuestan de verdad, nadie lo usará), integración con Tesorería (choca con los permisos de `tesoreria.js`, y esa plata no es de la iglesia).
 
 ## 🆕 FASE 9 (28 jul 2026): Auditoría UX medible + límite de peticiones por persona — DESPLEGADO
 
@@ -363,6 +376,13 @@ app/
 - ✅ ~~Filtrar asistencia por grupo~~ — hecho (26 jun)
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
+
+### 👉 POR DÓNDE RETOMAR (al 28 jul 2026, todo desplegado y 218 tests en verde)
+
+1. **Lo urgente no es código, es configuración en Render.** Confirmar las 4 variables `R2_*`/`LITESTREAM_*`: sin ellas la BD se borra en cada reinicio, y ya hay datos que duelen perder. Después `SMTP_USER`/`SMTP_PASS` (sin ellas nadie recupera su contraseña por correo) y `SUPERADMIN_PASSWORD`.
+2. **Test intermitente sin resolver:** los dos del límite de login (`seguridad.test.js`) fallaron una vez en la suite completa y pasaron las cinco corridas siguientes. Causa no identificada. Dependen de cuántas peticiones de login hicieron los tests anteriores del mismo archivo; ese acoplamiento va a volver a morder.
+3. **`POST /api/upload` no valida tipo MIME ni tamaño** (es multipart, zod no aplica). Y `adjunto_url` acepta apuntar a hosts externos: restringirlo a `/uploads/` es cambio de comportamiento, no de tipos.
+4. **El auditor de UX cubre 11 vistas**, no todas: quedan fuera Administración, Panel del Pastor, Reportes, Música, Niños, Cuidado y Mi Servicio. Por eso se le escaparon 6 casos de contraste que aparecieron a mano. Ampliar el recorrido es barato.
 
 ### Abierto de verdad (28 jul 2026)
 - **Botones por debajo de lo recomendado:** menú lateral a 42px de alto y `small-btn` a 36px. Cumplen el mínimo exigible (24px), quedan cortos frente a los 44px recomendados. Subirlos mueve el ritmo visual de toda la app → decisión de diseño, no deuda.
