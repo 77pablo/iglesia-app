@@ -642,3 +642,6 @@ body{transition:background-color .3s ease,color .3s ease;}
 .org-row{min-height:44px;}
 .org-listo{text-decoration:line-through;color:var(--muted);}
 .org-total{margin-top:10px;padding-top:10px;border-top:2px solid var(--border);text-align:right;font-size:1.1rem;}
+/* Quién trae cada cosa: a la derecha en escritorio, en su propia línea en móvil. */
+.org-quien{font-size:0.8125rem;flex-shrink:0;max-width:45%;text-align:right;}
+@media(max-width:520px){ .org-row{flex-wrap:wrap;} .org-quien{max-width:100%;text-align:left;} }

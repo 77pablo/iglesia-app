@@ -907,11 +907,12 @@ async function guardarAnuncio(){
 async function vistaMiServicio(){
   const c=$('content'); c.innerHTML=`<div id="ms" class="muted">Cargando…</div>`;
   const safe=p=>p.then(r=>r).catch(()=>[]);
-  const [servicios,musica,tareas]=await Promise.all([
-    safe(api('/asignaciones/mio')), safe(api('/musica/mis-asignaciones')), safe(api('/grupo/mis-tareas'))
+  const [servicios,musica,tareas,misCosas]=await Promise.all([
+    safe(api('/asignaciones/mio')), safe(api('/musica/mis-asignaciones')), safe(api('/grupo/mis-tareas')),
+    safe(api('/organizacion/mis-cosas'))
   ]);
   const cont=$('ms');
-  const total=(servicios?.length||0)+(musica?.length||0)+(tareas?.length||0);
+  const total=(servicios?.length||0)+(musica?.length||0)+(tareas?.length||0)+(misCosas?.length||0);
   if(!total){ cont.className=''; cont.innerHTML='<div class="placeholder"><div class="big">🙌</div><p>No tienes nada asignado por ahora.</p></div>'; return; }
   cont.className='';
   let html='';
@@ -943,6 +944,20 @@ async function vistaMiServicio(){
         <span class="estado-chip ${t.estado==='hecho'?'estado-aceptado':'estado-pendiente'}">${t.estado==='hecho'?'✅ Hecho':'⏳ Pendiente'}</span></div>
         <div class="row" style="width:auto;gap:8px">${t.estado!=='hecho'?`<button class="btn small-btn" onclick="tareaHecha(${t.id})">Hecho</button>`:''}
         <button class="btn ghost small-btn" onclick="navTo('mi_grupo')">Ver detalles ›</button></div></div>`).join('')+'</div>';
+  }
+
+  // 4) Mi parte: lo que me comprometí a llevar (Organización). Va aquí y no en un
+  // apartado propio: este es el lugar donde alguien mira "qué me toca".
+  if(misCosas.length){
+    html+='<h3 class="section-title">📦 Mi parte</h3><div class="list" style="margin-bottom:18px">'+misCosas.map(c=>{
+      const donde=c.evento_titulo||c.hoja_titulo||'';
+      const fecha=c.evento_fecha||c.fecha;
+      return `<div class="item-card flex">
+        <div style="flex:1"><div class="item-titulo ${c.listo?'org-listo':''}">${escHtml(c.nombre)} <b>×${c.cantidad}</b></div>
+          <div class="muted small">${escHtml(donde)}${fecha?' · '+fechaTxt(fecha):''}${c.hora_llegada?' · 🕐 llegar '+escHtml(c.hora_llegada):''}${c.lugar?' · 📍 '+escHtml(c.lugar):''}</div></div>
+        <button class="btn ${c.listo?'ghost ':''}small-btn" onclick="Org.marcarMio(${c.id}, ${c.listo?0:1})">${c.listo?'✓ Listo':'Ya lo tengo'}</button>
+      </div>`;
+    }).join('')+'</div>';
   }
   cont.innerHTML=html;
 }
@@ -3469,11 +3484,19 @@ const Org = {
     const ed=!!h.puede_editar;
     const titulo=(h.evento&&h.evento.titulo)||h.titulo||'(sin título)';
     const fecha=(h.evento&&h.evento.fecha)||h.fecha;
-    const cosas=h.cosas.map(x=>`<div class="org-row">
+    const cosas=h.cosas.map(x=>{
+      // La cuenta desactivada no borra el dato: se avisa para que el líder reasigne.
+      const inactivo = x.responsable_id && !x.responsable_activo;
+      const quien = x.responsable_id
+        ? `<button class="link" onclick="Org.asignar(${x.id})" title="Reasignar">👤 ${escHtml(x.responsable_nombre||'')}${inactivo?' <span style="color:var(--red-tx)">(cuenta inactiva — reasignar)</span>':''}</button>`
+        : `<button class="link" onclick="Org.asignar(${x.id})">👤 Asignar</button>`;
+      return `<div class="org-row">
         <label class="org-check"><input type="checkbox" ${x.listo?'checked':''} ${ed?'':'disabled'} onchange="Org.toggleCosa(${x.id}, this.checked)">
           <span class="${x.listo?'org-listo':''}">${escHtml(x.nombre)} <b>×${x.cantidad}</b></span></label>
+        <div class="org-quien">${ed?quien:(x.responsable_nombre?'👤 '+escHtml(x.responsable_nombre):'')}</div>
         ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar ${escHtml(x.nombre)}" onclick="Org.borrarCosa(${x.id})">✕</button>`:''}
-      </div>`).join('') || '<p class="muted small">Sin cosas todavía.</p>';
+      </div>`;
+    }).join('') || '<p class="muted small">Sin cosas todavía.</p>';
     const gastos=h.gastos.map(g=>`<div class="org-row">
         <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b></span>
         ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar el gasto ${escHtml(g.concepto)}" onclick="Org.borrarGasto(${g.id})">✕</button>`:''}
@@ -3537,6 +3560,47 @@ const Org = {
     await conBoton(botonActual(), async()=>{
       try{ await api('/organizacion/gastos/'+id,{method:'DELETE'}); Org._recargar(); }
       catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
+    });
+  },
+  // Selector de responsable: cualquier persona activa de la iglesia (decisión del
+  // dueño). GET /directorio ya devuelve un array plano de activos, ordenado por
+  // nombre, y es visible para todos: no hay que filtrar ni ordenar aquí.
+  async asignar(cosaId){
+    let personas=[];
+    try{ personas=await api('/directorio'); }
+    catch(e){ return toast((e&&e.message)||'No se pudo cargar la lista'); }
+    const opciones=personas.map(p=>`<button class="link org-persona" style="display:block;padding:10px 0;text-align:left;width:100%"
+        onclick="Org.guardarResponsable(${cosaId}, ${p.id})">${escHtml(p.nombre)}</button>`).join('')
+      || '<p class="muted small">No hay personas en el directorio.</p>';
+    const root=$('modal-root');
+    root.innerHTML=`<div class="modal-bg"><div class="modal"><h3>¿Quién lo trae?</h3>
+      <input id="org-buscar-persona" placeholder="Buscar por nombre" oninput="Org.filtrarPersonas(this.value)" />
+      <div id="org-personas" style="max-height:46vh;overflow:auto;margin-top:10px">${opciones}</div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+        <button class="btn" onclick="Org.guardarResponsable(${cosaId}, null)">Quitar responsable</button>
+      </div></div></div>`;
+    root.classList.add('show');
+  },
+  filtrarPersonas(q){
+    const t=(q||'').toLowerCase();
+    $('org-personas').querySelectorAll('.org-persona').forEach(b=>{
+      b.style.display = b.textContent.toLowerCase().includes(t) ? 'block' : 'none';
+    });
+  },
+  async guardarResponsable(cosaId, personaId){
+    cerrarModal();
+    try{
+      await api('/organizacion/cosas/'+cosaId,{method:'PATCH',body:JSON.stringify({responsable_id:personaId})});
+      toast(personaId?'✅ Asignado y avisado':'Responsable quitado');
+      Org._recargar();
+    }catch(e){ toast((e&&e.message)||'No se pudo asignar'); }
+  },
+  // "Ya lo tengo" desde Mi Servicio (feligrés): usa la rendija, no la hoja.
+  async marcarMio(id, listo){
+    await conBoton(botonActual(), async()=>{
+      try{ await api('/organizacion/mis-cosas/'+id,{method:'PATCH',body:JSON.stringify({listo:!!listo})}); vistaMiServicio(); }
+      catch(e){ toast((e&&e.message)||'No se pudo actualizar'); }
     });
   },
   async guardarHora(v){
