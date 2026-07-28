@@ -367,4 +367,6 @@ app/
 ### Abierto de verdad (28 jul 2026)
 - **Botones por debajo de lo recomendado:** menú lateral a 42px de alto y `small-btn` a 36px. Cumplen el mínimo exigible (24px), quedan cortos frente a los 44px recomendados. Subirlos mueve el ritmo visual de toda la app → decisión de diseño, no deuda.
 - **Organización v2** (fuera del alcance de la Fase 8, por decisión del spec): responsable y costo por línea, plantillas de listas, export a PDF, notificaciones "trae tu parte", integración con Tesorería.
-- **`zod` en el resto de los routers** (hoy está en login/admin/tesorería/cuenta/eventos/organización).
+- ✅ ~~`zod` en el resto de los routers~~ — **cerrado el 28 jul**. Se creía pendiente por una línea vieja de este documento; al inventariar los 37 routers, 24 ya validaban y el único hueco real era **mensajería** (4 rutas: se colaban `[3]` como id, `{a:1}` guardado como `"[object Object]"` y difundido por SSE + push, y listas de participantes sin tope). Cubierto con 15 tests.
+- **`POST /api/upload` sigue sin validar**: es multipart, no JSON, así que zod no aplica. Endurecerlo (tipos MIME y tamaño) es un trabajo aparte.
+- **`adjunto_url` acepta hosts externos**: hoy un adjunto puede apuntar fuera del servidor. Restringirlo a `/uploads/` es un cambio de comportamiento, no de tipos; queda señalado.
