@@ -7,8 +7,10 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, auditar, puedeIniciarChatCon, verificarToken } from './auth.js';
+import { validar } from './seguridad.js';
 import { enviarPush } from './push.js';
 import { emitir, estaConectada, registrar } from './sse.js';
 
@@ -36,6 +38,19 @@ r.use(authMiddleware);
 
 const LARGO_MAX = 4000;
 
+// --- Esquemas de entrada (zod) ---
+// Los ids llegan del frontend como numero, pero un cliente cualquiera puede
+// mandar su texto: se aceptan los dos. NO se usa z.coerce.number() a secas
+// porque Number([3]) === 3 y un array se colaria como si fuera el id 3.
+const idSchema = z.union([z.number(), z.string()])
+  .pipe(z.coerce.number().int().positive('id invalido'));
+
+// Los textos se validan por TIPO, no por contenido: las reglas de negocio
+// (mensaje vacio, mensaje demasiado largo) siguen en el handler para no
+// cambiar sus mensajes de error. null se acepta igual que antes (se trataba
+// como "sin adjunto").
+const textoOpcional = z.string().nullable().optional();
+
 // La conversacion pertenece a la iglesia del actor?
 function convDeIglesia(convId, iglesiaId) {
   return db.prepare('SELECT * FROM conversacion WHERE id = ? AND iglesia_id = ?').get(convId, iglesiaId);
@@ -50,9 +65,9 @@ function miembrosConv(convId) {
 }
 
 // --- Obtener o crear el 1:1 con otra persona ---
-r.post('/directo', (req, res) => {
-  const otroId = Number((req.body || {}).persona_id);
-  if (!otroId) return res.status(400).json({ error: 'Falta persona_id' });
+const directoSchema = z.object({ persona_id: idSchema });
+r.post('/directo', validar(directoSchema), (req, res) => {
+  const otroId = req.body.persona_id;
   if (!puedeIniciarChatCon(req.user.persona_id, otroId))
     return res.status(403).json({ error: 'No puedes iniciar un chat con esa persona' });
   // buscar 1:1 existente entre exactamente estas 2 personas
@@ -75,7 +90,15 @@ r.post('/directo', (req, res) => {
 });
 
 // --- Enviar un mensaje ---
-r.post('/conversacion/:id', (req, res) => {
+// texto y adjunto son ambos opcionales por separado (se puede mandar solo un
+// archivo, con texto vacio); que no vengan ni uno ni otro lo sigue resolviendo
+// el handler con su 400 de "El mensaje esta vacio".
+const enviarMensajeSchema = z.object({
+  texto: textoOpcional,
+  adjunto_url: textoOpcional,
+  adjunto_tipo: textoOpcional
+});
+r.post('/conversacion/:id', validar(enviarMensajeSchema), (req, res) => {
   const conv = convDeIglesia(req.params.id, req.user.iglesia_id);
   if (!conv) return res.status(404).json({ error: 'Conversacion no encontrada' });
   if (!esMiembroConv(conv.id, req.user.persona_id))
@@ -196,11 +219,13 @@ r.get('/conversaciones', (req, res) => {
 });
 
 // --- Marcar leido (solo avanza) ---
-r.post('/conversacion/:id/leido', (req, res) => {
+// mensaje_id ausente sigue valiendo 0 (no mueve el puntero), como antes.
+const leidoSchema = z.object({ mensaje_id: idSchema.optional() });
+r.post('/conversacion/:id/leido', validar(leidoSchema), (req, res) => {
   const conv = convDeIglesia(req.params.id, req.user.iglesia_id);
   if (!conv || !esMiembroConv(conv.id, req.user.persona_id))
     return res.status(403).json({ error: 'No perteneces a esta conversacion' });
-  const mid = Number((req.body || {}).mensaje_id) || 0;
+  const mid = req.body.mensaje_id || 0;
   db.prepare(
     `UPDATE conversacion_miembro SET ultimo_leido_mensaje_id = MAX(COALESCE(ultimo_leido_mensaje_id,0), ?)
       WHERE conversacion_id = ? AND persona_id = ?`
@@ -232,12 +257,18 @@ r.get('/contactos', (req, res) => {
 });
 
 // --- Crear grupo a medida ---
-r.post('/custom', (req, res) => {
-  const { titulo, participantes } = req.body || {};
-  const t = String(titulo || '').trim();
-  if (!t) return res.status(400).json({ error: 'Falta el titulo' });
-  const ids = [...new Set((Array.isArray(participantes) ? participantes : []).map(Number).filter(Boolean))]
-    .filter(id => id !== req.user.persona_id);
+// El tope de participantes acota el IN (...) que se arma mas abajo: sin el, una
+// lista enorme dispara un SELECT con miles de parametros.
+const customSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el titulo'),
+  participantes: z.array(idSchema)
+    .min(1, 'elige al menos un participante')
+    .max(200, 'demasiados participantes')
+});
+r.post('/custom', validar(customSchema), (req, res) => {
+  const { titulo: t, participantes } = req.body;
+  // Se quitan repetidos y a uno mismo (el creador ya entra como admin).
+  const ids = [...new Set(participantes)].filter(id => id !== req.user.persona_id);
   if (!ids.length) return res.status(400).json({ error: 'Elige al menos un participante' });
   // todos deben ser de la misma iglesia y estar activos
   const deLaIglesia = db.prepare(
