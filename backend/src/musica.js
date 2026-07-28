@@ -22,12 +22,15 @@ r.get('/canciones', (req, res) => {
 // YouTube, Spotify…): no se restringe a /uploads/, solo se le exige el
 // esquema http/https para que no entre un javascript: que se dispare al
 // pinchar la cancion.
+// Los campos sueltos admiten null ademas de ausente: el frontend reenvia la
+// cancion entera desde su copia en memoria, y los campos vacios de la BD viajan
+// como null, no como undefined (ver la nota larga en editarCancionSchema).
 const cancionSchema = z.object({
   titulo: z.string().trim().min(1, 'falta el titulo'),
-  autor: z.string().trim().optional(),
-  tono: z.string().trim().optional(),
-  enlace: zEnlaceExternoOpcional(1000).optional(),
-  letra: z.string().trim().optional()
+  autor: z.string().trim().nullable().optional(),
+  tono: z.string().trim().nullable().optional(),
+  enlace: zEnlaceExternoOpcional(1000).nullable().optional(),
+  letra: z.string().trim().nullable().optional()
 });
 r.post('/canciones', validar(cancionSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
@@ -40,12 +43,20 @@ r.post('/canciones', validar(cancionSchema), (req, res) => {
 });
 
 // Editar una canción (título, tono, acordes/letra...) — solo el líder de música.
+// null significa "no cambies este campo", igual que no mandarlo: es lo que ya
+// implementa el handler con `autor ?? c.autor`. Hace falta decirlo tambien aqui
+// porque z.string().optional() admite ausente o cadena, pero NO nulo, y el
+// visor de acordes (web/app.js, guardarLetraCancion) reenvia la cancion entera
+// desde su copia en memoria: en una cancion sin autor ni enlace esos campos
+// viajan como null y el guardado entero se caia con un 400.
+// Ojo: `.nullable()` solo abre la puerta al nulo. Un enlace que SI venga sigue
+// pasando por la validacion de enlace externo (nada de javascript:).
 const editarCancionSchema = z.object({
-  titulo: z.string().trim().optional(),
-  autor: z.string().trim().optional(),
-  tono: z.string().trim().optional(),
-  enlace: zEnlaceExternoOpcional(1000).optional(),   // externo a proposito (ver arriba)
-  letra: z.string().trim().optional()
+  titulo: z.string().trim().nullable().optional(),
+  autor: z.string().trim().nullable().optional(),
+  tono: z.string().trim().nullable().optional(),
+  enlace: zEnlaceExternoOpcional(1000).nullable().optional(),   // externo a proposito (ver arriba)
+  letra: z.string().trim().nullable().optional()
 });
 r.patch('/canciones/:id', validar(editarCancionSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
