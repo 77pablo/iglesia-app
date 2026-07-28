@@ -41,6 +41,7 @@ import directorioRouter, { generarCumpleanosHoyThrottled } from './directorio.js
 import publicoRouter from './publico.js';
 import registroRouter from './registro.js';
 import superadminRouter from './superadmin.js';
+import organizacionRouter from './organizacion.js';
 import consentimientoRouter, { tieneConsentimientoVigente } from './consentimiento.js';
 
 // --- Red de seguridad global: un rechazo/excepcion no atrapada NO debe tumbar
@@ -243,6 +244,8 @@ app.post('/api/dispositivo', authMiddleware, validar(dispositivoSchema), (req, r
 
 // --- Modulo A: Calendario + Eventos ---
 app.use('/api/eventos', eventosRouter);
+// --- Organizacion de eventos: hoja de cosas a llevar + gastos (solo lideres) ---
+app.use('/api/organizacion', organizacionRouter);
 // --- Modulo B: Anuncios + Notificaciones ---
 app.use('/api/anuncios', anunciosRouter);
 app.use('/api/notificaciones', notificacionesRouter);
