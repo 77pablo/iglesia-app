@@ -38,6 +38,7 @@ import cuentaRouter from './cuenta.js';
 import adminRouter from './admin.js';
 import mensajesRouter from './mensajes.js';
 import directorioRouter, { generarCumpleanosHoyThrottled } from './directorio.js';
+import { vigilarPersistenciaThrottled } from './persistencia.js';
 import publicoRouter from './publico.js';
 import registroRouter from './registro.js';
 import superadminRouter from './superadmin.js';
@@ -304,6 +305,10 @@ app.get('/api/me', authMiddleware, (req, res) => {
   // Genera recordatorios pendientes de la iglesia al iniciar sesion (no duplica).
   try { generarRecordatoriosThrottled(persona.iglesia_id); } catch (e) { console.error('[recordatorios]', e.message); }
   try { generarCumpleanosHoyThrottled(persona.iglesia_id); } catch (e) { console.error('[cumple]', e.message); }
+  // Comprueba el respaldo externo (cacheado): cualquier trafico en la app sirve
+  // de disparo, porque en el plan free no hay cron y el super-admin puede pasar
+  // semanas sin entrar -- que es justo cuando conviene enterarse.
+  try { vigilarPersistenciaThrottled(); } catch (e) { console.error('[persistencia]', e.message); }
   const iglesia = db.prepare('SELECT nombre, codigo_unico FROM iglesia WHERE id = ?').get(persona.iglesia_id);
   res.json({
     persona: perfilPublico(persona),

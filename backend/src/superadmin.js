@@ -12,6 +12,7 @@ import db from './db.js';
 import { authMiddleware, hashPassword, auditar, generarPasswordTemporal } from './auth.js';
 import { validar } from './seguridad.js';
 import { eliminarIglesiaCompleta } from './eliminarIglesia.js';
+import { estadoPersistencia } from './persistencia.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -189,6 +190,12 @@ r.delete('/iglesias/:id', (req, res) => {
     console.error('[superadmin] eliminar iglesia falló:', e.message);
     res.status(500).json({ error: 'No se pudo eliminar la iglesia (no se borró nada)' });
   }
+});
+
+// --- Estado del respaldo externo (Litestream + rclone) ---
+// El gate de super_admin ya lo aplica el r.use() de arriba.
+r.get('/persistencia', async (req, res) => {
+  res.json(await estadoPersistencia());   // estadoPersistencia() nunca lanza
 });
 
 export default r;
