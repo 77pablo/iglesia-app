@@ -219,3 +219,65 @@ test('cosas: quién NO puede tocarlas (gate, permiso de edición y otra iglesia)
   assert.deepEqual({ ...fila }, { nombre: 'Sillas', cantidad: 2, listo: 1 });
   assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_cosa WHERE org_id = ?').get(id).n, 1);
 });
+
+test('gastos: dos gastos suman el total; borrar uno recalcula; monto>0', async () => {
+  const b = await servidor();
+  const S = sembrarOrg('GAST');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  let res = await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Cuentas' }) });
+  const { id } = await res.json();
+
+  // monto inválido (0 y negativo) → 400
+  res = await fetch(b + `/api/organizacion/${id}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Nada', monto: 0 }) });
+  assert.equal(res.status, 400);
+  res = await fetch(b + `/api/organizacion/${id}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Devolucion', monto: -500 }) });
+  assert.equal(res.status, 400);
+
+  // dos gastos
+  res = await fetch(b + `/api/organizacion/${id}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Jugos', monto: 8000 }) });
+  assert.equal(res.status, 200);
+  res = await fetch(b + `/api/organizacion/${id}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Pan', monto: 5000 }) });
+  const gasto2 = (await res.json()).id;
+
+  // total = 13000, y el listado de hojas muestra el mismo total
+  res = await fetch(b + '/api/organizacion/' + id, { headers: auth });
+  let hoja = await res.json();
+  assert.equal(hoja.total_gastado, 13000);
+  assert.equal(hoja.gastos.length, 2);
+  res = await fetch(b + '/api/organizacion', { headers: auth });
+  assert.equal((await res.json()).find(h => h.id === id).total_gastado, 13000);
+
+  // borrar uno → total = 8000 (se recalcula, no se persiste)
+  res = await fetch(b + `/api/organizacion/gastos/${gasto2}`, { method: 'DELETE', headers: auth });
+  assert.equal(res.status, 200);
+  res = await fetch(b + '/api/organizacion/' + id, { headers: auth });
+  hoja = await res.json();
+  assert.equal(hoja.total_gastado, 8000);
+  assert.equal(hoja.gastos.length, 1);
+});
+
+test('gastos: el gate y el permiso de edición también aplican', async () => {
+  const b = await servidor();
+  const S = sembrarOrg('GASP');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  let res = await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Caja' }) });
+  const { id } = await res.json();
+  res = await fetch(b + `/api/organizacion/${id}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Arriendo', monto: 20000 }) });
+  const gastoId = (await res.json()).id;
+
+  // feligrés: lo frena el gate de visibilidad
+  res = await fetch(b + `/api/organizacion/gastos/${gastoId}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tok(S.feligresId, S.iglesiaId) } });
+  assert.equal(res.status, 403);
+  // otro líder de la misma iglesia: pasa el gate, pero no puede editar la hoja
+  const lid2 = db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo) VALUES (?,?,?,?,1)").run(S.iglesiaId, 'lid2_GASP', 'Lider2', 'x');
+  db.prepare("INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?, 'admin')").run(Number(lid2.lastInsertRowid), S.grupoId);
+  res = await fetch(b + `/api/organizacion/gastos/${gastoId}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tok(Number(lid2.lastInsertRowid), S.iglesiaId) } });
+  assert.equal(res.status, 403);
+  // líder de otra iglesia: 404
+  const O = sembrarOrg('GASQ');
+  res = await fetch(b + `/api/organizacion/gastos/${gastoId}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tok(O.liderId, O.iglesiaId) } });
+  assert.equal(res.status, 404);
+  // el gasto sigue ahí y el total intacto
+  res = await fetch(b + '/api/organizacion/' + id, { headers: auth });
+  assert.equal((await res.json()).total_gastado, 20000);
+});

@@ -182,5 +182,29 @@ r.delete('/cosas/:cosaId', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Gastos (se suman en total_gastado) ----------
+// El total NO se guarda en ninguna columna: se recalcula al leer la hoja, asi
+// nunca queda descuadrado respecto a las filas de gastos.
+const gastoSchema = z.object({
+  concepto: z.string().trim().min(1, 'falta el concepto'),
+  monto: z.coerce.number().positive('el monto debe ser mayor a 0')
+});
+r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
+  const org = hojaEditable(req, res, Number(req.params.id));
+  if (!org) return;
+  const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto) VALUES (?,?,?)')
+    .run(org.id, req.body.concepto, req.body.monto);
+  res.json({ ok: true, id: Number(info.lastInsertRowid) });
+});
+
+r.delete('/gastos/:gastoId', (req, res) => {
+  const gasto = db.prepare('SELECT * FROM evento_org_gasto WHERE id = ?').get(Number(req.params.gastoId));
+  if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' });
+  const org = hojaEditable(req, res, gasto.org_id);
+  if (!org) return;
+  db.prepare('DELETE FROM evento_org_gasto WHERE id=?').run(gasto.id);
+  res.json({ ok: true });
+});
+
 export default r;
 export { puedeEditarOrg, armarHoja, hojaEditable };
