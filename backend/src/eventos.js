@@ -272,6 +272,11 @@ r.delete('/:id', (req, res) => {
     // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
     db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
     limpiarSolicitud(ev);   // quita la notificación "Revisar y aprobar" si seguía activa
+    // Hoja de organizacion del evento: cosas + gastos + la hoja. Va antes del
+    // DELETE del evento porque evento_org.evento_id lo referencia.
+    db.prepare('DELETE FROM evento_org_cosa  WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
+    db.prepare('DELETE FROM evento_org_gasto WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
+    db.prepare('DELETE FROM evento_org WHERE evento_id=?').run(ev.id);
     db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
     db.exec('COMMIT');
   } catch (e) {

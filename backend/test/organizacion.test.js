@@ -281,3 +281,45 @@ test('gastos: el gate y el permiso de edición también aplican', async () => {
   res = await fetch(b + '/api/organizacion/' + id, { headers: auth });
   assert.equal((await res.json()).total_gastado, 20000);
 });
+
+test('borrar la hoja arrastra sus cosas y gastos (transacción con hijos)', async () => {
+  const b = await servidor();
+  const S = sembrarOrg('HIJO');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  let res = await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Con hijos' }) });
+  const { id } = await res.json();
+  await fetch(b + `/api/organizacion/${id}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: 'Vasos', cantidad: 30 }) });
+  await fetch(b + `/api/organizacion/${id}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Bebidas', monto: 12000 }) });
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_cosa WHERE org_id = ?').get(id).n, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_gasto WHERE org_id = ?').get(id).n, 1);
+
+  res = await fetch(b + '/api/organizacion/' + id, { method: 'DELETE', headers: auth });
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org WHERE id = ?').get(id).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_cosa WHERE org_id = ?').get(id).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_gasto WHERE org_id = ?').get(id).n, 0);
+});
+
+test('borrar el evento borra su hoja de organización (cascada)', async () => {
+  const b = await servidor();
+  const S = sembrarOrg('CASC');
+  const ev = db.prepare("INSERT INTO evento (iglesia_id, titulo, fecha, grupo_id, estado, creado_por) VALUES (?, 'Borrable', '2026-08-20', ?, 'aprobado', ?)").run(S.iglesiaId, S.grupoId, S.pastorId);
+  const eventoId = Number(ev.lastInsertRowid);
+  const auth = { Authorization: 'Bearer ' + tok(S.pastorId, S.iglesiaId), 'Content-Type': 'application/json' };
+  // abrir hoja (la crea) + una cosa + un gasto
+  let res = await fetch(b + '/api/organizacion/evento/' + eventoId, { headers: auth });
+  const hojaId = (await res.json()).id;
+  await fetch(b + `/api/organizacion/${hojaId}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: 'Sillas', cantidad: 10 }) });
+  await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Arriendo', monto: 20000 }) });
+
+  // borrar el evento vía su endpoint (el pastor puede)
+  res = await fetch(b + '/api/eventos/' + eventoId, { method: 'DELETE', headers: auth });
+  assert.equal(res.status, 200);
+
+  // no queda ni la hoja ni sus hijos, ni referencias rotas
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org WHERE id = ?').get(hojaId).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_cosa WHERE org_id = ?').get(hojaId).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_gasto WHERE org_id = ?').get(hojaId).n, 0);
+  db.exec('PRAGMA foreign_keys = ON');
+  assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0, 'quedaron referencias huérfanas');
+});
