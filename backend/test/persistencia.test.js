@@ -6,7 +6,7 @@
 // ============================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsearDuracion, interpretarGeneraciones, interpretarSello } from '../src/persistencia.js';
+import { parsearDuracion, interpretarGeneraciones, interpretarSello, estadoPersistencia, _limpiarCache } from '../src/persistencia.js';
 
 // Salida real de `litestream generations` (columnas alineadas con espacios).
 const CABECERA = 'name  generation        lag     start                     end';
@@ -128,4 +128,43 @@ test('sello con contenido ilegible -> desconocido', () => {
   const r = interpretarSello('no soy una fecha', AHORA, ARRANQUE_VIEJO);
   assert.equal(r.estado, 'desconocido');
   assert.equal(r.motivo, 'formato_no_reconocido');
+});
+
+// --- Obtencion del estado real -----------------------------------------
+test('sin variables de R2 el modo es "sin-replica" y todo es no_aplica', async () => {
+  const previas = { b: process.env.R2_BUCKET, k: process.env.LITESTREAM_ACCESS_KEY_ID, e: process.env.R2_ENDPOINT };
+  delete process.env.R2_BUCKET; delete process.env.LITESTREAM_ACCESS_KEY_ID; delete process.env.R2_ENDPOINT;
+  _limpiarCache();
+  try {
+    const r = await estadoPersistencia();
+    assert.equal(r.modo, 'sin-replica');
+    assert.equal(r.bd.estado, 'no_aplica');
+    assert.equal(r.uploads.estado, 'no_aplica');
+    assert.equal(r.ok, null, 'sin replica no es ni bien ni mal: no aplica');
+  } finally {
+    if (previas.b) process.env.R2_BUCKET = previas.b;
+    if (previas.k) process.env.LITESTREAM_ACCESS_KEY_ID = previas.k;
+    if (previas.e) process.env.R2_ENDPOINT = previas.e;
+    _limpiarCache();
+  }
+});
+
+test('con variables de R2 pero sin el binario, la BD es no_aplica y no revienta', async () => {
+  const previas = { b: process.env.R2_BUCKET, k: process.env.LITESTREAM_ACCESS_KEY_ID, e: process.env.R2_ENDPOINT };
+  process.env.R2_BUCKET = 'bucket-de-prueba';
+  process.env.LITESTREAM_ACCESS_KEY_ID = 'clave-de-prueba';
+  process.env.R2_ENDPOINT = 'https://ejemplo.invalido';
+  _limpiarCache();
+  try {
+    // En Windows/desarrollo no existe el binario: el modulo debe decirlo, no caerse.
+    const r = await estadoPersistencia();
+    assert.ok(['no_aplica', 'desconocido'].includes(r.bd.estado));
+    assert.ok(!/cloudflarestorage|clave-de-prueba/.test(JSON.stringify(r)),
+      'el estado no puede arrastrar credenciales');
+  } finally {
+    if (previas.b) process.env.R2_BUCKET = previas.b; else delete process.env.R2_BUCKET;
+    if (previas.k) process.env.LITESTREAM_ACCESS_KEY_ID = previas.k; else delete process.env.LITESTREAM_ACCESS_KEY_ID;
+    if (previas.e) process.env.R2_ENDPOINT = previas.e; else delete process.env.R2_ENDPOINT;
+    _limpiarCache();
+  }
 });

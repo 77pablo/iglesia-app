@@ -9,6 +9,10 @@
 //  separadas para poder probar la logica sin contenedor, sin red y sin bucket.
 // ============================================================
 
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+
 // Umbrales del spec (docs/superpowers/specs/2026-07-28-indicador-persistencia-design.md).
 export const UMBRAL_RETRASO_SEG = 15 * 60;   // el retraso normal se mide en segundos
 
@@ -93,4 +97,84 @@ export function interpretarSello(contenido, ahoraMs = Date.now(), arranqueMs = A
       : { estado: 'mal', motivo: 'sello_viejo', ultimo };
   }
   return { estado: 'ok', motivo: null, ultimo };
+}
+
+// ============================================================
+//  OBTENCION: aqui si se ejecuta un binario y se toca el disco.
+// ============================================================
+
+const CACHE_MS = 5 * 60 * 1000;
+let cache = null;
+export function _limpiarCache() { cache = null; }   // solo para pruebas
+
+// Las mismas tres variables que mira docker-entrypoint.sh para decidir si
+// arranca con replicacion. Si no estan, esta instancia no replica y punto.
+function hayReplica() {
+  return !!(process.env.R2_BUCKET && process.env.LITESTREAM_ACCESS_KEY_ID && process.env.R2_ENDPOINT);
+}
+
+function rutaSello() {
+  if (process.env.RESPALDO_SELLO) return process.env.RESPALDO_SELLO;
+  const uploads = process.env.UPLOADS_DIR || '/data/uploads';
+  return path.join(path.dirname(uploads), '.respaldo-uploads');
+}
+
+// Ejecuta `litestream generations`. NUNCA propaga stderr: se clasifica el fallo
+// en un motivo corto y se descarta el texto, que puede traer endpoint y llaves.
+function pedirGeneraciones() {
+  return new Promise(resolve => {
+    execFile(
+      'litestream',
+      ['generations', '-config', '/etc/litestream.yml', process.env.DB_PATH || ''],
+      { timeout: 3000, windowsHide: true },
+      (err, stdout) => {
+        if (!err) return resolve({ salida: stdout });
+        if (err.code === 'ENOENT') return resolve({ motivo: 'binario_ausente' });
+        if (err.killed) return resolve({ motivo: 'tiempo_agotado' });
+        resolve({ motivo: 'comando_fallo' });
+      }
+    );
+  });
+}
+
+async function calcular() {
+  if (!hayReplica()) {
+    const nada = { estado: 'no_aplica', motivo: null, ultimo: null };
+    return { modo: 'sin-replica', ok: null, bd: { ...nada, retraso_seg: null }, uploads: { ...nada } };
+  }
+
+  const r = await pedirGeneraciones();
+  const bd = r.salida
+    ? interpretarGeneraciones(r.salida)
+    : {
+        // Sin binario no es un fallo del respaldo: es que esta instancia no es
+        // el contenedor (desarrollo local). Lo demas si es "no pude saberlo".
+        estado: r.motivo === 'binario_ausente' ? 'no_aplica' : 'desconocido',
+        motivo: r.motivo, ultimo: null, retraso_seg: null
+      };
+
+  let contenido = '';
+  try { contenido = fs.readFileSync(rutaSello(), 'utf8'); } catch { contenido = ''; }
+  const uploads = bd.estado === 'no_aplica' && r.motivo === 'binario_ausente'
+    ? { estado: 'no_aplica', motivo: null, ultimo: null }
+    : interpretarSello(contenido);
+
+  const ok = bd.estado === 'ok' && uploads.estado === 'ok';
+  return { modo: 'litestream', ok, bd, uploads };
+}
+
+// Estado del respaldo, cacheado 5 minutos: abrir el panel varias veces no debe
+// llamar a R2 varias veces. Nunca lanza: si algo revienta, devuelve 'desconocido'.
+export async function estadoPersistencia() {
+  if (cache && Date.now() - cache.ts < CACHE_MS) return cache.valor;
+  let valor;
+  try {
+    valor = await calcular();
+  } catch (e) {
+    console.error('[persistencia]', e.message);
+    const gris = { estado: 'desconocido', motivo: 'error_interno', ultimo: null };
+    valor = { modo: 'desconocido', ok: null, bd: { ...gris, retraso_seg: null }, uploads: { ...gris } };
+  }
+  cache = { ts: Date.now(), valor };
+  return valor;
 }
