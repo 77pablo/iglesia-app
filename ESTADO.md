@@ -48,6 +48,7 @@ Los hallazgos **B1–B7** de aquella auditoría (obispo con permisos de admin, f
 
 ### ⏳ Pendientes para uso real (no demo)
 1. **Confirmar Litestream en Render** (4 variables `R2_*`/`LITESTREAM_*`): es lo único que separa la BD de ser efímera. Sin eso, cada reinicio borra todo.
+   Desde el 28 jul el panel del super-admin muestra el estado real del respaldo (tarjeta 💾 Respaldo) y avisa una vez al día si deja de funcionar, así que este fallo ya no es silencioso. **Ojo:** el indicador dice la verdad sobre lo que hay; no sustituye a poner las variables.
 2. **SMTP** (`SMTP_USER`/`SMTP_PASS`): sin ellas la recuperación de contraseña no envía nada.
 3. **Push real (VAPID):** añadir `VAPID_PUBLIC`, `VAPID_PRIVATE`, `VAPID_SUBJECT` en Render → Environment (ver Fase 5).
 4. **Reconocimiento facial** (Python, carpeta `facial/`) NO está en el contenedor → desplegar aparte si se quiere usar `/inscribir.html` y `/kiosko.html`.

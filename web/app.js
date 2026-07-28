@@ -2782,6 +2782,11 @@ async function adminGuardarGrupo(id){
 async function vistaSuperadmin(){
   $('content').innerHTML=`
     <div class="card" style="max-width:640px;margin-bottom:20px">
+      <h2 style="font-size:1.3rem;margin-bottom:4px">💾 Respaldo</h2>
+      <p class="muted small" style="margin-bottom:14px">Si esto no está en verde, un reinicio del servicio borra los datos.</p>
+      <div id="sa-persistencia" class="muted small">Comprobando…</div>
+    </div>
+    <div class="card" style="max-width:640px;margin-bottom:20px">
       <h2 style="font-size:1.3rem;margin-bottom:4px">🛡️ Crear iglesia</h2>
       <p class="muted small" style="margin-bottom:14px">Crea una nueva iglesia junto a la cuenta de su pastor. El código que se genera se lo entregas a la iglesia para que sus feligreses puedan unirse.</p>
       <label for="sa-nombre-ig">Nombre de la iglesia</label>
@@ -2808,6 +2813,7 @@ async function vistaSuperadmin(){
       <div id="sa-lista" class="muted small">Cargando…</div>
     </div>`;
   saCargarLista();
+  saCargarPersistencia();
 }
 let SA_IGLESIAS=[]; // cache de la última lista cargada (para abrir el modal de editar sin otro fetch)
 async function saCargarLista(){
@@ -2837,6 +2843,39 @@ async function saCargarLista(){
       </div>`;
     }).join('') : '<p class="muted small">Aún no hay iglesias creadas.</p>';
   }catch(e){ z.className='error'; z.textContent='No se pudo cargar la lista: '+((e&&e.message)||'error'); }
+}
+// Pinta el estado del respaldo. Cuatro estados, no dos: "no pude comprobarlo"
+// (ambar) no es lo mismo que "esta mal" (rojo), y "esta instancia no replica"
+// (gris) es lo normal en desarrollo, no una alarma.
+const PERS_PINTA={ok:['✅','--green-tx','Respaldando'],mal:['⛔','--red-tx','SIN RESPALDO'],
+  desconocido:['⚠️','--muted','No se pudo comprobar'],no_aplica:['—','--muted','Esta instancia no replica']};
+const PERS_MOTIVO={sin_generaciones:'nunca se ha replicado nada',retraso_alto:'el respaldo va muy atrasado',
+  formato_no_reconocido:'respuesta inesperada de Litestream',comando_fallo:'Litestream devolvió un error',
+  tiempo_agotado:'Litestream no respondió a tiempo',binario_ausente:'no hay Litestream en esta máquina',
+  sello_ausente:'el respaldo de archivos no ha corrido nunca',sello_viejo:'el respaldo de archivos está detenido',
+  arrancando:'el servicio acaba de arrancar',error_interno:'error al comprobar'};
+
+function _persFila(etiqueta,b){
+  const [ico,varColor,texto]=PERS_PINTA[b.estado]||PERS_PINTA.desconocido;
+  const motivo=b.motivo?` · ${escHtml(PERS_MOTIVO[b.motivo]||b.motivo)}`:'';
+  const cuando=b.ultimo?` · último: ${new Date(b.ultimo).toLocaleString('es-CL')}`:'';
+  return `<div class="row" style="justify-content:space-between;gap:10px;margin:6px 0">
+    <span>${escHtml(etiqueta)}</span>
+    <span style="color:var(${varColor});text-align:right">${ico} ${escHtml(texto)}<span class="muted small">${motivo}${cuando}</span></span>
+  </div>`;
+}
+
+async function saCargarPersistencia(){
+  const c=$('sa-persistencia'); if(!c) return;
+  try{
+    const e=await api('/superadmin/persistencia');
+    c.innerHTML=_persFila('Base de datos',e.bd)+_persFila('Archivos subidos',e.uploads);
+  }catch(err){ c.textContent='No se pudo consultar el estado del respaldo.'; }
+  // El super-admin no pasa por el dashboard, que es quien normalmente rellena
+  // la campana: aqui se hace explicito, si no su aviso no se veria nunca.
+  // GET /api/notificaciones devuelve { items, noLeidas, hayMas, offset }
+  // (notificaciones.js:79-92) y setCampana(n) espera el numero (app.js:309).
+  try{ const n=await api('/notificaciones'); setCampana(n.noLeidas); }catch{}
 }
 // ---------- Editar iglesia (nombre / código) ----------
 function saEditarIglesia(id){
