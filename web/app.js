@@ -755,7 +755,7 @@ function verDia(fecha){
       ${(puede||puedeBorrar||puedePublicar())?`<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
         ${puedePublicar()?`<button class="link" onclick="Org.abrirEvento(${e.id})">🗒️ Organización</button>`:''}
         ${puede?`<button class="link" onclick="editarEvento(${e.id})">✏️ Editar</button>`:''}
-        ${puedeBorrar?`<button class="link" style="color:var(--red)" onclick="borrarEvento(${e.id})">🗑️ Borrar</button>`:''}
+        ${puedeBorrar?`<button class="link" style="color:var(--red-tx)" onclick="borrarEvento(${e.id})">🗑️ Borrar</button>`:''}
       </div>`:''}</div>`;
   }).join('');
   cont.innerHTML=`<div class="card" style="margin-top:16px">${inner}</div>`;
@@ -1078,9 +1078,9 @@ function renderListasAsist(){
   const asistieron = miembros.filter(m=>_asist.present.has(m.id));
   const ausentes   = miembros.filter(m=>!_asist.present.has(m.id));
   $('listas-asist').innerHTML=`
-    <h3 class="section-title" style="margin-top:18px;color:var(--green)">✅ Asistieron (${asistieron.length})</h3>
+    <h3 class="section-title" style="margin-top:18px;color:var(--green-tx)">✅ Asistieron (${asistieron.length})</h3>
     <div class="list">${asistieron.length? asistieron.map(m=>filaAsist(m,true)).join('') : '<p class="muted small">Nadie marcado aún.</p>'}</div>
-    <h3 class="section-title" style="margin-top:18px;color:var(--red)">❌ No asistieron (${ausentes.length})</h3>
+    <h3 class="section-title" style="margin-top:18px;color:var(--red-tx)">❌ No asistieron (${ausentes.length})</h3>
     <div class="list">${ausentes.length? ausentes.map(m=>filaAsist(m,false)).join('') : '<p class="muted small">¡Todos asistieron! 🎉</p>'}</div>`;
 }
 function togglePresente(id){
@@ -1423,7 +1423,7 @@ function renderCanciones(q){
   const puede=esLiderMusicaUI();
   cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1;cursor:pointer" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
     <span class="estado-chip">${escHtml(c.tono||'—')}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></div>
-    ${puede?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar canción" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
+    ${puede?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar canción" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
 }
 function borrarCancion(id){ modalConfirm('¿Eliminar esta canción del cancionero?', async()=>{
   try{ await api('/musica/canciones/'+id,{method:'DELETE'}); cargarCanciones(); toast('Canción eliminada'); }catch(e){ toast(e.message); } }); }
@@ -1498,7 +1498,7 @@ async function cargarPlan(eventoId){
       ? '<div class="list" style="margin-top:6px">'+[...porPersona.values()].map(p=>`<div class="item-card flex">
           <div style="flex:1"><b>${escHtml(p.nombre)}</b>
             <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;vertical-align:middle">${p.items.map(it=>
-              `<span class="estado-chip">${escHtml(it.instrumento||'—')}${lider?` <span title="Quitar" style="cursor:pointer;color:var(--red);font-weight:700;margin-left:2px" onclick="quitarIntegrante(${it.id})">×</span>`:''}</span>`).join('')}</span>
+              `<span class="estado-chip">${escHtml(it.instrumento||'—')}${lider?` <span title="Quitar" style="cursor:pointer;color:var(--red-tx);font-weight:700;margin-left:2px" onclick="quitarIntegrante(${it.id})">×</span>`:''}</span>`).join('')}</span>
           </div></div>`).join('')+'</div>'
       : '<p class="muted small" style="margin-top:6px">Aún no hay equipo asignado.</p>';
     // Form para agregar (solo líder)
@@ -1554,7 +1554,7 @@ async function cargarMaterialMusica(){
         : `<div class="muted small">📎 <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">Ver / descargar</a>${m.creado_en?' · '+fechaTxt(m.creado_en.slice(0,10)):''}</div>`;
       return `<div class="item-card flex">
       <div style="flex:1">${titulo}${permanente?' <span class="estado-chip">📌 Fijo</span>':''}${sub}</div>
-      ${puedeBorrar?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar material" onclick="borrarMaterialMus(${m.id})">🗑️</button>`:''}</div>`;
+      ${puedeBorrar?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar material" onclick="borrarMaterialMus(${m.id})">🗑️</button>`:''}</div>`;
     }).join('');
   }catch{ $('material-mus').innerHTML='<p class="error">Error al cargar el material.</p>'; }
 }
@@ -1824,7 +1824,10 @@ async function atenderCaso(id){
 // ============================================================
 //  FASE 3: TESORERÍA (contabilidad + transparencia)
 // ============================================================
-function money(n){ return '$'+Number(n||0).toLocaleString('es-MX'); }
+// Formato unico de dinero para toda la app (CLP: miles con punto, sin decimales).
+// Antes convivian dos: 'es-MX' aqui y 'es-CL' en Organizacion, asi que el mismo
+// monto se veia distinto segun el modulo.
+function money(n){ return '$'+Number(n||0).toLocaleString('es-CL'); }
 
 let _movOffset=0;
 async function vistaTesoreria(){
@@ -1841,8 +1844,8 @@ async function vistaTesoreria(){
     $('tz').innerHTML=`
       <div class="widgets" style="margin-bottom:18px">
         <div class="widget"><div class="widget-head">💰 Saldo actual</div><div class="stat-num">${money(res.saldo)}</div></div>
-        <div class="widget"><div class="widget-head">↑ Ingresos del mes</div><div class="stat-num" style="color:var(--green)">${money(res.ingMes)}</div></div>
-        <div class="widget"><div class="widget-head">↓ Gastos del mes</div><div class="stat-num" style="color:var(--red)">${money(res.gasMes)}</div></div>
+        <div class="widget"><div class="widget-head">↑ Ingresos del mes</div><div class="stat-num" style="color:var(--green-tx)">${money(res.ingMes)}</div></div>
+        <div class="widget"><div class="widget-head">↓ Gastos del mes</div><div class="stat-num" style="color:var(--red-tx)">${money(res.gasMes)}</div></div>
       </div>
       ${esTesoreroUI()
         ? `<div class="row" style="margin-bottom:14px">
@@ -1872,7 +1875,7 @@ function filaMov(m){
   return `<div class="item-card flex">
     <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${cap(m.categoria||m.tipo)}</b>
     <div class="muted small">${escHtml(m.descripcion||'')} · ${escHtml(m.fecha)}${m.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(m.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div>
-    <b style="color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
+    <b style="color:${m.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
 }
 async function cargarMasMovimientos(){
   const btn=$('mov-mas');
@@ -2099,7 +2102,7 @@ async function cargarAvisosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/avisos'); const c=$('mg-avisos'); const lider=window._grupoLider;
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin avisos todavía.</p>'; return; }
     c.className='list';
-    c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${escHtml(a.texto||'')}</div></div>${lider?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar aviso" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${escHtml(a.texto||'')}</div></div>${lider?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar aviso" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
   }catch{ $('mg-avisos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formAvisoGrupo(){ const z=$('mg-aviso-form'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2121,7 +2124,7 @@ async function cargarRecursosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/recursos'); const c=$('mg-recursos'); const lider=window._grupoLider;
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin recursos todavía.</p>'; return; }
     c.className='list';
-    c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${escHtml(safeUrl(rc.url))}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar recurso" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${escHtml(safeUrl(rc.url))}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar recurso" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
   }catch{ $('mg-recursos').innerHTML='<p class="error">Error.</p>'; }
 }
 function formRecursoGrupo(){ const z=$('mg-rec-form'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2150,7 +2153,7 @@ function borrarRecursoGrupo(id){ modalConfirm('¿Eliminar este recurso?', async(
 async function cargarMiembrosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/miembros'); window._mgMiembros=list.filter(m=>!m.esLider); const c=$('mg-miembros'); const lider=window._grupoLider;
     c.className='list';
-    c.innerHTML=list.map(m=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(m.nombre)}</b>${m.esLider?' <span class="estado-chip estado-aceptado">Líder</span>':''}</div>${(lider&&!m.esLider)?`<button class="link" style="color:var(--red)" onclick="quitarMiembroGrupo(${m.id},'${(m.nombre||'').replace(/['"\\]/g,'')}')">Quitar</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(m=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(m.nombre)}</b>${m.esLider?' <span class="estado-chip estado-aceptado">Líder</span>':''}</div>${(lider&&!m.esLider)?`<button class="link" style="color:var(--red-tx)" onclick="quitarMiembroGrupo(${m.id},'${(m.nombre||'').replace(/['"\\]/g,'')}')">Quitar</button>`:''}</div>`).join('');
     if(lider) renderAvisarBox();
   }catch{ $('mg-miembros').innerHTML='<p class="error">Error.</p>'; }
 }
@@ -2201,7 +2204,7 @@ async function cargarTareasGrupo(){
   catch{ cont.className='muted'; cont.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarTareasGrupo()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; return; }
   if(!list.length){ cont.className='muted'; cont.innerHTML='<p class="small">Sin tareas asignadas.</p>'; return; }
   cont.className='list';
-  cont.innerHTML=list.map(t=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(t.titulo)}</b> <span class="muted small">→ ${escHtml(t.nombre)}</span>${t.detalle?`<div class="muted small">${escHtml(t.detalle)}</div>`:''} <span class="estado-chip ${t.estado==='hecho'?'estado-aceptado':'estado-pendiente'}">${t.estado==='hecho'?'✅ Hecho':'⏳ Pendiente'}</span></div><button class="link icon-only" style="color:var(--red)" aria-label="Eliminar tarea" onclick="borrarTareaGrupo(${t.id})">🗑️</button></div>`).join('');
+  cont.innerHTML=list.map(t=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(t.titulo)}</b> <span class="muted small">→ ${escHtml(t.nombre)}</span>${t.detalle?`<div class="muted small">${escHtml(t.detalle)}</div>`:''} <span class="estado-chip ${t.estado==='hecho'?'estado-aceptado':'estado-pendiente'}">${t.estado==='hecho'?'✅ Hecho':'⏳ Pendiente'}</span></div><button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar tarea" onclick="borrarTareaGrupo(${t.id})">🗑️</button></div>`).join('');
 }
 function borrarTareaGrupo(id){ modalConfirm('¿Eliminar esta tarea?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/tareas/'+id,{method:'DELETE'}); cargarTareasGrupo(); toast('Tarea eliminada'); }catch(e){ toast(e.message);} }); }
 
@@ -2235,11 +2238,11 @@ async function verPredica(id){
   const recs=(d.recursos||[]).map(r=>{
     const ic=r.tipo==='archivo'?'📎':r.tipo==='libro'?'📚':'🔗';
     const link=r.url?`<a href="${escHtml(safeUrl(r.url))}" target="_blank">${r.tipo==='archivo'?'Abrir / descargar':'Abrir'}</a>`:'';
-    return `<div class="item-card flex"><div style="flex:1"><b>${ic} ${escHtml(r.titulo)}</b> <span class="muted small">${link}</span></div>${edit?`<button class="link icon-only" style="color:var(--red)" aria-label="Eliminar recurso" onclick="borrarRecPredica(${r.id})">🗑️</button>`:''}</div>`;
+    return `<div class="item-card flex"><div style="flex:1"><b>${ic} ${escHtml(r.titulo)}</b> <span class="muted small">${link}</span></div>${edit?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar recurso" onclick="borrarRecPredica(${r.id})">🗑️</button>`:''}</div>`;
   }).join('');
   $('prd').className='';
   $('prd').innerHTML=`<div class="card">
-    <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link icon-only" style="color:var(--red)" aria-label="Eliminar predicación" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
+    <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar predicación" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
     <div class="muted small" style="margin-top:4px">${d.fecha?'📅 '+fechaTxt(d.fecha):''}${d.predicador?' · 🎤 '+escHtml(d.predicador):''}</div>
     ${d.notas?`<div style="margin-top:14px;white-space:pre-wrap;line-height:1.5">${escHtml(d.notas)}</div>`:'<p class="muted small" style="margin-top:10px">Sin notas.</p>'}
   </div>
@@ -2303,7 +2306,7 @@ async function cargarPredicadores(){
       <span class="muted small">Hasta:</span>${fechaSelectHTML('prp-hasta','')}
       <button class="btn small-btn" onclick="asignarPredicador()">Asignar</button></div>
     ${fallo?'<p class="error small">No se pudo cargar la lista de predicadores · <a href="javascript:cargarPredicadores()" class="link" style="display:inline;padding:0">Reintentar</a></p>'
-      :(list.length?'<div class="list">'+list.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(x.nombre)}</b> ${x.vigente?'<span class="estado-chip estado-aceptado">Vigente</span>':'<span class="estado-chip">Inactivo</span>'}<div class="muted small">${fechaTxt(x.desde)} → ${fechaTxt(x.hasta)}</div></div><button class="link" style="color:var(--red)" onclick="quitarPredicador(${x.id})">Quitar</button></div>`).join('')+'</div>':'<p class="muted small">Nadie con rol predicador todavía.</p>')}
+      :(list.length?'<div class="list">'+list.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(x.nombre)}</b> ${x.vigente?'<span class="estado-chip estado-aceptado">Vigente</span>':'<span class="estado-chip">Inactivo</span>'}<div class="muted small">${fechaTxt(x.desde)} → ${fechaTxt(x.hasta)}</div></div><button class="link" style="color:var(--red-tx)" onclick="quitarPredicador(${x.id})">Quitar</button></div>`).join('')+'</div>':'<p class="muted small">Nadie con rol predicador todavía.</p>')}
   </div>`;
 }
 async function asignarPredicador(){
@@ -2357,7 +2360,7 @@ async function verIglesiaObispo(id, mes){
       <div class="widget" style="cursor:pointer" onclick="obAsistencia(${id})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></div>
       <div class="widget" style="cursor:pointer" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green)':'var(--red)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></div>
     </div>
-    ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${id})">Ver movimientos ›</button>`)}
+    ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green-tx)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red-tx)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${id})">Ver movimientos ›</button>`)}
     ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${escHtml(e.grupo||'')} · ${escHtml(e.estado)}</div></div><span class="estado-chip">✅ ${e.asistencia}</span></div>`, 'Sin eventos este mes.'))}
     ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<div class="item-card flex" style="cursor:pointer" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${escHtml(p.predicador||'')}</div></div><span class="muted" style="font-size:18px">›</span></div>`, 'Sin prédicas este mes.'))}
     <div class="widgets" style="margin-bottom:16px">
@@ -2518,7 +2521,7 @@ function cerrarModal(){ const r=$('modal-root'); r.classList.remove('show'); r.i
 function accionesBtns(editFn, delFn, id){
   return `<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
     <button class="link" onclick="${editFn}(${id})">✏️ Editar</button>
-    <button class="link" style="color:var(--red)" onclick="${delFn}(${id})">🗑️ Borrar</button></div>`;
+    <button class="link" style="color:var(--red-tx)" onclick="${delFn}(${id})">🗑️ Borrar</button></div>`;
 }
 // Modal de confirmación genérico
 // Modal de confirmación genérico. opts: { okLabel, danger }.
@@ -2590,7 +2593,7 @@ function renderAdmin(){
   const usuarios=d.usuarios.map(u=>{
     const chips=u.roles.length
       ? u.roles.map(r=>`<span class="estado-chip" style="margin:2px 4px 2px 0">${escHtml(r.grupo)} · ${escHtml(rolLabel(r.rol))}
-          <a href="javascript:adminQuitarRol(${r.pertenencia_id})" style="color:var(--red);margin-left:4px" title="Quitar">✕</a></span>`).join('')
+          <a href="javascript:adminQuitarRol(${r.pertenencia_id})" style="color:var(--red-tx);margin-left:4px" title="Quitar">✕</a></span>`).join('')
       : '<span class="muted small">Sin roles</span>';
     const badges=`${u.es_pastor?'<span class="estado-chip estado-aceptado">⛪ Pastor</span> ':''}${!u.activo?'<span class="estado-chip estado-rechazado">Inactivo</span>':''}`;
     return `<div class="item-card" style="margin-top:10px">
@@ -2773,7 +2776,7 @@ async function saCargarLista(){
           <button class="btn ghost small-btn" onclick="saEditarIglesia(${ig.id})">✏️ Editar</button>
           <button class="btn ghost small-btn" onclick="saToggleActiva(${ig.id})">${activa?'⛔ Desactivar':'✅ Reactivar'}</button>
           <button class="btn ghost small-btn" onclick="saResetPastor(${ig.id})">🔑 Resetear contraseña del pastor</button>
-          <button class="btn ghost small-btn" style="color:var(--red)" onclick="saEliminarIglesia(${ig.id})">🗑️ Eliminar</button>
+          <button class="btn ghost small-btn" style="color:var(--red-tx)" onclick="saEliminarIglesia(${ig.id})">🗑️ Eliminar</button>
         </div>
       </div>`;
     }).join('') : '<p class="muted small">Aún no hay iglesias creadas.</p>';
@@ -3379,7 +3382,6 @@ const Chat = {
 //  ORGANIZACIÓN DE EVENTOS: hoja de cosas a llevar + gastos (total que se suma).
 //  Ver: líderes/pastor. Editar: solo el creador o el pastor (lo dice puede_editar).
 // ============================================================
-function fmtMonto(n){ return '$'+Number(n||0).toLocaleString('es-CL'); }
 
 async function vistaOrganizacion(){
   const c=$('content');
@@ -3395,7 +3397,7 @@ async function vistaOrganizacion(){
       return `<div class="item-card flex" style="margin-top:10px;cursor:pointer" onclick="Org.abrir(${h.id})">
         <div style="flex:1"><div class="item-titulo">${escHtml(titulo)}</div>
           <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''} · ${h.n_cosas||0} cosa(s)</div></div>
-        <div style="text-align:right"><b>${fmtMonto(h.total_gastado)}</b><div class="muted small">gastado</div></div>
+        <div style="text-align:right"><b>${money(h.total_gastado)}</b><div class="muted small">gastado</div></div>
       </div>`;
     }).join('') : '<p class="muted small">Aún no hay listas. Crea una con "Nueva lista".</p>';
   }catch(e){ const z=$('org-lista'); z.className='error'; z.textContent=(e&&e.message)||'No se pudo cargar'; }
@@ -3429,11 +3431,11 @@ const Org = {
     const cosas=h.cosas.map(x=>`<div class="org-row">
         <label class="org-check"><input type="checkbox" ${x.listo?'checked':''} ${ed?'':'disabled'} onchange="Org.toggleCosa(${x.id}, this.checked)">
           <span class="${x.listo?'org-listo':''}">${escHtml(x.nombre)} <b>×${x.cantidad}</b></span></label>
-        ${ed?`<button class="link" style="color:var(--red)" onclick="Org.borrarCosa(${x.id})">✕</button>`:''}
+        ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar ${escHtml(x.nombre)}" onclick="Org.borrarCosa(${x.id})">✕</button>`:''}
       </div>`).join('') || '<p class="muted small">Sin cosas todavía.</p>';
     const gastos=h.gastos.map(g=>`<div class="org-row">
-        <span>${escHtml(g.concepto)} — <b>${fmtMonto(g.monto)}</b></span>
-        ${ed?`<button class="link" style="color:var(--red)" onclick="Org.borrarGasto(${g.id})">✕</button>`:''}
+        <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b></span>
+        ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar el gasto ${escHtml(g.concepto)}" onclick="Org.borrarGasto(${g.id})">✕</button>`:''}
       </div>`).join('') || '<p class="muted small">Sin gastos todavía.</p>';
 
     $('content').innerHTML=`
@@ -3454,12 +3456,12 @@ const Org = {
       </div>
       <div class="card" style="margin-top:14px"><h3 style="font-size:16px">💵 Gastos</h3>
         <div id="org-gastos">${gastos}</div>
-        <div class="org-total">Total gastado: <b>${fmtMonto(h.total_gastado)}</b></div>
+        <div class="org-total">Total gastado: <b>${money(h.total_gastado)}</b></div>
         ${ed?`<div class="row" style="gap:6px;margin-top:10px">
           <input id="org-gasto-concepto" placeholder="Ej. Pan">
           <input id="org-gasto-monto" type="number" min="1" placeholder="Monto" style="max-width:110px">
           <button class="btn small-btn" onclick="Org.addGasto()">Añadir</button></div>`:''}
-        ${ed?`<div style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
+        ${ed?`<div style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red-tx)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
       </div>`;
   },
   _recargar(){ if(Org._hoja) Org.abrir(Org._hoja.id); },
