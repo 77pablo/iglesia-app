@@ -136,5 +136,51 @@ r.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Cosas a llevar ----------
+// /:id/cosas y /cosas/:cosaId no colisionan: la primera lleva el id de la hoja
+// delante, la segunda empieza por el literal 'cosas'.
+const cosaSchema = z.object({
+  nombre: z.string().trim().min(1, 'falta el nombre'),
+  cantidad: z.coerce.number().int().min(1).optional()
+});
+r.post('/:id/cosas', validar(cosaSchema), (req, res) => {
+  const org = hojaEditable(req, res, Number(req.params.id));
+  if (!org) return;
+  const info = db.prepare('INSERT INTO evento_org_cosa (org_id, nombre, cantidad) VALUES (?,?,?)')
+    .run(org.id, req.body.nombre, req.body.cantidad || 1);
+  res.json({ ok: true, id: Number(info.lastInsertRowid) });
+});
+
+// PATCH parcial: lo que no venga conserva su valor. 'listo' acepta booleano o 0/1
+// porque el checkbox del frontend manda true/false y la BD guarda 0/1.
+const editarCosaSchema = z.object({
+  nombre: z.string().trim().min(1).optional(),
+  cantidad: z.coerce.number().int().min(1).optional(),
+  listo: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional()
+});
+r.patch('/cosas/:cosaId', validar(editarCosaSchema), (req, res) => {
+  const cosa = db.prepare('SELECT * FROM evento_org_cosa WHERE id = ?').get(Number(req.params.cosaId));
+  if (!cosa) return res.status(404).json({ error: 'Cosa no encontrada' });
+  const org = hojaEditable(req, res, cosa.org_id);   // valida iglesia (404) y permiso (403)
+  if (!org) return;
+  const { nombre, cantidad, listo } = req.body;
+  db.prepare('UPDATE evento_org_cosa SET nombre=?, cantidad=?, listo=? WHERE id=?').run(
+    nombre ?? cosa.nombre,
+    cantidad ?? cosa.cantidad,
+    listo === undefined ? cosa.listo : (listo ? 1 : 0),
+    cosa.id
+  );
+  res.json({ ok: true });
+});
+
+r.delete('/cosas/:cosaId', (req, res) => {
+  const cosa = db.prepare('SELECT * FROM evento_org_cosa WHERE id = ?').get(Number(req.params.cosaId));
+  if (!cosa) return res.status(404).json({ error: 'Cosa no encontrada' });
+  const org = hojaEditable(req, res, cosa.org_id);
+  if (!org) return;
+  db.prepare('DELETE FROM evento_org_cosa WHERE id=?').run(cosa.id);
+  res.json({ ok: true });
+});
+
 export default r;
 export { puedeEditarOrg, armarHoja, hojaEditable };

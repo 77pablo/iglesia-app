@@ -150,3 +150,72 @@ test('editar/borrar hoja: solo creador o pastor; otro líder 403', async () => {
   assert.equal(res.status, 200);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org WHERE id = ?').get(id).n, 0);
 });
+
+test('cosas: añadir, marcar listo y borrar (con permiso)', async () => {
+  const b = await servidor();
+  const S = sembrarOrg('COSA');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  let res = await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Lista' }) });
+  const { id } = await res.json();
+
+  // añadir cosa con cantidad
+  res = await fetch(b + `/api/organizacion/${id}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: 'Jugos nectar', cantidad: 5 }) });
+  assert.equal(res.status, 200);
+  const cosaId = (await res.json()).id;
+  // se ve en la hoja
+  res = await fetch(b + '/api/organizacion/' + id, { headers: auth });
+  const hoja = await res.json();
+  assert.equal(hoja.cosas.length, 1);
+  assert.equal(hoja.cosas[0].nombre, 'Jugos nectar');
+  assert.equal(hoja.cosas[0].cantidad, 5);
+  assert.equal(hoja.cosas[0].listo, 0);
+  // sin nombre → 400 (no se cuelan cosas en blanco)
+  res = await fetch(b + `/api/organizacion/${id}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: '  ' }) });
+  assert.equal(res.status, 400);
+  // marcar listo, y desmarcar (el PATCH parcial no pierde el toggle)
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ listo: true }) });
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT listo FROM evento_org_cosa WHERE id = ?').get(cosaId).listo, 1);
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ listo: false }) });
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT listo FROM evento_org_cosa WHERE id = ?').get(cosaId).listo, 0);
+  // el creador la borra
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'DELETE', headers: auth });
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_cosa WHERE id = ?').get(cosaId).n, 0);
+});
+
+test('cosas: quién NO puede tocarlas (gate, permiso de edición y otra iglesia)', async () => {
+  const b = await servidor();
+  const S = sembrarOrg('COSP');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  let res = await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Con dueño' }) });
+  const { id } = await res.json();
+  res = await fetch(b + `/api/organizacion/${id}/cosas`, { method: 'POST', headers: auth, body: JSON.stringify({ nombre: 'Sillas', cantidad: 2 }) });
+  const cosaId = (await res.json()).id;
+
+  // 1) feligrés: lo frena el GATE de visibilidad del router, antes de mirar la cosa
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tok(S.feligresId, S.iglesiaId) } });
+  assert.equal(res.status, 403);
+  // 2) otro líder de la MISMA iglesia: pasa el gate, pero no es creador ni pastor
+  //    → aquí sí se prueba el permiso de edición de la hoja.
+  const lid2 = db.prepare("INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo) VALUES (?,?,?,?,1)").run(S.iglesiaId, 'lid2_COSP', 'Lider2', 'x');
+  db.prepare("INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?, 'admin')").run(Number(lid2.lastInsertRowid), S.grupoId);
+  const auth2 = { Authorization: 'Bearer ' + tok(Number(lid2.lastInsertRowid), S.iglesiaId), 'Content-Type': 'application/json' };
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: auth2, body: JSON.stringify({ listo: true }) });
+  assert.equal(res.status, 403);
+  res = await fetch(b + `/api/organizacion/${id}/cosas`, { method: 'POST', headers: auth2, body: JSON.stringify({ nombre: 'Colada' }) });
+  assert.equal(res.status, 403);
+  // 3) líder de OTRA iglesia: 404, ni siquiera confirma que la cosa exista
+  const O = sembrarOrg('COSQ');
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tok(O.liderId, O.iglesiaId) } });
+  assert.equal(res.status, 404);
+  // 4) el pastor de la iglesia SÍ puede (no es el creador, pero es pastor)
+  res = await fetch(b + `/api/organizacion/cosas/${cosaId}`, { method: 'PATCH', headers: { Authorization: 'Bearer ' + tok(S.pastorId, S.iglesiaId), 'Content-Type': 'application/json' }, body: JSON.stringify({ listo: true }) });
+  assert.equal(res.status, 200);
+  // nada de lo anterior alteró la cosa salvo el pastor
+  // (los rows de node:sqlite tienen prototipo nulo: se copian con spread para comparar)
+  const fila = db.prepare('SELECT nombre, cantidad, listo FROM evento_org_cosa WHERE id = ?').get(cosaId);
+  assert.deepEqual({ ...fila }, { nombre: 'Sillas', cantidad: 2, listo: 1 });
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM evento_org_cosa WHERE org_id = ?').get(id).n, 1);
+});
