@@ -3498,9 +3498,21 @@ const Org = {
       </div>`;
     }).join('') || '<p class="muted small">Sin cosas todavía.</p>';
     const gastos=h.gastos.map(g=>`<div class="org-row">
-        <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b></span>
+        <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b>${g.pagado_por_nombre?` <span class="muted small">· puso ${escHtml(g.pagado_por_nombre)}</span>`:''}</span>
         ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar el gasto ${escHtml(g.concepto)}" onclick="Org.borrarGasto(${g.id})">✕</button>`:''}
       </div>`).join('') || '<p class="muted small">Sin gastos todavía.</p>';
+    // "Quién puso qué": lo que se mira al final para saber a quién devolverle cuánto.
+    // Los gastos anteriores a esta función no tienen a nadie registrado, así que
+    // la suma de los aportes puede quedar por debajo del total: se dice en vez de
+    // callarlo, si no el resumen parece una cuenta mal hecha.
+    const listaAportes=h.aportes||[];
+    const sumaAportes=listaAportes.reduce((s,a)=>s+Number(a.total||0),0);
+    const sinRegistrar=Number(h.total_gastado||0)-sumaAportes;
+    const aportes=listaAportes.length
+      ? `<div class="org-aportes"><b class="muted small">Quién puso qué</b>${listaAportes.map(a=>
+          `<div class="org-row"><span>${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')}
+          ${sinRegistrar>0?`<div class="org-row muted small"><span>Sin registrar quién puso</span><b>${money(sinRegistrar)}</b></div>`:''}</div>`
+      : '';
 
     $('content').innerHTML=`
       <div class="head-row"><h2>🗒️ ${escHtml(titulo)}</h2>
@@ -3521,13 +3533,29 @@ const Org = {
       <div class="card" style="margin-top:14px"><h3 style="font-size:16px">💵 Gastos</h3>
         <div id="org-gastos">${gastos}</div>
         <div class="org-total">Total gastado: <b>${money(h.total_gastado)}</b></div>
+        ${aportes}
         ${ed?`<div class="row" style="gap:6px;margin-top:10px">
           <input id="org-gasto-concepto" placeholder="Ej. Pan">
           <input id="org-gasto-monto" type="number" min="1" placeholder="Monto" style="max-width:110px">
+          <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?">
+            <option value="">Lo puse yo</option>
+          </select>
           <button class="btn small-btn" onclick="Org.addGasto()">Añadir</button></div>`:''}
         ${ed?`<div style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red-tx)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
       </div>`;
+    if(ed) Org._llenarQuienPago();
   },
+  // El selector de "¿quién puso el dinero?" se llena aparte para no cargar cada
+  // lectura de la hoja con la lista entera de la iglesia. Se cachea por sesión.
+  async _llenarQuienPago(){
+    const sel=$('org-gasto-quien'); if(!sel) return;
+    try{
+      if(!Org._personas) Org._personas=await api('/directorio');
+      sel.innerHTML='<option value="">Lo puse yo</option>'+
+        Org._personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
+    }catch{ /* si falla, queda "Lo puse yo", que es el caso normal */ }
+  },
+  _personas:null,
   _recargar(){ if(Org._hoja) Org.abrir(Org._hoja.id); },
   async addCosa(){
     const nombre=$('org-cosa-nombre').value.trim(); const cantidad=Number($('org-cosa-cant').value)||1;
@@ -3551,8 +3579,10 @@ const Org = {
     const concepto=$('org-gasto-concepto').value.trim(); const monto=Number($('org-gasto-monto').value);
     if(!concepto) return toast('Escribe el concepto');
     if(!(monto>0)) return toast('El monto debe ser mayor a 0');
+    const quien=Number(($('org-gasto-quien')||{}).value)||null;   // vacío = lo puse yo
     await conBoton(botonActual(), async()=>{
-      try{ await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify({concepto,monto})}); Org._recargar(); }
+      const cuerpo = quien ? {concepto,monto,pagado_por:quien} : {concepto,monto};
+      try{ await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)}); Org._recargar(); }
       catch(e){ toast((e&&e.message)||'No se pudo añadir'); }
     });
   },

@@ -227,3 +227,72 @@ test('recordatorio: no avisa si la hoja no tiene fecha ni evento', async () => {
   generarRecordatorios(S.iglesiaId);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM recordatorio_enviado WHERE clave LIKE ?').get(`org_cosa:${cosaId}:%`).n, 0);
 });
+
+test('gastos: se registra quien puso el dinero y la hoja resume cuanto puso cada uno', async () => {
+  const b = await servidor();
+  const S = sembrar('PAGO');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  let res = await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Asado' }) });
+  const hojaId = (await res.json()).id;
+
+  // Sin indicar quien pago: queda a nombre de quien registra el gasto.
+  res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Carne', monto: 20000 }) });
+  assert.equal(res.status, 200);
+
+  // Indicando a otra persona de la iglesia.
+  res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Bebidas', monto: 8000, pagado_por: S.feligresId }) });
+  assert.equal(res.status, 200);
+  // Y un segundo gasto de la misma persona, para comprobar que el resumen suma.
+  await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Hielo', monto: 2500, pagado_por: S.feligresId }) });
+
+  const hoja = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hoja.total_gastado, 30500);
+  const carne = hoja.gastos.find(g => g.concepto === 'Carne');
+  assert.equal(carne.pagado_por, S.liderId, 'por defecto paga quien registra');
+  assert.equal(carne.pagado_por_nombre, 'Lider');
+  assert.equal(hoja.gastos.find(g => g.concepto === 'Bebidas').pagado_por_nombre, 'Feligres Juan');
+
+  // Resumen "quien puso que": una fila por persona, de mayor a menor.
+  assert.equal(hoja.aportes.length, 2);
+  assert.deepEqual({ ...hoja.aportes[0] }, { persona_id: S.liderId, nombre: 'Lider', total: 20000 });
+  assert.deepEqual({ ...hoja.aportes[1] }, { persona_id: S.feligresId, nombre: 'Feligres Juan', total: 10500 });
+});
+
+test('gastos: no se puede atribuir el pago a alguien de otra iglesia', async () => {
+  const b = await servidor();
+  const A = sembrar('PAGA');
+  const B = sembrar('PAGB');
+  const auth = { Authorization: 'Bearer ' + tok(A.liderId, A.iglesiaId), 'Content-Type': 'application/json' };
+  const hojaId = (await (await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Once' }) })).json()).id;
+
+  let res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Te', monto: 3000, pagado_por: B.feligresId }) });
+  assert.equal(res.status, 400);
+  res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Te', monto: 3000, pagado_por: 999999 }) });
+  assert.equal(res.status, 400);
+
+  // No se registro ningun gasto.
+  const hoja = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hoja.gastos.length, 0);
+  assert.deepEqual(hoja.aportes, []);
+});
+
+test('gastos antiguos sin pagador: cuentan en el total pero no en el resumen', async () => {
+  // Los gastos creados antes de que existiera pagado_por tienen la columna en
+  // NULL. Deben seguir sumando al total (es plata que se gasto) pero no pueden
+  // inventar un aportante. El frontend se apoya en esta diferencia para mostrar
+  // la linea "sin registrar quien puso".
+  const b = await servidor();
+  const S = sembrar('VIEJ');
+  const auth = { Authorization: 'Bearer ' + tok(S.liderId, S.iglesiaId), 'Content-Type': 'application/json' };
+  const hojaId = (await (await fetch(b + '/api/organizacion', { method: 'POST', headers: auth, body: JSON.stringify({ titulo: 'Historica' }) })).json()).id;
+
+  db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto) VALUES (?,?,?)').run(hojaId, 'Gasto antiguo', 5000);
+  await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Nuevo', monto: 3000 }) });
+
+  const hoja = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hoja.total_gastado, 8000, 'el gasto antiguo sigue sumando');
+  assert.equal(hoja.gastos.length, 2);
+  assert.equal(hoja.gastos.find(g => g.concepto === 'Gasto antiguo').pagado_por, null);
+  assert.equal(hoja.aportes.length, 1, 'solo el gasto con pagador aparece en el resumen');
+  assert.equal(hoja.aportes[0].total, 3000);
+});

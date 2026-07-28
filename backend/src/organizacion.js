@@ -76,12 +76,23 @@ function armarHoja(org) {
        FROM evento_org_cosa c LEFT JOIN persona p ON p.id = c.responsable_id
       WHERE c.org_id = ? ORDER BY c.orden, c.id`
   ).all(org.id);
-  const gastos = db.prepare('SELECT id, concepto, monto, creado_en FROM evento_org_gasto WHERE org_id = ? ORDER BY id').all(org.id);
+  const gastos = db.prepare(
+    `SELECT g.id, g.concepto, g.monto, g.creado_en, g.pagado_por, p.nombre AS pagado_por_nombre
+       FROM evento_org_gasto g LEFT JOIN persona p ON p.id = g.pagado_por
+      WHERE g.org_id = ? ORDER BY g.id`
+  ).all(org.id);
   const total = db.prepare('SELECT COALESCE(SUM(monto),0) AS t FROM evento_org_gasto WHERE org_id = ?').get(org.id).t;
+  // "Quien puso que": cuanto puso cada persona, de mayor a menor. Es lo que se
+  // mira al final para saber a quien devolverle cuanto.
+  const aportes = db.prepare(
+    `SELECT g.pagado_por AS persona_id, p.nombre, SUM(g.monto) AS total
+       FROM evento_org_gasto g JOIN persona p ON p.id = g.pagado_por
+      WHERE g.org_id = ? GROUP BY g.pagado_por, p.nombre ORDER BY total DESC, p.nombre`
+  ).all(org.id);
   const evento = org.evento_id
     ? db.prepare('SELECT id, titulo, fecha, hora_inicio, lugar FROM evento WHERE id = ?').get(org.evento_id)
     : null;
-  return { ...org, evento, cosas, gastos, total_gastado: total };
+  return { ...org, evento, cosas, gastos, aportes, total_gastado: total };
 }
 
 // Obtiene el row de la hoja y valida edición. Responde 404/403 y devuelve null,
@@ -271,13 +282,21 @@ r.delete('/cosas/:cosaId', (req, res) => {
 // nunca queda descuadrado respecto a las filas de gastos.
 const gastoSchema = z.object({
   concepto: z.string().trim().min(1, 'falta el concepto'),
-  monto: z.coerce.number().positive('el monto debe ser mayor a 0')
+  monto: z.coerce.number().positive('el monto debe ser mayor a 0'),
+  // Opcional: si no viene, paga quien registra el gasto (el caso normal).
+  pagado_por: z.coerce.number().int().positive().optional()
 });
 r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
   const org = hojaEditable(req, res, Number(req.params.id));
   if (!org) return;
-  const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto) VALUES (?,?,?)')
-    .run(org.id, req.body.concepto, req.body.monto);
+  const quienPago = req.body.pagado_por ?? req.user.persona_id;
+  // Solo gente de la misma iglesia: atribuirle un pago a un tercero de otra
+  // congregacion no significa nada y ensucia el resumen de a quien devolver.
+  const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?')
+    .get(quienPago, req.user.iglesia_id);
+  if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+  const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por) VALUES (?,?,?,?)')
+    .run(org.id, req.body.concepto, req.body.monto, quienPago);
   res.json({ ok: true, id: Number(info.lastInsertRowid) });
 });
 

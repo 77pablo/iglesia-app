@@ -570,6 +570,9 @@ agregarColumna('movimiento', 'comprobante_url', 'TEXT');
 //  asignada_en: cuando se asigno; de ahi se apoya el "no volver a avisar".
 agregarColumna('evento_org_cosa', 'responsable_id', 'INTEGER REFERENCES persona(id)');
 agregarColumna('evento_org_cosa', 'asignada_en', 'TEXT');
+// EVENTO_ORG_GASTO: quien puso el dinero. Sin esto, al final del almuerzo nadie
+// sabe a quien hay que devolverle cuanto (el lider puso la carne, otro las bebidas).
+agregarColumna('evento_org_gasto', 'pagado_por', 'INTEGER REFERENCES persona(id)');
 // GRUPO: carpeta de Google Drive vinculada por el líder (compartir archivos/fotos)
 agregarColumna('grupo', 'drive_url', 'TEXT');
 // PERSONA: Directorio de miembros + cumpleaños — foto y toggles de privacidad
