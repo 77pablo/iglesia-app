@@ -42,12 +42,21 @@ if [ -n "$R2_BUCKET" ] && [ -n "$LITESTREAM_ACCESS_KEY_ID" ] && [ -n "$R2_ENDPOI
   rclone copy "R2:$R2_BUCKET/uploads" "$UPLOADS_DIR" \
     || echo "[rclone] restauracion de uploads con error o sin respaldo previo (ver detalle arriba); se continua con lo que haya en disco"
 
+  # Sello de "ultimo respaldo correcto". El backend lo lee para saber si este
+  # bucle sigue vivo: si muere, muere en SILENCIO (el arranque si fue correcto,
+  # asi que no queda ninguna linea de log que lo delate) y lo unico que lo
+  # denuncia es este archivo envejeciendo. Ver persistencia.js.
+  SELLO_UPLOADS="$(dirname "$UPLOADS_DIR")/.respaldo-uploads"
+
   echo "[rclone] iniciando respaldo periodico de $UPLOADS_DIR -> R2:$R2_BUCKET/uploads (cada 30s, en background)..."
   (
     while true; do
       sleep 30
-      rclone sync "$UPLOADS_DIR" "R2:$R2_BUCKET/uploads" \
-        || echo "[rclone] fallo el respaldo periodico de uploads (revisa conexion/credenciales R2)"
+      if rclone sync "$UPLOADS_DIR" "R2:$R2_BUCKET/uploads"; then
+        date -u +%Y-%m-%dT%H:%M:%SZ > "$SELLO_UPLOADS"
+      else
+        echo "[rclone] fallo el respaldo periodico de uploads (revisa conexion/credenciales R2)"
+      fi
     done
   ) &
 
