@@ -14,7 +14,7 @@
 
 - **Español** en código, comentarios, mensajes de error y textos de interfaz, igual que el resto del repo. Los identificadores de código van **sin tildes** (`interpretarSello`, `retraso_seg`), siguiendo la convención existente.
 - **Nunca tumbar la app.** Mismo principio que `push.js`: cualquier fallo del indicador se traga y se registra por consola; jamás se propaga a la petición del usuario.
-- **Nunca devolver `stderr` crudo al frontend.** Los motivos son un conjunto cerrado de cadenas cortas: `sin_generaciones`, `retraso_alto`, `formato_no_reconocido`, `comando_fallo`, `tiempo_agotado`, `binario_ausente`, `sello_ausente`, `sello_viejo`, `arrancando`, `error_interno`. La salida de Litestream puede contener el endpoint de R2 y trozos de credenciales.
+- **Nunca devolver `stderr` crudo al frontend.** Los motivos son un conjunto cerrado de cadenas cortas: `sin_generaciones`, `retraso_alto`, `formato_no_reconocido`, `comando_fallo`, `tiempo_agotado`, `binario_ausente`, `sello_ausente`, `sello_viejo`, `arrancando`, `error_interno`, `sin_configurar` (revisión final: en producción sin variables R2_*/LITESTREAM_* es un fallo real, no un gris `no_aplica`). La salida de Litestream puede contener el endpoint de R2 y trozos de credenciales.
 - **Umbrales, fijados en el spec:** retraso de la BD `15 min`; edad del sello `5 min`; gracia tras arranque `3 min`; caché `5 min`.
 - **Cuatro estados**, nunca dos: `ok`, `mal`, `desconocido` (no pude comprobarlo → ámbar, **no** avisa) y `no_aplica` (esta instancia no replica → gris).
 - **Sin dependencias nuevas** en `package.json`.

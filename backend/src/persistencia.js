@@ -40,7 +40,7 @@ export function parsearDuracion(txt) {
 // La cabecera se lee por NOMBRE de columna, no por posicion: si una version
 // futura reordena o renombra columnas, el resultado es 'desconocido' (ambar, sin
 // aviso) en vez de una alarma falsa. Ante la duda, callar, no gritar.
-export function interpretarGeneraciones(salida, ahoraMs = Date.now()) {
+export function interpretarGeneraciones(salida) {
   const nada = { estado: 'mal', motivo: 'sin_generaciones', ultimo: null, retraso_seg: null };
   const raro = { estado: 'desconocido', motivo: 'formato_no_reconocido', ultimo: null, retraso_seg: null };
 
@@ -92,7 +92,20 @@ export function interpretarSello(contenido, ahoraMs = Date.now(), arranqueMs = A
   if (!Number.isFinite(t)) return { estado: 'desconocido', motivo: 'formato_no_reconocido', ultimo: null };
 
   const ultimo = new Date(t).toISOString();
-  if ((ahoraMs - t) / 1000 > UMBRAL_SELLO_SEG) {
+  const diff = (ahoraMs - t) / 1000;   // positivo: el sello es viejo. negativo: el sello es futuro.
+
+  // Un sello con fecha futura da diff negativo, que nunca supera el umbral de
+  // "viejo" en la comparacion de abajo: sin este chequeo, un reloj adelantado
+  // (o un sello corrupto) dejaria los uploads en verde para siempre aunque el
+  // bucle de rclone lleve semanas muerto. Callarse justo ahi es el fallo que
+  // este modulo existe para evitar, asi que se trata como formato irreconocible
+  // (ambar), no como salud. No se distingue por periodo de gracia: una fecha
+  // imposible lo es tanto si el proceso acaba de arrancar como si no.
+  if (-diff > UMBRAL_SELLO_SEG) {
+    return { estado: 'desconocido', motivo: 'formato_no_reconocido', ultimo };
+  }
+
+  if (diff > UMBRAL_SELLO_SEG) {
     return enGracia
       ? { estado: 'desconocido', motivo: 'arrancando', ultimo }
       : { estado: 'mal', motivo: 'sello_viejo', ultimo };
@@ -122,22 +135,43 @@ export function esArrancando(valor) {
 }
 
 // Decide el estado de la BD a partir del resultado de pedirGeneraciones().
-// Pura y exportada: solo mira la FORMA de r (si tiene 'motivo' o 'salida'),
-// no ejecuta nada. Se discrimina por la PRESENCIA de motivo (asi resuelve el
-// fallo pedirGeneraciones), no por la verdad de r.salida como cadena: un
-// comando exitoso puede imprimir una salida vacia, y eso interpretarGeneraciones
-// ya sabe leerlo (-> mal/sin_generaciones). Mirar "if (r.salida)" tomaria ese
-// caso legitimo como fallo y devolveria motivo:undefined, fuera del conjunto
-// cerrado de motivos.
-export function decidirBd(r) {
-  return r.motivo === undefined
-    ? interpretarGeneraciones(r.salida)
-    : {
-        // Sin binario no es un fallo del respaldo: es que esta instancia no es
-        // el contenedor (desarrollo local). Lo demas si es "no pude saberlo".
-        estado: r.motivo === 'binario_ausente' ? 'no_aplica' : 'desconocido',
-        motivo: r.motivo, ultimo: null, retraso_seg: null
-      };
+// Pura (para las mismas entradas, incluidos ahoraMs/arranqueMs, siempre da la
+// misma salida) y exportada: solo mira la FORMA de r (si tiene 'motivo' o
+// 'salida'), no ejecuta nada. Se discrimina por la PRESENCIA de motivo (asi
+// resuelve el fallo pedirGeneraciones), no por la verdad de r.salida como
+// cadena: un comando exitoso puede imprimir una salida vacia, y eso
+// interpretarGeneraciones ya sabe leerlo (-> mal/sin_generaciones). Mirar
+// "if (r.salida)" tomaria ese caso legitimo como fallo y devolveria
+// motivo:undefined, fuera del conjunto cerrado de motivos.
+export function decidirBd(r, ahoraMs = Date.now(), arranqueMs = ARRANQUE_MS) {
+  if (r.motivo === undefined) {
+    const g = interpretarGeneraciones(r.salida);
+    // Periodo de gracia, igual que en interpretarSello: en el primer despliegue
+    // contra un bucket vacio, `litestream generations` solo imprime la cabecera
+    // hasta la primera replicacion, y eso es sin_generaciones/mal -> aviso
+    // falso. Ese aviso falso tiene un dano extra: consume la clave del dia (ver
+    // avisarSiMal), asi que un fallo real ese mismo dia ya no notificaria. Vive
+    // aqui y no en interpretarGeneraciones (que se mantiene pura, sin reloj)
+    // porque el dato del arranque (ARRANQUE_MS) es de esta capa, no de la
+    // interpretacion del texto. Solo protege 'sin_generaciones': un
+    // 'retraso_alto' durante la gracia significa que SI hay generaciones y van
+    // atrasadas, eso es real y no se perdona.
+    if (g.motivo === 'sin_generaciones' && (ahoraMs - arranqueMs) / 1000 < GRACIA_ARRANQUE_SEG) {
+      return { estado: 'desconocido', motivo: 'arrancando', ultimo: null, retraso_seg: null };
+    }
+    return g;
+  }
+  return {
+    // Sin binario no es un fallo del respaldo: es que esta instancia no es el
+    // contenedor (desarrollo local). Un comando que FALLA (mal copiada la
+    // clave, bucket mal escrito) si es "mal": hay configuracion, el binario
+    // existe, y aun asi no funciona. Lo unico que de verdad es "no pude
+    // saberlo" es que el comando se cuelgue sin responder (tiempo_agotado).
+    estado: r.motivo === 'binario_ausente' ? 'no_aplica'
+      : r.motivo === 'comando_fallo' ? 'mal'
+      : 'desconocido',
+    motivo: r.motivo, ultimo: null, retraso_seg: null
+  };
 }
 
 // Combina bd y uploads en el 'ok' final. Pura y exportada para poder probarla
@@ -159,7 +193,6 @@ function hayReplica() {
 }
 
 function rutaSello() {
-  if (process.env.RESPALDO_SELLO) return process.env.RESPALDO_SELLO;
   const uploads = process.env.UPLOADS_DIR || '/data/uploads';
   return path.join(path.dirname(uploads), '.respaldo-uploads');
 }
@@ -184,6 +217,17 @@ function pedirGeneraciones() {
 
 async function calcular() {
   if (!hayReplica()) {
+    // Fuera de produccion (portatil de desarrollo), no tener R2 configurado es
+    // lo normal: gris, sin aviso. En produccion (Dockerfile fija NODE_ENV) es
+    // justo el escenario que este modulo existe para delatar: sin esas
+    // variables el contenedor no replica nada, y el proximo reinicio borra los
+    // datos. Eso es 'mal', no un gris silencioso.
+    if (process.env.NODE_ENV === 'production') {
+      const mal = { estado: 'mal', motivo: 'sin_configurar', ultimo: null };
+      const bd = { ...mal, retraso_seg: null };
+      const uploads = { ...mal };
+      return { modo: 'sin-replica', ok: combinarEstado(bd, uploads), bd, uploads };
+    }
     const nada = { estado: 'no_aplica', motivo: null, ultimo: null };
     return { modo: 'sin-replica', ok: null, bd: { ...nada, retraso_seg: null }, uploads: { ...nada } };
   }

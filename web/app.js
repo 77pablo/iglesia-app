@@ -2853,7 +2853,8 @@ const PERS_MOTIVO={sin_generaciones:'nunca se ha replicado nada',retraso_alto:'e
   formato_no_reconocido:'respuesta inesperada de Litestream',comando_fallo:'Litestream devolvió un error',
   tiempo_agotado:'Litestream no respondió a tiempo',binario_ausente:'no hay Litestream en esta máquina',
   sello_ausente:'el respaldo de archivos no ha corrido nunca',sello_viejo:'el respaldo de archivos está detenido',
-  arrancando:'el servicio acaba de arrancar',error_interno:'error al comprobar'};
+  arrancando:'el servicio acaba de arrancar',error_interno:'error al comprobar',
+  sin_configurar:'faltan las variables R2_*/LITESTREAM_* en el entorno'};
 
 function _persFila(etiqueta,b){
   const [ico,varColor,texto]=PERS_PINTA[b.estado]||PERS_PINTA.desconocido;
@@ -2869,8 +2870,9 @@ async function saCargarPersistencia(){
   const c=$('sa-persistencia'); if(!c) return;
   try{
     const e=await api('/superadmin/persistencia');
+    c.className='muted small';
     c.innerHTML=_persFila('Base de datos',e.bd)+_persFila('Archivos subidos',e.uploads);
-  }catch(err){ c.textContent='No se pudo consultar el estado del respaldo.'; }
+  }catch(err){ c.className='error'; c.textContent='No se pudo consultar el estado del respaldo.'; }
   // El super-admin no pasa por el dashboard, que es quien normalmente rellena
   // la campana: aqui se hace explicito, si no su aviso no se veria nunca.
   // GET /api/notificaciones devuelve { items, noLeidas, hayMas, offset }
