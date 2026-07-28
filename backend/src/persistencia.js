@@ -104,8 +104,32 @@ export function interpretarSello(contenido, ahoraMs = Date.now(), arranqueMs = A
 // ============================================================
 
 const CACHE_MS = 5 * 60 * 1000;
+// El resultado 'arrancando' se cachea mucho menos: la gracia dura 3 min, menos
+// que el cache normal de 5. Si la primera consulta cae dentro de la gracia, un
+// cache de 5 min congelaria "arrancando" hasta 2 min despues de que la gracia
+// termine, retrasando la deteccion de un fallo real. 30 s evita ese retraso sin
+// volver a recalcular en cada peticion.
+const CACHE_ARRANCANDO_MS = 30 * 1000;
 let cache = null;
 export function _limpiarCache() { cache = null; }   // solo para pruebas
+
+// Cierto si el resultado todavia esta en el periodo de gracia (bd o uploads con
+// motivo 'arrancando'): ese resultado se cachea con TTL corto (ver arriba).
+function esArrancando(valor) {
+  return valor.bd.motivo === 'arrancando' || valor.uploads.motivo === 'arrancando';
+}
+
+// Combina bd y uploads en el 'ok' final. Pura y exportada para poder probarla
+// sin ejecutar nada. 'mal' manda: si un bloque esta roto, el indicador entero se
+// declara roto sin importar el otro. 'null' es "no se pudo comprobar" (algun
+// bloque 'desconocido' o 'no_aplica' y ninguno 'mal'), y eso NO es lo mismo que
+// estar roto: mezclar ambos bajo 'false' confundiria un fallo real con los 3
+// minutos de gracia tras arrancar.
+export function combinarEstado(bd, uploads) {
+  if (bd.estado === 'mal' || uploads.estado === 'mal') return false;
+  if (bd.estado === 'ok' && uploads.estado === 'ok') return true;
+  return null;
+}
 
 // Las mismas tres variables que mira docker-entrypoint.sh para decidir si
 // arranca con replicacion. Si no estan, esta instancia no replica y punto.
@@ -144,7 +168,13 @@ async function calcular() {
   }
 
   const r = await pedirGeneraciones();
-  const bd = r.salida
+  // Se discrimina por la PRESENCIA de motivo (asi resuelve el fallo
+  // pedirGeneraciones), no por la verdad de r.salida como cadena: un comando
+  // exitoso puede imprimir una salida vacia, y eso interpretarGeneraciones ya
+  // sabe leerlo (-> mal/sin_generaciones). Mirar "if (r.salida)" tomaria ese
+  // caso legitimo como fallo y devolveria motivo:undefined, fuera del conjunto
+  // cerrado de motivos.
+  const bd = r.motivo === undefined
     ? interpretarGeneraciones(r.salida)
     : {
         // Sin binario no es un fallo del respaldo: es que esta instancia no es
@@ -155,18 +185,24 @@ async function calcular() {
 
   let contenido = '';
   try { contenido = fs.readFileSync(rutaSello(), 'utf8'); } catch { contenido = ''; }
-  const uploads = bd.estado === 'no_aplica' && r.motivo === 'binario_ausente'
+  // interpretarGeneraciones nunca devuelve 'no_aplica': ese estado solo llega
+  // por la rama de arriba cuando r.motivo === 'binario_ausente'. Por eso
+  // bd.estado === 'no_aplica' ya implica esa segunda condicion.
+  const uploads = bd.estado === 'no_aplica'
     ? { estado: 'no_aplica', motivo: null, ultimo: null }
     : interpretarSello(contenido);
 
-  const ok = bd.estado === 'ok' && uploads.estado === 'ok';
-  return { modo: 'litestream', ok, bd, uploads };
+  return { modo: 'litestream', ok: combinarEstado(bd, uploads), bd, uploads };
 }
 
-// Estado del respaldo, cacheado 5 minutos: abrir el panel varias veces no debe
-// llamar a R2 varias veces. Nunca lanza: si algo revienta, devuelve 'desconocido'.
+// Estado del respaldo, cacheado 5 minutos (30s si el resultado es 'arrancando',
+// ver CACHE_ARRANCANDO_MS): abrir el panel varias veces no debe llamar a R2
+// varias veces. Nunca lanza: si algo revienta, devuelve 'desconocido'.
+// modo: 'litestream' (hay R2 configurado y se pudo o no leer el estado real) |
+//       'sin-replica' (esta instancia no replica, ver hayReplica) |
+//       'desconocido' (fallo interno inesperado calculando el estado, rama catch).
 export async function estadoPersistencia() {
-  if (cache && Date.now() - cache.ts < CACHE_MS) return cache.valor;
+  if (cache && Date.now() - cache.ts < cache.ttlMs) return cache.valor;
   let valor;
   try {
     valor = await calcular();
@@ -175,6 +211,7 @@ export async function estadoPersistencia() {
     const gris = { estado: 'desconocido', motivo: 'error_interno', ultimo: null };
     valor = { modo: 'desconocido', ok: null, bd: { ...gris, retraso_seg: null }, uploads: { ...gris } };
   }
-  cache = { ts: Date.now(), valor };
+  const ttlMs = esArrancando(valor) ? CACHE_ARRANCANDO_MS : CACHE_MS;
+  cache = { ts: Date.now(), valor, ttlMs };
   return valor;
 }

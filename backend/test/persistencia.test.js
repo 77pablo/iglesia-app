@@ -6,7 +6,7 @@
 // ============================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsearDuracion, interpretarGeneraciones, interpretarSello, estadoPersistencia, _limpiarCache } from '../src/persistencia.js';
+import { parsearDuracion, interpretarGeneraciones, interpretarSello, combinarEstado, estadoPersistencia, _limpiarCache } from '../src/persistencia.js';
 
 // Salida real de `litestream generations` (columnas alineadas con espacios).
 const CABECERA = 'name  generation        lag     start                     end';
@@ -128,6 +128,43 @@ test('sello con contenido ilegible -> desconocido', () => {
   const r = interpretarSello('no soy una fecha', AHORA, ARRANQUE_VIEJO);
   assert.equal(r.estado, 'desconocido');
   assert.equal(r.motivo, 'formato_no_reconocido');
+});
+
+// --- Combinar bd y uploads en el ok final -------------------------------
+// combinarEstado es pura: no ejecuta litestream ni toca disco, asi que se
+// prueban aqui todas las combinaciones sin depender del binario.
+const OK = { estado: 'ok', motivo: null, ultimo: null };
+const MAL = { estado: 'mal', motivo: 'sello_viejo', ultimo: null };
+const DESCONOCIDO = { estado: 'desconocido', motivo: 'arrancando', ultimo: null };
+const NO_APLICA = { estado: 'no_aplica', motivo: null, ultimo: null };
+
+test('combinarEstado: los dos ok -> true', () => {
+  assert.equal(combinarEstado(OK, OK), true);
+});
+
+test('combinarEstado: uno mal y el otro ok -> false', () => {
+  assert.equal(combinarEstado(MAL, OK), false);
+  assert.equal(combinarEstado(OK, MAL), false);
+});
+
+test('combinarEstado: uno desconocido y el otro ok -> null (no se pudo comprobar, no es "mal")', () => {
+  assert.equal(combinarEstado(DESCONOCIDO, OK), null);
+  assert.equal(combinarEstado(OK, DESCONOCIDO), null);
+});
+
+test('combinarEstado: los dos desconocido -> null', () => {
+  assert.equal(combinarEstado(DESCONOCIDO, DESCONOCIDO), null);
+});
+
+test('combinarEstado: mal y desconocido a la vez -> false, el mal manda', () => {
+  assert.equal(combinarEstado(MAL, DESCONOCIDO), false);
+  assert.equal(combinarEstado(DESCONOCIDO, MAL), false);
+});
+
+test('combinarEstado: no_aplica no es ni ok ni mal -> null salvo que haya un mal', () => {
+  assert.equal(combinarEstado(NO_APLICA, NO_APLICA), null);
+  assert.equal(combinarEstado(NO_APLICA, OK), null);
+  assert.equal(combinarEstado(MAL, NO_APLICA), false);
 });
 
 // --- Obtencion del estado real -----------------------------------------
