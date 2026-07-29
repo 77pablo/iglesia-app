@@ -68,6 +68,8 @@ fly deploy
 
 **Sin esto, cada reinicio del servicio borra la base de datos y los archivos subidos.** En el plan free de Render el disco `/data` es efímero: no es un riesgo teórico, pasa en cada redeploy y cada vez que el servicio se duerme y despierta.
 
+> ℹ️ **En este despliegue ya está montado:** el bucket es **`iglesia-app-db`** en Cloudflare R2 y lleva tiempo en uso. Los pasos 1 y 2 de abajo son para un despliegue **nuevo** (u otra iglesia); si solo quieres saber si el respaldo funciona **hoy**, ve directo al **paso 4**.
+
 `docker-entrypoint.sh` mira **tres** variables al arrancar. Si están, restaura la BD desde R2 y arranca replicando en continuo con Litestream, además de sincronizar los archivos subidos con `rclone` cada 30 s. Si falta cualquiera, escribe un aviso en el log y arranca **sin persistencia**.
 
 ### Paso 1 — Crear el bucket en Cloudflare R2
