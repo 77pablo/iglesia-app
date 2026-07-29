@@ -3616,13 +3616,18 @@ const Org = {
       : '';
 
     $('content').innerHTML=`
+      <!-- Cabecera que SOLO sale en papel: la hoja se pega en la puerta de la
+           iglesia y allí nadie sabe de dónde salió ni si es la última versión.
+           En pantalla sobra, porque el nombre de la iglesia ya está en el menú. -->
+      <div class="solo-print">${escHtml(ME.iglesia?ME.iglesia.nombre:'')} · impreso el ${escHtml(new Date().toLocaleDateString('es-CL'))}</div>
       <div class="head-row"><h2>🗒️ ${escHtml(titulo)}</h2>
         <!-- btn-fila, no row: .row reparte a lo ancho sin permitir salto de linea y a
              390px estos cuatro botones desbordaban la pagina (405px de contenido). -->
         <div class="btn-fila no-print" style="width:auto;gap:6px">
           <button class="btn ghost small-btn" onclick="Org.duplicar()">⧉ Duplicar</button>
           <button class="btn ghost small-btn" onclick="Org.copiarParaWhatsapp()">📋 Copiar</button>
-          <button class="btn ghost small-btn" onclick="window.print()">🖨️ Imprimir</button>
+          <button class="btn ghost small-btn" onclick="Org.imprimir()"
+            title="En el diálogo de impresión, elige &quot;Guardar como PDF&quot; en el destino">🖨️ Imprimir / PDF</button>
           <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div></div>
       <div class="card">
         <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''}</div>
@@ -3710,6 +3715,30 @@ const Org = {
         Org.abrir(r.id);
       }catch(e){ toast((e&&e.message)||'No se pudo duplicar'); }
     }, { okLabel:'Sí, duplicar' });
+  },
+  // Imprimir la hoja — y de paso, guardarla como PDF: el diálogo del navegador
+  // ya ofrece "Guardar como PDF" en Chrome, Android y iOS, así que no hace falta
+  // ninguna librería. Lo que sí hacía falta es el nombre del archivo: el
+  // navegador lo saca de document.title, que aquí es la cadena fija "Iglesia
+  // App" (index.html), y así toda hoja guardada salía como "Iglesia App.pdf" —
+  // cinco eventos distintos, cinco archivos homónimos en el teléfono.
+  imprimir(){
+    const h=Org._hoja;
+    if(!h){ window.print(); return; }   // sin hoja cargada no hay nada que nombrar
+    const titulo=(h.evento&&h.evento.titulo)||h.titulo||'Lista';
+    const fecha=(h.evento&&h.evento.fecha)||h.fecha;
+    const previo=document.title;
+    document.title=titulo+(fecha?' — '+fechaTxt(fecha):'');
+    // Restaurar en 'afterprint' y NO justo después de print(): en el escritorio
+    // print() bloquea hasta que se cierra el diálogo, pero en móvil vuelve
+    // enseguida y el título se restauraría antes de que el navegador lo lea.
+    // El temporizador es solo la red de seguridad para el navegador que no
+    // dispare el evento (o que el usuario deje el diálogo abierto y se olvide):
+    // restaurar dos veces no hace daño, deja el título mal para siempre sí.
+    const restaurar=()=>{ document.title=previo; };
+    window.addEventListener('afterprint',restaurar,{once:true});
+    setTimeout(restaurar,60000);
+    window.print();
   },
   // Texto plano para pegar en el grupo de WhatsApp, que es por donde la iglesia
   // realmente comparte esto. SIN gastos a propósito: se pega en un grupo donde

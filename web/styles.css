@@ -645,6 +645,15 @@ body{transition:background-color .3s ease,color .3s ease;}
   /* Hoja de organización impresa: se pega en la puerta de la iglesia, así que
      va SIN gastos (la card los lleva marcados .no-print) y sin los botones de
      asignar. Las casillas quedan grandes para marcar a mano lo que ya llegó. */
+  /* Identifica el papel pegado en la puerta: de que iglesia es y de cuando.
+     Sin esto, dos hojas de semanas distintas son indistinguibles en el corcho.
+     El !important no es adorno: la regla que lo oculta en pantalla vive MAS
+     ABAJO en este archivo (busca .solo-print) y tiene la misma especificidad,
+     asi que sin esto ganaria ella y la cabecera no saldria nunca. .org-firma se
+     libra del problema solo porque alli el selector de impresion lleva dos
+     clases. Mismo recurso que usa .no-print cuatro lineas mas arriba. */
+  .solo-print{display:block !important;font-size:0.85rem;color:#444;border-bottom:1px solid #ccc;
+    padding-bottom:4px;margin-bottom:10px;}
   .org-row{padding:10px 0;border-bottom:1px solid #ddd;}
   /* Se oculta el ✕ y el botón "Asignar", pero NUNCA el nombre: una hoja impresa
      sin nombres no sirve para repartir nada. Lo que falta por asignar deja una
@@ -676,4 +685,5 @@ body{transition:background-color .3s ease,color .3s ease;}
 /* Quién trae cada cosa: a la derecha en escritorio, en su propia línea en móvil. */
 .org-quien{font-size:0.8125rem;flex-shrink:0;max-width:45%;text-align:right;}
 .org-firma{display:none;}   /* solo aparece en la hoja impresa */
+.solo-print{display:none;}  /* al reves que .no-print: en pantalla no, en papel si */
 @media(max-width:520px){ .org-row{flex-wrap:wrap;} .org-quien{max-width:100%;text-align:left;} }
