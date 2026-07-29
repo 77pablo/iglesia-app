@@ -55,6 +55,22 @@ async function api(path, opts={}){
   if(!r.ok) throw new Error(data.error||'Error');
   return data;
 }
+// Pone el https:// que el backend exige a un enlace pegado como lo copia la
+// gente desde el navegador del teléfono ("www.youtube.com/watch?v=…").
+// Dos cosas que NO hace, a propósito:
+//  - Si ya trae esquema —incluido javascript:— lo deja tal cual y que decida el
+//    backend. Anteponerle https:// convertiría un javascript: en una URL válida
+//    y absurda, y de paso taparía el intento en vez de rechazarlo.
+//  - Si no parece un enlace (sin punto, o con espacios) tampoco lo toca: así
+//    "hola" no se convierte en "https://hola", que el backend aceptaría como
+//    host válido. Mejor que llegue tal cual y el usuario vea el error claro.
+function normalizarEnlace(v){
+  const s=String(v||'').trim();
+  if(!s) return '';
+  if(/^[a-zA-Z][a-zA-Z0-9+.\-]*:/.test(s)) return s;
+  if(/\s/.test(s) || !s.includes('.')) return s;
+  return 'https://'+s;
+}
 // Sube un archivo y devuelve su URL
 async function uploadArchivo(file){
   const fd=new FormData(); fd.append('archivo',file);
@@ -2106,7 +2122,7 @@ function renderMiGrupo(){
 }
 // --- Carpeta de Google Drive del grupo ---
 async function guardarDriveGrupo(){
-  const url=$('mg-drive').value.trim();
+  const url=normalizarEnlace($('mg-drive').value);
   try{ await api('/grupo/'+_grupoSel+'/drive',{method:'POST',body:JSON.stringify({url})}); toast('📁 Carpeta de Drive vinculada'); vistaMiGrupo(); }
   catch(e){ toast(e.message); }
 }
@@ -2158,7 +2174,7 @@ async function guardarRecursoGrupo(){
   try{
     let url;
     if(tipo==='archivo'){ const f=$('rg-file').files[0]; if(!f) return toast('Elige un archivo'); toast('Subiendo…'); url=await uploadArchivo(f); }
-    else { url=$('rg-url').value.trim(); if(!url) return toast('Pega el link'); }
+    else { url=normalizarEnlace($('rg-url').value); if(!url) return toast('Pega el link'); }
     await api('/grupo/'+_grupoSel+'/recursos',{method:'POST',body:JSON.stringify({tipo,titulo,url})});
     $('mg-rec-form').innerHTML=''; cargarRecursosGrupo(); toast('🔗 Recurso compartido');
   }catch(e){ toast(e.message); }
@@ -2302,7 +2318,9 @@ async function guardarRecPredica(){
   try{
     let url='';
     if(tipo==='archivo'){ const f=$('prr-file').files[0]; if(!f) return toast('Elige un archivo'); toast('Subiendo…'); url=await uploadArchivo(f); }
-    else { url=$('prr-url').value.trim(); }
+    // Solo 'link' es una URL. 'libro' es una referencia de texto libre
+    // ("Comentario de Juan (Hendriksen)") y ponerle https:// la destrozaría.
+    else { const v=$('prr-url').value; url = tipo==='link' ? normalizarEnlace(v) : v.trim(); }
     await api('/predica/'+window._predActual+'/recurso',{method:'POST',body:JSON.stringify({tipo,titulo,url})});
     toast('Recurso agregado'); verPredica(window._predActual);
   }catch(e){ toast(e.message); }
