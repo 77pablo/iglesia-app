@@ -13,6 +13,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import db from './db.js';
+import { fechaLocal } from './fechas.js';
 
 // Umbrales del spec (docs/superpowers/specs/2026-07-28-indicador-persistencia-design.md).
 export const UMBRAL_RETRASO_SEG = 15 * 60;   // el retraso normal se mide en segundos
@@ -125,7 +126,13 @@ const CACHE_MS = 5 * 60 * 1000;
 // volver a recalcular en cada peticion.
 const CACHE_ARRANCANDO_MS = 30 * 1000;
 let cache = null;
-export function _limpiarCache() { cache = null; }   // solo para pruebas
+// Comprobacion EN CURSO. La cache guarda el resultado, pero mientras se calcula
+// no hay resultado que guardar: con la cache fria, /api/me (via
+// vigilarPersistenciaThrottled) y el panel del super-admin entran casi a la vez
+// y ambos lanzaban `litestream generations`. Aqui el segundo se engancha al
+// vuelo del primero en vez de abrir el suyo.
+let vuelo = null;
+export function _limpiarCache() { cache = null; vuelo = null; }   // solo para pruebas
 
 // Cierto si el resultado todavia esta en el periodo de gracia (bd o uploads con
 // motivo 'arrancando'): ese resultado se cachea con TTL corto (ver arriba).
@@ -257,6 +264,19 @@ async function calcular() {
 //       'desconocido' (fallo interno inesperado calculando el estado, rama catch).
 export async function estadoPersistencia() {
   if (cache && Date.now() - cache.ts < cache.ttlMs) return cache.valor;
+  if (vuelo) return vuelo;   // ya hay una comprobacion en marcha: esperar esa
+  // El .finally suelta el vuelo pase lo que pase. Sin el, un fallo inesperado
+  // dejaria la promesa pegada y TODAS las consultas futuras recibirian ese
+  // mismo fallo para siempre. La comparacion `vuelo === p` evita que un vuelo
+  // ya soltado por _limpiarCache anule al que arranco despues de el.
+  const p = calcularYGuardar().finally(() => { if (vuelo === p) vuelo = null; });
+  vuelo = p;
+  return p;
+}
+
+// Calcula el estado y lo deja en la cache. Nunca lanza: si algo revienta, el
+// veredicto es 'desconocido' (no pude comprobarlo), que no es lo mismo que mal.
+async function calcularYGuardar() {
   let valor;
   try {
     valor = await calcular();
@@ -278,7 +298,13 @@ export async function estadoPersistencia() {
 // es "no pude comprobarlo" y avisar por un corte de red de tres segundos es el
 // ruido que hace que las alarmas se aprendan a ignorar.
 // Devuelve cuantas notificaciones creo (0 si ya se aviso hoy).
-export function avisarSiMal(estado, hoy = new Date().toISOString().slice(0, 10)) {
+//
+// "Hoy" es el dia del calendario LOCAL (fechaLocal), no el de UTC. Con
+// toISOString() el dia cambiaba a las 20:00 de Chile, asi que un corte que
+// empieza a las 19:00 y sigue a las 21:00 gastaba DOS claves en la misma noche
+// -> dos avisos por lo mismo. Ese aviso no lo lee un servidor: lo lee una
+// persona, en su dia.
+export function avisarSiMal(estado, hoy = fechaLocal()) {
   if (!estado) return 0;
   if (estado.bd.estado !== 'mal' && estado.uploads.estado !== 'mal') return 0;
 

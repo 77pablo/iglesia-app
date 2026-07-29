@@ -43,6 +43,11 @@ test('el super-admin lo ve, con los dos bloques', async () => {
   assert.ok(['litestream', 'sin-replica', 'desconocido'].includes(b.modo));
   assert.ok(['ok', 'mal', 'desconocido', 'no_aplica'].includes(b.bd.estado));
   assert.ok(['ok', 'mal', 'desconocido', 'no_aplica'].includes(b.uploads.estado));
+  // La tarjeta pinta el retraso en numeros (con 'retraso_alto', 16 minutos y 6
+  // horas son decisiones distintas), asi que el campo tiene que llegar SIEMPRE,
+  // aunque valga null: si desaparece del contrato, el frontend se queda mudo
+  // justo en el caso que mas importa.
+  assert.ok('retraso_seg' in b.bd, 'bd debe traer retraso_seg (null si no se sabe)');
 });
 
 test('la respuesta no filtra credenciales ni rutas del servidor', async () => {

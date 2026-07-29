@@ -12,7 +12,7 @@ import db from './db.js';
 import { authMiddleware, hashPassword, auditar, generarPasswordTemporal } from './auth.js';
 import { validar } from './seguridad.js';
 import { eliminarIglesiaCompleta } from './eliminarIglesia.js';
-import { estadoPersistencia } from './persistencia.js';
+import { estadoPersistencia, avisarSiMal } from './persistencia.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -195,7 +195,15 @@ r.delete('/iglesias/:id', (req, res) => {
 // --- Estado del respaldo externo (Litestream + rclone) ---
 // El gate de super_admin ya lo aplica el r.use() de arriba.
 r.get('/persistencia', async (req, res) => {
-  res.json(await estadoPersistencia());   // estadoPersistencia() nunca lanza
+  const estado = await estadoPersistencia();   // estadoPersistencia() nunca lanza
+  // El aviso se crea AQUI, antes de responder, y no solo en el disparo de
+  // /api/me: el panel pide primero este estado y despues /notificaciones para
+  // rellenar la campana. Si el aviso lo creara unicamente aquella comprobacion
+  // lanzada y olvidada, en la carga que DESCUBRE el fallo podia llegar tarde y
+  // la campana se quedaba en 0 con la tarjeta ya en rojo. Es idempotente: la
+  // clave diaria de avisarSiMal impide que refrescar el panel duplique nada.
+  try { avisarSiMal(estado); } catch (e) { console.error('[persistencia]', e.message); }
+  res.json(estado);
 });
 
 export default r;

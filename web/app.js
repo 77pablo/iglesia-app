@@ -98,6 +98,30 @@ function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?
 function chipFecha(f){ const x=parseFecha(f); if(!x) return `<div class="mini-date"><b>—</b><span></span></div>`; return `<div class="mini-date"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
 function fechaChip(f){ const x=parseFecha(f); if(!x) return `<div class="fecha-chip"><b>—</b><span></span></div>`; return `<div class="fecha-chip"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
 function fechaTxt(f){ const x=parseFecha(f); if(!x) return String(f||'—'); return x.d+' '+(MESES[(+x.m)-1]||''); }
+// Duración legible a partir de SEGUNDOS: "45 s", "16 min", "6 h 5 min", "3 d 2 h".
+// Dos unidades y no una a propósito: para decidir si hay que actuar, 16 minutos
+// y 6 horas de retraso son situaciones muy distintas, y redondear a una sola
+// unidad las acerca ("1 h" tanto para 61 minutos como para 119).
+function duracionTxt(seg){
+  const s=Math.max(0,Math.floor(Number(seg)||0));
+  if(s<60) return s+' s';
+  if(s<3600) return Math.floor(s/60)+' min';
+  if(s<86400){ const h=Math.floor(s/3600), m=Math.floor((s%3600)/60); return m?`${h} h ${m} min`:`${h} h`; }
+  const d=Math.floor(s/86400), h=Math.floor((s%86400)/3600); return h?`${d} d ${h} h`:`${d} d`;
+}
+// "hace 4 h" a partir de una fecha ISO. Un "28-07-2026 11:04" obliga a restar
+// mentalmente para saber si eso es reciente; "hace 4 h" se entiende de un
+// vistazo. Devuelve '' si la fecha no se entiende, para poder omitir el dato.
+function haceTxt(iso){
+  const t=Date.parse(iso);
+  if(!Number.isFinite(t)) return '';
+  const seg=(Date.now()-t)/1000;
+  // Una fecha en el futuro (reloj desajustado o dato corrupto) no puede leerse
+  // "hace -3 min", que parecería un error de la app en vez de del dato.
+  if(seg<0) return 'con fecha futura';
+  if(seg<45) return 'hace un momento';
+  return 'hace '+duracionTxt(seg);
+}
 // "Mi Grupo" muestra el nombre real del grupo (ej. "Jóvenes"); "Mis Grupos" si son varios.
 function etiquetaMiGrupo(){
   const gs=[...new Set(((ME&&ME.roles&&ME.roles.pertenencias)||[]).map(p=>p.grupo))];
@@ -2877,10 +2901,21 @@ const PERS_MOTIVO={sin_generaciones:'nunca se ha replicado nada',retraso_alto:'e
 function _persFila(etiqueta,b){
   const [ico,varColor,texto]=PERS_PINTA[b.estado]||PERS_PINTA.desconocido;
   const motivo=b.motivo?` · ${escHtml(PERS_MOTIVO[b.motivo]||b.motivo)}`:'';
-  const cuando=b.ultimo?` · último: ${escHtml(new Date(b.ultimo).toLocaleString('es-CL'))}`:'';
+  // Tiempo relativo, con la fecha exacta a un paso (el title, al pasar el
+  // cursor): lo que se necesita saber de un respaldo es cuánto hace, no a qué
+  // hora fue.
+  const hace=haceTxt(b.ultimo);
+  const cuando=hace
+    ? ` · último: <span title="${escHtml(new Date(b.ultimo).toLocaleString('es-CL'))}">${escHtml(hace)}</span>`
+    : '';
+  // El retraso en números. El backend ya lo calculaba pero no se pintaba: con
+  // el motivo 'retraso_alto' la tarjeta no distinguía 16 minutos de 6 horas, y
+  // en verde explica por qué un "último" viejo puede ser sano (nadie escribió,
+  // así que no hay nada pendiente de replicar).
+  const retraso=Number.isFinite(b.retraso_seg)?` · retraso: ${escHtml(duracionTxt(b.retraso_seg))}`:'';
   return `<div class="row" style="justify-content:space-between;gap:10px;margin:6px 0">
     <span>${escHtml(etiqueta)}</span>
-    <span style="color:var(${varColor});text-align:right">${ico} ${escHtml(texto)}<span class="muted small">${motivo}${cuando}</span></span>
+    <span style="color:var(${varColor});text-align:right">${ico} ${escHtml(texto)}<span class="muted small">${motivo}${cuando}${retraso}</span></span>
   </div>`;
 }
 
@@ -2893,6 +2928,11 @@ async function saCargarPersistencia(){
   }catch(err){ c.className='error'; c.textContent='No se pudo consultar el estado del respaldo.'; }
   // El super-admin no pasa por el dashboard, que es quien normalmente rellena
   // la campana: aqui se hace explicito, si no su aviso no se veria nunca.
+  // El orden importa y es el que esta: GET /superadmin/persistencia crea el
+  // aviso ANTES de responder (superadmin.js), asi que cuando se llega a esta
+  // linea el aviso de esta misma carga ya esta en la BD. Antes lo creaba solo
+  // la comprobacion lanzada y olvidada desde /api/me, que podia terminar
+  // despues de esta peticion: la tarjeta salia roja y la campana en 0.
   // GET /api/notificaciones devuelve { items, noLeidas, hayMas, offset }
   // (notificaciones.js:79-92) y setCampana(n) espera el numero (app.js:309).
   try{ const n=await api('/notificaciones'); setCampana(n.noLeidas); }catch{}

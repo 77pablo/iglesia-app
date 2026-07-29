@@ -420,3 +420,45 @@ test('con variables de R2 pero sin el binario, la BD es no_aplica y no revienta'
     _limpiarCache();
   }
 });
+
+// --- Una sola comprobacion en vuelo (single-flight) ---------------------
+// La cache guarda el RESULTADO, pero mientras se calcula no hay nada guardado:
+// con la cache fria, /api/me (vigilarPersistenciaThrottled) y el panel del
+// super-admin entran casi a la vez y ambos lanzaban el binario. Se comprueba por
+// IDENTIDAD del objeto devuelto: si de verdad hubo una sola comprobacion, los
+// dos que esperaban reciben el MISMO objeto; si hubo dos, cada calcular() fabrica
+// el suyo.
+function conR2(fn) {
+  return async () => {
+    const previas = { b: process.env.R2_BUCKET, k: process.env.LITESTREAM_ACCESS_KEY_ID, e: process.env.R2_ENDPOINT };
+    process.env.R2_BUCKET = 'bucket-de-prueba';
+    process.env.LITESTREAM_ACCESS_KEY_ID = 'clave-de-prueba';
+    process.env.R2_ENDPOINT = 'https://ejemplo.invalido';
+    _limpiarCache();
+    try { await fn(); } finally {
+      if (previas.b) process.env.R2_BUCKET = previas.b; else delete process.env.R2_BUCKET;
+      if (previas.k) process.env.LITESTREAM_ACCESS_KEY_ID = previas.k; else delete process.env.LITESTREAM_ACCESS_KEY_ID;
+      if (previas.e) process.env.R2_ENDPOINT = previas.e; else delete process.env.R2_ENDPOINT;
+      _limpiarCache();
+    }
+  };
+}
+
+test('con la cache fria, dos consultas a la vez comparten UNA sola comprobacion', conR2(async () => {
+  const [a, b] = await Promise.all([estadoPersistencia(), estadoPersistencia()]);
+  assert.equal(a, b, 'las dos deben recibir el mismo objeto: solo se ejecuto litestream una vez');
+}));
+
+test('tras el vuelo, la cache sigue sirviendo el mismo resultado', conR2(async () => {
+  const a = await estadoPersistencia();
+  const b = await estadoPersistencia();
+  assert.equal(a, b, 'la segunda consulta debe salir de la cache, no de un vuelo pegado');
+}));
+
+test('un vuelo no se queda pegado: _limpiarCache lo suelta y la siguiente consulta recalcula', conR2(async () => {
+  const enVuelo = estadoPersistencia();   // arranca el vuelo, no se espera todavia
+  _limpiarCache();                        // debe soltar cache Y vuelo
+  const nueva = estadoPersistencia();     // no puede engancharse al vuelo soltado
+  const [a, b] = await Promise.all([enVuelo, nueva]);
+  assert.notEqual(a, b, 'tras _limpiarCache la siguiente consulta arranca una comprobacion nueva');
+}));

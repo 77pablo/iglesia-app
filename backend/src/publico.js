@@ -16,6 +16,7 @@ import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, auditar } from './auth.js';
 import { limiterSensible, validar } from './seguridad.js';
+import { fechaLocal } from './fechas.js';
 
 const r = Router();
 
@@ -67,16 +68,11 @@ r.patch('/info', authMiddleware, validar(infoSchema), (req, res) => {
   res.json({ ok: true });
 });
 
-// Fecha del calendario LOCAL en formato YYYY-MM-DD.
-// NO vale toISOString(), que da la fecha en UTC: Chile va cuatro horas por
-// detras, asi que a las 20:00 hora local ya es el dia siguiente en UTC y los
-// eventos de HOY desaparecian del portal cuatro horas antes de tiempo -- justo
-// cuando alguien mira el sitio para saber si esta noche hay culto. Las fechas
-// de `evento.fecha` son dias del calendario de la gente, no instantes UTC, y
-// asi es como las cuenta tambien recordatorios.js (diasHasta).
-export function fechaLocal(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// La fecha local vive ahora en ./fechas.js, porque la comparte con
+// persistencia.js (la clave diaria del aviso del respaldo). Se re-exporta desde
+// aqui porque este era su sitio original y hay tests que la piden por esta
+// puerta; el import esta arriba, con el resto.
+export { fechaLocal };
 
 // ============================================================
 //  PUBLICO (sin login): datos de una iglesia por su codigo_unico.
