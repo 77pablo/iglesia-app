@@ -200,8 +200,14 @@ test('recordatorio: avisa el dia antes a quien trae algo, y una sola vez', async
   const { cosaId, auth } = await hojaConCosa(b, S);
   const { generarRecordatorios } = await import('../src/recordatorios.js');
 
-  // La hoja es para mañana.
-  const manana = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
+  // La hoja es para mañana, en hora LOCAL. No sirve toISOString() aquí: da la
+  // fecha en UTC, y recordatorios.js cuenta los días contra la medianoche local
+  // (diasHasta: `hoy.setHours(0,0,0,0)` y `new Date(fecha + 'T00:00:00')`).
+  // En Chile (UTC-4) las dos fechas dejan de coincidir a partir de las 20:00:
+  // el "mañana" en UTC pasa a estar a DOS días de la medianoche local, el
+  // recordatorio no se genera y este test fallaba cuatro horas cada día.
+  const m = new Date(Date.now() + 24 * 3600 * 1000);
+  const manana = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}-${String(m.getDate()).padStart(2, '0')}`;
   await fetch(b + '/api/organizacion/cosas/' + cosaId, { method: 'PATCH', headers: auth, body: JSON.stringify({ responsable_id: S.feligresId }) });
   db.prepare('UPDATE evento_org SET fecha = ? WHERE id = (SELECT org_id FROM evento_org_cosa WHERE id = ?)').run(manana, cosaId);
 
