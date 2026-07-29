@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 28 de julio de 2026 (Organización v2 completa + auditoría UX medible)*
+*Última actualización: 28 de julio de 2026, noche (indicador de persistencia — el respaldo ya no falla en silencio)*
 
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
 
@@ -59,6 +59,26 @@ Los hallazgos **B1–B7** de aquella auditoría (obispo con permisos de admin, f
 - **Chat interno** (`feat/mensajeria-chat`): ver **Fase 6** abajo.
 
 ---
+
+## 🆕 FASE 11 (28 jul 2026): Indicador de persistencia — el respaldo deja de fallar en silencio — DESPLEGADO
+
+Hasta hoy, que la BD se estuviera respaldando o no vivía en **una línea del log de arranque del contenedor**, que nadie lee. El fallo más caro del proyecto era también el más silencioso: si faltaba una variable o una clave estaba mal copiada, todo se veía normal —la gente se registraba, subía comprobantes, escribía en el chat— hasta que un reinicio se lo llevaba. Spec en `docs/superpowers/specs/2026-07-28-indicador-persistencia-design.md`, plan en `docs/superpowers/plans/2026-07-28-indicador-persistencia.md`.
+
+**Cómo leer la tarjeta 💾 Respaldo** (primera cosa del panel del super-admin). Son **cuatro** estados, no dos, y la diferencia importa:
+
+| Color | Qué significa | Qué hacer |
+|---|---|---|
+| ✅ **Verde** | Está respaldando, con la fecha del último respaldo | Nada |
+| ⛔ **Rojo** | **No** está respaldando. Un reinicio borra los datos | Revisar las variables `R2_*`/`LITESTREAM_*` en Render |
+| ⚠️ **Ámbar** | No se pudo comprobar (se colgó el comando, formato inesperado) | Mirar otra vez más tarde; **no** es una alarma |
+| — **Gris** | Esta instancia no replica (normal en tu máquina) | Nada |
+
+- **Se comprueba el respaldo REAL, no las variables.** A Litestream **se le pregunta** (`litestream generations` da el retraso verdadero), porque es un proceso vivo con estado: eso detecta la clave mal copiada y el bucket mal escrito. Al bucle de `rclone` de los uploads **no se le puede preguntar** —es un `while` de shell que, si muere, muere en silencio— así que deja un **sello** en disco tras cada sincronización correcta, y el sello envejeciendo es lo único que lo delata.
+- **La salud de la BD se mide por el *retraso*, no por la fecha del último respaldo:** si nadie escribe en tres horas esa fecha envejece aunque todo esté bien, y medirlo así daría una alarma falsa cada noche.
+- **En producción, sin variables = rojo.** Fuera de producción es gris. Sin esa distinción el indicador se callaba justo en el escenario que lo justificaba, que además es el estado real de Render hoy.
+- **Aviso activo** al super-admin cuando pasa a rojo, **una vez al día** (tabla `aviso_sistema`; no sirve `recordatorio_enviado` porque su `iglesia_id` es `NOT NULL` y el super-admin no tiene iglesia). La dedupe es por día porque el registro de "ya avisé" vive en la misma BD cuya pérdida intenta prevenir.
+- **Nunca grita por nada:** hay periodo de gracia de 3 min tras arrancar (al despertar del plan free el disco viene vacío), "no pude comprobarlo" nunca avisa, y un formato de salida inesperado degrada a ámbar en vez de a alarma.
+- Backend nuevo `persistencia.js`, endpoint `GET /api/superadmin/persistencia`, vigilancia colgada de `/api/me` (no hay cron en el plan free: cualquier tráfico sirve de disparo), una línea en `docker-entrypoint.sh` para el sello. **43 tests nuevos.**
 
 ## 🆕 FASE 8 (28 jul 2026): Organización de eventos — DESPLEGADO
 
@@ -319,7 +339,7 @@ node src/server.js
 
 ### Calidad
 - Diseño profesional (sidebar, dashboard, toasts, modales, iconos SVG)
-- **177 tests** en verde (`cd backend && node --test`), incluidos los de aislamiento multi-iglesia, permisos por rol y límite de peticiones.
+- **304 tests** en verde (`cd backend && node --test`), incluidos los de aislamiento multi-iglesia, permisos por rol, límite de peticiones, validación de subidas y estado del respaldo.
 - Accesibilidad medida, no supuesta: contraste AA y área táctil verificados con `scripts/auditoria-ux.py` (ver Fase 9).
 - 8 bugs del QA corregidos (validaciones, aislamiento entre iglesias, JWT, multer, rate-limit, CORS, manejo de errores global)
 
@@ -380,7 +400,7 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 28 jul 2026, todo desplegado y 248 tests en verde)
+### 👉 POR DÓNDE RETOMAR (al 28 jul 2026 · noche, todo desplegado y **304 tests en verde**)
 
 1. **Lo urgente no es código, es configuración en Render.** Confirmar las 4 variables `R2_*`/`LITESTREAM_*`: sin ellas la BD se borra en cada reinicio, y ya hay datos que duelen perder. Después `SMTP_USER`/`SMTP_PASS` (sin ellas nadie recupera su contraseña por correo) y `SUPERADMIN_PASSWORD`.
 2. ✅ ~~**Test intermitente sin resolver**~~ — **acoplamiento roto el 28 jul, pero el fallo original nunca se reprodujo** (0 de 15 corridas aisladas antes de tocar nada, y 20 réplicas instrumentadas en paralelo con trazas idénticas). Se encontraron dos fragilidades reales: (a) el comentario del test decía "ya se hicieron 2 peticiones de login" cuando son **3** —el limitador corre antes que zod, así que el test del body inválido también cuenta—, dejando una holgura de exactamente una petición; y (b) `BASE` usaba `localhost`, que resuelve a `::1` **y** a `127.0.0.1`, y con `autoSelectFamily` cada conexión compite entre ambas familias: **dos cubos distintos del mismo limitador** (medido: `127.0.0.1` → 401 con `remaining=4` mientras `[::1]` → 429 con `remaining=0`). Ahora el test lee `RateLimit-Limit` del servidor y pide en bucle hasta el 429, y usa la IP literal. ⚠️ **Si vuelve a fallar, la causa es una tercera que no se vio.**
@@ -394,3 +414,10 @@ app/
 - ✅ ~~**`POST /api/upload` sigue sin validar**~~ y ✅ ~~**`adjunto_url` acepta hosts externos**~~ — ambos **cerrados el 28 jul** (ver punto 3 de "por dónde retomar").
 - ✅ ~~**Guardar acordes de una canción da 400**~~ — **cerrado el 28 jul**. `guardarLetraCancion` reenvía la canción entera desde su copia en memoria, y `enlace`/`autor` viajaban como `null`; `z.string().optional()` acepta ausente o cadena, pero no nulo. El arreglo fue en el esquema y no en el frontend, porque el handler ya estaba escrito para esto (`autor ?? c.autor` = "si no viene, deja lo que había"): quien contradecía esa intención era el esquema. Revisados los otros 7 handlers con el mismo `??`: el bug era único — todos los demás `PATCH` arman su body desde los campos del formulario, que siempre dan cadena.
 - **Enlaces sin esquema se rechazan**: pegar `www.youtube.com/x` en un recurso o en el enlace de una canción da 400, hay que escribir `https://`. Es el mismo comportamiento que `grupo.drive_url` tenía desde antes, así que al menos es coherente; si molesta en la práctica, lo natural es que `web/app.js` anteponga `https://` al pegar.
+
+### 🆕 Salió el 28 jul por la noche (Fase 11) — abierto
+
+- 🐞 **La página pública oculta los eventos de HOY a partir de las 20:00 (hora de Chile).** `publico.js` filtra con `fecha >= hoy` calculando `hoy` con `toISOString()`, que da la fecha en **UTC**; a las 20:00 en Chile (UTC-4) ya es el día siguiente en UTC, así que los eventos de hoy dejan de aparecer cuatro horas antes de tiempo. Su test usa el mismo criterio, por eso no falla: están consistentemente equivocados. **Es el mismo defecto que se arregló esa noche en `organizacion-responsable.test.js`, pero este está en código de producción y lo ve la congregación.** Arreglo: calcular `hoy` con la fecha local, como ya hace `recordatorios.js` (`diasHasta`).
+- **Menores del indicador, diferidos a propósito** por la revisión final de la rama (ninguno bloquea): la tarjeta muestra la fecha absoluta del último respaldo en vez de "hace 4 h"; `retraso_seg` se calcula pero no se pinta (con `retraso_alto` no se distingue 16 min de 6 h); la clave del aviso diario usa UTC (un corte nocturno puede dar dos avisos en un mismo día local); con caché fría, `/api/me` y el panel pueden lanzar `litestream generations` dos veces casi a la vez; y en la carga que **detecta** el fallo, el número de la campana puede quedar en 0 hasta el siguiente refresco (la tarjeta roja sí lleva la señal).
+- ⚠️ **Falta la verificación que ningún test puede hacer**, porque depende del contenedor real: que en Render la tarjeta se comporte como se diseñó. Si sale **ámbar** con "respuesta inesperada de Litestream", esa versión del binario imprime las columnas con otros nombres y hay que ajustar `interpretarGeneraciones` (se ve con `litestream generations -config /etc/litestream.yml $DB_PATH` desde la shell del contenedor). El diseño previó ese caso: degrada a ámbar **sin** alarma falsa.
+- **Rama `chore/limpieza-profunda` (23 jul):** completamente fusionada en `main`, cero commits propios. Es un resto, se puede borrar.
