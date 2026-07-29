@@ -32,16 +32,18 @@ beforeEach(() => {
 const H = (p, iglesiaId) => ({ 'Content-Type': 'application/json',
   Authorization: 'Bearer ' + signToken({ id: p.id, iglesia_id: iglesiaId }) });
 
-function manana(dias = 1) {
+// Fechas del calendario LOCAL, igual que las cuenta el portal (publico.js,
+// fechaLocal). Con toISOString() estas ayudantes daban la fecha en UTC: a
+// partir de las 20:00 en Chile, el "ayer" que devolvian era en realidad HOY,
+// el evento "pasado" dejaba de serlo y el test fallaba. Test y codigo estaban
+// equivocados de la misma forma, asi que la suite pasaba con el bug dentro.
+function diaLocal(dias) {
   const d = new Date();
   d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-function ayer() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
+function manana(dias = 1) { return diaLocal(dias); }
+function ayer() { return diaLocal(-1); }
 
 test('GET /api/publico/:codigo: iglesia no encontrada -> 404', async () => {
   const res = await fetch(base + '/api/publico/NOEXISTE');

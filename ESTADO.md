@@ -339,7 +339,7 @@ node src/server.js
 
 ### Calidad
 - Diseño profesional (sidebar, dashboard, toasts, modales, iconos SVG)
-- **304 tests** en verde (`cd backend && node --test`), incluidos los de aislamiento multi-iglesia, permisos por rol, límite de peticiones, validación de subidas y estado del respaldo.
+- **307 tests** en verde (`cd backend && node --test`), incluidos los de aislamiento multi-iglesia, permisos por rol, límite de peticiones, validación de subidas y estado del respaldo.
 - Accesibilidad medida, no supuesta: contraste AA y área táctil verificados con `scripts/auditoria-ux.py` (ver Fase 9).
 - 8 bugs del QA corregidos (validaciones, aislamiento entre iglesias, JWT, multer, rate-limit, CORS, manejo de errores global)
 
@@ -400,7 +400,7 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 28 jul 2026 · noche, todo desplegado y **304 tests en verde**)
+### 👉 POR DÓNDE RETOMAR (al 28 jul 2026 · noche, todo desplegado y **307 tests en verde**)
 
 1. **Lo urgente no es código, es configuración en Render.** Confirmar las 4 variables `R2_*`/`LITESTREAM_*`: sin ellas la BD se borra en cada reinicio, y ya hay datos que duelen perder. Después `SMTP_USER`/`SMTP_PASS` (sin ellas nadie recupera su contraseña por correo) y `SUPERADMIN_PASSWORD`.
 2. ✅ ~~**Test intermitente sin resolver**~~ — **acoplamiento roto el 28 jul, pero el fallo original nunca se reprodujo** (0 de 15 corridas aisladas antes de tocar nada, y 20 réplicas instrumentadas en paralelo con trazas idénticas). Se encontraron dos fragilidades reales: (a) el comentario del test decía "ya se hicieron 2 peticiones de login" cuando son **3** —el limitador corre antes que zod, así que el test del body inválido también cuenta—, dejando una holgura de exactamente una petición; y (b) `BASE` usaba `localhost`, que resuelve a `::1` **y** a `127.0.0.1`, y con `autoSelectFamily` cada conexión compite entre ambas familias: **dos cubos distintos del mismo limitador** (medido: `127.0.0.1` → 401 con `remaining=4` mientras `[::1]` → 429 con `remaining=0`). Ahora el test lee `RateLimit-Limit` del servidor y pide en bucle hasta el 429, y usa la IP literal. ⚠️ **Si vuelve a fallar, la causa es una tercera que no se vio.**
@@ -417,7 +417,7 @@ app/
 
 ### 🆕 Salió el 28 jul por la noche (Fase 11) — abierto
 
-- 🐞 **La página pública oculta los eventos de HOY a partir de las 20:00 (hora de Chile).** `publico.js` filtra con `fecha >= hoy` calculando `hoy` con `toISOString()`, que da la fecha en **UTC**; a las 20:00 en Chile (UTC-4) ya es el día siguiente en UTC, así que los eventos de hoy dejan de aparecer cuatro horas antes de tiempo. Su test usa el mismo criterio, por eso no falla: están consistentemente equivocados. **Es el mismo defecto que se arregló esa noche en `organizacion-responsable.test.js`, pero este está en código de producción y lo ve la congregación.** Arreglo: calcular `hoy` con la fecha local, como ya hace `recordatorios.js` (`diasHasta`).
+- ✅ ~~**La página pública oculta los eventos de HOY a partir de las 20:00**~~ — **cerrado el 28 jul por la noche**. `publico.js` filtraba con `fecha >= hoy` calculando `hoy` en **UTC**, y Chile va cuatro horas por detrás: los eventos de hoy desaparecían del portal justo en la franja en que alguien mira el sitio para saber si esa noche hay culto. Ahora hay un `fechaLocal()` exportado y probado con la zona horaria fijada (`publico-fecha.test.js`), así que el test demuestra el fallo en cualquier máquina y no solo a las 20:00 de Chile. **Lo interesante:** el test viejo construía sus fechas con el mismo criterio equivocado, así que la suite pasaba con el bug dentro; al arreglar el código se destapó y hubo que arreglar los dos. Un test que comparte el error del código no protege de nada.
 - **Menores del indicador, diferidos a propósito** por la revisión final de la rama (ninguno bloquea): la tarjeta muestra la fecha absoluta del último respaldo en vez de "hace 4 h"; `retraso_seg` se calcula pero no se pinta (con `retraso_alto` no se distingue 16 min de 6 h); la clave del aviso diario usa UTC (un corte nocturno puede dar dos avisos en un mismo día local); con caché fría, `/api/me` y el panel pueden lanzar `litestream generations` dos veces casi a la vez; y en la carga que **detecta** el fallo, el número de la campana puede quedar en 0 hasta el siguiente refresco (la tarjeta roja sí lleva la señal).
 - ⚠️ **Falta la verificación que ningún test puede hacer**, porque depende del contenedor real: que en Render la tarjeta se comporte como se diseñó. Si sale **ámbar** con "respuesta inesperada de Litestream", esa versión del binario imprime las columnas con otros nombres y hay que ajustar `interpretarGeneraciones` (se ve con `litestream generations -config /etc/litestream.yml $DB_PATH` desde la shell del contenedor). El diseño previó ese caso: degrada a ámbar **sin** alarma falsa.
 - **Rama `chore/limpieza-profunda` (23 jul):** completamente fusionada en `main`, cero commits propios. Es un resto, se puede borrar.

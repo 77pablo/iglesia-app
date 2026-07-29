@@ -67,6 +67,17 @@ r.patch('/info', authMiddleware, validar(infoSchema), (req, res) => {
   res.json({ ok: true });
 });
 
+// Fecha del calendario LOCAL en formato YYYY-MM-DD.
+// NO vale toISOString(), que da la fecha en UTC: Chile va cuatro horas por
+// detras, asi que a las 20:00 hora local ya es el dia siguiente en UTC y los
+// eventos de HOY desaparecian del portal cuatro horas antes de tiempo -- justo
+// cuando alguien mira el sitio para saber si esta noche hay culto. Las fechas
+// de `evento.fecha` son dias del calendario de la gente, no instantes UTC, y
+// asi es como las cuenta tambien recordatorios.js (diasHasta).
+export function fechaLocal(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ============================================================
 //  PUBLICO (sin login): datos de una iglesia por su codigo_unico.
 // ============================================================
@@ -74,7 +85,7 @@ r.get('/:codigoIglesia', (req, res) => {
   const iglesia = iglesiaPorCodigo(req.params.codigoIglesia);
   if (!iglesia) return res.status(404).json({ error: 'Iglesia no encontrada' });
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = fechaLocal();
   // Solo eventos APROBADOS con fecha de hoy en adelante. NUNCA pendientes/rechazados.
   const eventos = db.prepare(
     `SELECT titulo, fecha, hora_inicio, hora_fin, lugar, descripcion
