@@ -221,3 +221,31 @@ test('el limitador general cuenta por PERSONA: agotar la cuota de una no bloquea
   const res = await pedirComo(tokenDe(personas[1]));
   assert.equal(res.status, 200, 'otra persona tras la misma IP no debe heredar el bloqueo');
 });
+
+// La comprobacion de salud NO puede estar limitada. Render la usa como
+// healthCheckPath (render.yaml) y la pide cada pocos segundos: con el limitador
+// general encima, al pasar de 100 en la ventana empieza a recibir 429, Render
+// declara el servicio enfermo y lo REINICIA. Y el reinicio pone el contador en
+// memoria a cero, asi que el ciclo se repite solo: un bucle de reinicios que se
+// alimenta a si mismo, con la app respondiendo 200 a todo lo demas.
+test('GET /api/health nunca se limita: es la ruta que Render usa para el health check', async () => {
+  // Muy por encima del tope general (100) y de golpe, que es como la pide Render.
+  const TOPE_GENERAL = 100;
+  let peor = 200, bloqueadas = 0;
+  for (let i = 0; i < TOPE_GENERAL + 20; i++) {
+    const r = await fetch(`${BASE}/api/health`);
+    if (r.status === 429) { bloqueadas++; peor = 429; }
+    await r.arrayBuffer();   // no dejar cuerpos sin leer
+  }
+  assert.equal(bloqueadas, 0,
+    `${bloqueadas} de ${TOPE_GENERAL + 20} comprobaciones de salud recibieron 429; ` +
+    'con eso Render reinicia el servicio en bucle');
+  assert.equal(peor, 200);
+
+  // Y ademas queda FUERA del limitador, no solo holgada dentro: si el
+  // middleware la tocara, pondria sus cabeceras. Sin esta asercion, subir el
+  // tope a 1000 haria pasar el test dejando la bomba armada para mas adelante.
+  const r = await fetch(`${BASE}/api/health`);
+  assert.equal(r.headers.get('ratelimit-limit'), null,
+    'la ruta de salud no debe pasar por ningun limitador');
+});

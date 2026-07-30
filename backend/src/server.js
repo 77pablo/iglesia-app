@@ -108,12 +108,27 @@ app.use(compression({
 
 app.use(express.json({ limit: '12mb' }));   // imagenes faciales en base64 pueden ser grandes
 
-// --- Rate limiting general para toda la API (100 req/IP cada 15 min) ---
-// EXCEPCION: /api/mensajes queda fuera del limite general porque el chat
-// tiene su propio limitador mas holgado (limiterChat); si no, el trafico
-// legitimo del chat (SSE + envios + "escribiendo"/"leido") lo agotaria.
+// --- Rate limiting general para toda la API (100 req/persona cada 15 min) ---
+// EXCEPCIONES, las dos por la misma razon de fondo: hay trafico legitimo que
+// supera ese tope, y limitarlo no protege de nada, solo rompe la aplicacion.
+//
+//  - /api/mensajes: el chat tiene su propio limitador mas holgado (limiterChat);
+//    si no, su trafico normal (SSE + envios + "escribiendo"/"leido") lo agotaria.
+//
+//  - /api/health: es la ruta que Render consulta para decidir si el servicio
+//    esta sano (healthCheckPath en render.yaml), y la pide cada pocos segundos.
+//    Con el limitador encima, al pasar de 100 en la ventana empieza a responder
+//    429, Render declara el servicio enfermo y lo REINICIA. Y el reinicio pone
+//    el contador (que vive en memoria) a cero, asi que el ciclo se repite solo:
+//    un bucle de reinicios que se alimenta a si mismo mientras la app contesta
+//    200 a todo lo demas. En el plan free, donde /data es efimero, cada reinicio
+//    ademas se lleva por delante lo que Litestream no haya replicado todavia.
+//    Una ruta de salud no se limita nunca.
+const SIN_LIMITE_GENERAL = ['/api/mensajes', '/api/health'];
 app.use('/api', (req, res, next) =>
-  req.originalUrl.startsWith('/api/mensajes') ? next() : limiterGeneral(req, res, next));
+  SIN_LIMITE_GENERAL.some(p => req.originalUrl.startsWith(p))
+    ? next()
+    : limiterGeneral(req, res, next));
 
 const webDir = path.join(__dirname, '..', '..', 'web');
 
