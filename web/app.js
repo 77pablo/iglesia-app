@@ -3631,18 +3631,20 @@ const Org = {
           <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div></div>
       <div class="card">
         <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''}</div>
-        <div style="margin-top:10px"><b>🕐 Hora de llegada:</b>
+        <!-- org-hora: la rendicion la oculta. Al tesorero la hora de llegada no
+             le dice nada, y comparte card con el contexto, que si sale. -->
+        <div class="org-hora" style="margin-top:10px"><b>🕐 Hora de llegada:</b>
           ${ed?`<input id="org-hora" type="time" value="${h.hora_llegada||''}" onchange="Org.guardarHora(this.value)" style="max-width:130px;display:inline-block">`
               :`<span>${escHtml(h.hora_llegada||'—')}</span>`}</div>
       </div>
-      <div class="card" style="margin-top:14px"><h3 style="font-size:16px">📦 Cosas a llevar</h3>
+      <div class="card card-cosas" style="margin-top:14px"><h3 style="font-size:16px">📦 Cosas a llevar</h3>
         <div id="org-cosas">${cosas}</div>
         ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px">
           <input id="org-cosa-nombre" placeholder="Ej. Jugos nectar">
           <input id="org-cosa-cant" type="number" min="1" value="1" style="max-width:80px">
           <button class="btn small-btn" onclick="Org.addCosa()">Añadir</button></div>`:''}
       </div>
-      <div class="card no-print" style="margin-top:14px"><h3 style="font-size:16px">💵 Gastos</h3>
+      <div class="card no-print card-gastos" style="margin-top:14px"><h3 style="font-size:16px">💵 Gastos</h3>
         <div id="org-gastos">${gastos}</div>
         <div class="org-total">Total gastado: <b>${money(h.total_gastado)}</b></div>
         ${aportes}
