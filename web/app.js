@@ -1664,13 +1664,27 @@ function _renderAcordes(contenido,n){
   }).join('\n');
 }
 
+// El himnario tiene DOS secciones y la numeración se reinicia en la segunda, así
+// que el número NO identifica a un himno: el 45 existe dos veces. Cada himno
+// trae un `id` estable ("2-45"). Esto le pone uno a los que vengan de una copia
+// vieja guardada en el teléfono, que se grabó antes de que el campo existiera.
+function _normalizarHimnos(lista){
+  let sec=1, prev=0;
+  for(const h of (lista||[])){
+    if(h.n<=prev) sec++;
+    if(!h.seccion) h.seccion=sec;
+    prev=h.n;
+    if(!h.id) h.id=`${h.seccion}-${h.n}`;
+  }
+  return lista||[];
+}
 async function _cargarHimnos(){
   if(window._himnos) return window._himnos;
   try{
     const r=await fetch('/assets/himnario.json'); const j=await r.json();
-    window._himnos=j; try{ localStorage.setItem('himnario_json', JSON.stringify(j)); }catch{}
+    window._himnos=_normalizarHimnos(j); try{ localStorage.setItem('himnario_json', JSON.stringify(j)); }catch{}
   }catch{
-    try{ window._himnos=JSON.parse(localStorage.getItem('himnario_json')||'[]'); }catch{ window._himnos=[]; }
+    try{ window._himnos=_normalizarHimnos(JSON.parse(localStorage.getItem('himnario_json')||'[]')); }catch{ window._himnos=[]; }
   }
   return window._himnos;
 }
@@ -1698,12 +1712,18 @@ function himnarioBuscar(q){
   const lista=(window._himnos||[]).filter(h=> !term || (h.titulo||'').toLowerCase().includes(term) || String(h.n).includes(term));
   const cont=$('hm-lista'); if(!cont) return;
   if(!lista.length){ cont.innerHTML='<p class="muted small">Sin resultados.</p>'; return; }
-  cont.innerHTML=lista.slice(0,300).map(h=>`<div class="hmodal-song ${_hmSel&&_hmSel.n===h.n?'sel':''}" onclick="himnarioSel(${h.n})">
-    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span></div>`).join('')
-    + (lista.length>300?`<p class="muted small" style="padding:8px">Mostrando 300 de ${lista.length}. Afina la búsqueda.</p>`:'');
+  // Se pintan TODOS. Antes se cortaba en 300 y, con 522 himnos, los últimos no
+  // aparecían nunca al abrir el himnario: había que adivinar el título para que
+  // el buscador los sacara. Son 522 <div>: el navegador con eso no se despeina.
+  cont.innerHTML=lista.map(h=>`<div class="hmodal-song ${_hmSel&&_hmSel.id===h.id?'sel':''}" onclick="himnarioSel(${escJsAttr(h.id)})">
+    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span>${h.seccion===2?' <span class="muted small">· coros</span>':''}</div>`).join('');
 }
-function himnarioSel(n){
-  _hmSel=(window._himnos||[]).find(h=>h.n===n); _hmTrans=0;
+// Se selecciona por `id`, no por número: los números se repiten entre las dos
+// secciones y un find(h=>h.n===n) devolvía SIEMPRE el de la primera. Tocar
+// cualquier corito abría el himno tradicional que compartía número, así que
+// media colección era inalcanzable desde la app.
+function himnarioSel(id){
+  _hmSel=(window._himnos||[]).find(h=>h.id===id); _hmTrans=0;
   himnarioBuscar($('hm-buscar')?$('hm-buscar').value:''); // refresca selección en la lista
   renderHimno();
 }
@@ -1714,8 +1734,9 @@ function renderHimno(){
   const tonoBase=_hmSel.tono||'';
   const tonoAhora=_transAcorde(tonoBase, _hmTrans);
   v.innerHTML=`<div class="transbar">
-      <h3 style="flex:1;font-size:17px;margin:0">#${_hmSel.n} ${escHtml(_hmSel.titulo)}</h3>
+      <h3 style="flex:1;font-size:17px;margin:0">#${_hmSel.n} ${escHtml(_hmSel.titulo)}${_hmSel.seccion===2?' <span class="muted small" style="font-weight:400">· coros</span>':''}</h3>
     </div>
+    ${_hmSel.nota?`<p class="muted small" style="margin:4px 0 0">✏️ ${escHtml(_hmSel.nota)}</p>`:''}
     <div class="transbar">
       <span class="muted small">Tono:</span> <b style="color:var(--primary)">${escHtml(tonoAhora)||'—'}</b>
       <button class="cal-navbtn" onclick="himnarioTrans(-1)" title="Bajar ½ tono" aria-label="Bajar medio tono">−</button>
@@ -1723,7 +1744,9 @@ function renderHimno(){
       ${_hmTrans!==0?`<button class="btn ghost small-btn" onclick="himnarioReset()">Original (${escHtml(tonoBase)})</button>`:''}
       <span class="muted small">${_hmTrans>0?'+'+_hmTrans:_hmTrans} semitono(s)</span>
     </div>
-    <div class="acordes">${_renderAcordes(_hmSel.contenido||'', _hmTrans)}</div>`;
+    ${_hmSel.sin_letra
+      ? '<p class="muted small" style="margin-top:12px">Esta alabanza aparece en el himnario solo con el título: el documento no trae su letra ni sus acordes.</p>'
+      : `<div class="acordes">${_renderAcordes(_hmSel.contenido||'', _hmTrans)}</div>`}`;
 }
 
 // ---------- VISOR DE CANCIÓN DEL CANCIONERO (con transpositor) ----------
