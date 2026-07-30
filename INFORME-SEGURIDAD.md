@@ -96,10 +96,19 @@ IP+ruta).
 
 Middleware reutilizable `validar(schema, fuente = 'body')` en
 `backend/src/seguridad.js`: valida `req[fuente]` con `schema.safeParse`; en
-fallo responde `400 { error: "Datos invalidos: revisa <campos>" }` y loguea
+fallo responde `400 { error: "Datos inválidos: <motivos>" }` y loguea
 `[seguridad] entrada rechazada: <METODO> <ruta> - campos invalidos: <lista>`
 — **nunca** vuelca el valor recibido (evita filtrar contrasenas o datos
 personales en logs).
+
+Los dos textos son a proposito distintos (30 jul 2026): **la respuesta habla en
+castellano y el log habla en tecnico**. Antes ambos decian la clave de zod, con
+lo que la persona leia "revisa hora_inicio" o "revisa persona_id". Ahora el 400
+reaprovecha el mensaje que el esquema ya trae escrito (`'falta el titulo'`,
+`'el monto debe ser un numero mayor que cero'`); si ese campo no tiene mensaje
+propio, se le nombra en castellano ("revisa la contraseña"). El `console.warn`
+sigue listando el nombre tecnico del campo, que es lo unico que sirve para
+depurar. Cubierto por `backend/test/validacion-mensajes.test.js`.
 
 Aplicado a:
 
@@ -273,14 +282,14 @@ invalido; luego 3 con password incorrecta → la 6ta peticion total ya da 429):
 
 ```
 POST /api/login (correcto)                         -> 200 {token,...}
-POST /api/login (body invalido, {"iglesia":""})     -> 400 {"error":"Datos invalidos: revisa iglesia, usuario, password"}
+POST /api/login (body invalido, {"iglesia":""})     -> 400 {"error":"Datos inválidos: revisa el usuario; revisa la contraseña"}
 POST /api/login (password mala) x3                  -> 401,401,401
 POST /api/login (password mala) x3 mas               -> 429,429,429
 ```
 
 Log del servidor durante esa prueba:
 ```
-[seguridad] entrada rechazada: POST /api/login - campos invalidos: iglesia, usuario, password
+[seguridad] entrada rechazada: POST /api/login - campos invalidos: usuario, password
 [seguridad] login fallido: iglesia="MONTESION" usuario="pastor" ip=::1
 [seguridad] login fallido: iglesia="MONTESION" usuario="pastor" ip=::1
 [seguridad] login fallido: iglesia="MONTESION" usuario="pastor" ip=::1
@@ -293,9 +302,9 @@ Flujo admin + tesoreria de extremo a extremo (servidor nuevo, DB limpia):
 
 ```
 POST /api/admin/usuarios {nombre,usuario,password}          -> 200 {"ok":true,"id":12}
-POST /api/admin/usuarios {nombre,usuario}  (sin password)   -> 400 {"error":"Datos invalidos: revisa password"}
+POST /api/admin/usuarios {nombre,usuario}  (sin password)   -> 400 {"error":"Datos inválidos: revisa la contraseña"}
 POST /api/tesoreria/movimientos como pastor (no tesorero)   -> 403 {"error":"Solo el tesorero puede registrar..."}
-POST /api/tesoreria/movimientos como tesorero, monto:-5     -> 400 {"error":"Datos invalidos: revisa monto"}
+POST /api/tesoreria/movimientos como tesorero, monto:-5     -> 400 {"error":"Datos inválidos: el monto debe ser un numero mayor que cero"}
 POST /api/tesoreria/movimientos como tesorero, monto:100    -> 200 {"ok":true}
 GET  /api/tesoreria/resumen x12 seguidos                    -> 200 x12 (no se bloquea: confirma el trade-off del punto 1)
 GET  /api/admin/datos x12 seguidos                          -> 200 hasta agotar la cuota de 10, despues 429 (limite sensible activo en admin)
