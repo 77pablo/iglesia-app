@@ -1152,11 +1152,12 @@ async function vistaServicio(){
   const c=$('content'); c.innerHTML=`<div id="sv" class="muted">Cargando…</div>`;
   try{
     const [eventos,personas]=await Promise.all([api('/eventos'),api('/personas')]);
-    const ev=eventos.map(e=>`<option value="${e.id}">${escHtml(e.titulo)} (${fechaTxt(e.fecha)})</option>`).join('');
+    // La fecha de cada evento viaja en el <option> para saber que dia consultar.
+    const ev=eventos.map(e=>`<option value="${e.id}" data-fecha="${escHtml(e.fecha)}">${escHtml(e.titulo)} (${fechaTxt(e.fecha)})</option>`).join('');
     const ps=personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
     $('sv').innerHTML=`<div class="card" style="max-width:480px">
       <h3 style="margin-bottom:4px">Asignar un servicio</h3>
-      <label for="sv-ev">Evento</label><select id="sv-ev">${ev}</select>
+      <label for="sv-ev">Evento</label><select id="sv-ev" onchange="pintarNoDispServicio()">${ev}</select>
       <label for="sv-persona">Persona</label><select id="sv-persona">${ps}</select>
       <label for="sv-tipo">Servicio</label><select id="sv-tipo">
         <option value="predicar">🎤 Predicar</option><option value="ofrenda">💰 Ofrenda</option>
@@ -1164,7 +1165,26 @@ async function vistaServicio(){
         <option value="aseo">🧹 Aseo</option></select>
       <p id="sv-msg" class="small" style="margin-top:10px"></p>
       <button class="btn" style="margin-top:8px" onclick="asignar()">Asignar y avisar</button></div>`;
+    pintarNoDispServicio();   // el select de evento ya viene con uno elegido
   }catch{ $('sv').innerHTML=errCargar('vistaServicio()','los servicios'); }
+}
+// Marca en el desplegable a quien dijo que no puede ese dia.
+// Se hace ANTES de asignar a proposito: el aviso de despues llega cuando a la
+// persona ya le salto el push "te asignaron".
+async function pintarNoDispServicio(){
+  const selEv=$('sv-ev'), selP=$('sv-persona');
+  if(!selEv||!selP) return;
+  const fecha=selEv.selectedOptions[0]?.dataset.fecha||'';
+  // Limpiar siempre primero: si falla la consulta, mejor sin marcas que con
+  // marcas del evento anterior, que serian mentira.
+  for(const o of selP.options) o.textContent=o.dataset.nombre||o.textContent;
+  for(const o of selP.options) if(!o.dataset.nombre) o.dataset.nombre=o.textContent;
+  if(!fecha) return;
+  try{
+    const ids=await api('/disponibilidad/no-disponibles?fecha='+encodeURIComponent(fecha));
+    const set=new Set(ids.map(String));
+    for(const o of selP.options) if(set.has(o.value)) o.textContent=o.dataset.nombre+' ⚠️ no disponible';
+  }catch{ /* sin marcas: nunca bloquea ni rompe la pantalla */ }
 }
 async function asignar(){
   const body={evento_id:$('sv-ev').value,persona_id:$('sv-persona').value,tipo:$('sv-tipo').value};
