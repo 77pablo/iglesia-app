@@ -1113,7 +1113,7 @@ async function cargarNoDisp(){
     </div>`).join('') : '<p class="small">No has marcado ningún día.</p>';
   }catch{
     c.className='muted';
-    c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarNoDisp()" class="link" style="display:inline;padding:0">Reintentar</a></p>';
+    c.innerHTML=errCargar('cargarNoDisp()','tus fechas');
   }
 }
 function formNoDisp(){ const z=$('form-nodisp'); if(z.innerHTML){z.innerHTML='';return;}
