@@ -2806,6 +2806,45 @@ function modalConfirm(msg, onYes, opts){
   root.classList.add('show');
   $('cf-ok').onclick=()=>{ cerrarModal(); onYes(); };
 }
+// Hermano de modalConfirm, pero con un campo de texto: sustituye a prompt(), que
+// abre una ventanita gris del sistema, sin el tipo de letra ni los colores de la
+// app, y que en varios navegadores de móvil se puede silenciar para siempre —
+// entonces el botón deja de hacer nada y nadie sabe por qué.
+//
+// opts:
+//   titulo      — encabezado del modal (por defecto "Confirmar")
+//   placeholder — pista dentro del campo
+//   valor       — texto de partida (editar en vez de crear)
+//   okLabel     — texto del botón de aceptar
+//   danger      — botón rojo, para lo destructivo
+//   requerido   — palabra EXACTA que hay que teclear para poder aceptar; es lo
+//                 que convierte una pregunta en un acto deliberado.
+//   ayuda       — línea pequeña bajo el campo
+// Igual que modalConfirm, `msg` se mete crudo en innerHTML (a propósito: varios
+// mensajes llevan <b>), así que lo que se interpole ahí va con escHtml().
+function modalPrompt(msg, cb, opts){
+  opts = opts || {};
+  const okClase = opts.danger ? 'btn danger' : 'btn';
+  const root=$('modal-root');
+  root.innerHTML=`<div class="modal-bg"><div class="modal"><h3>${escHtml(opts.titulo||'Confirmar')}</h3>
+    <p class="muted" style="margin:8px 0 14px">${msg}</p>
+    <input id="mp-txt" type="text" autocomplete="off" placeholder="${escHtml(opts.placeholder||'')}" value="${escHtml(opts.valor||'')}" />
+    ${opts.ayuda?`<p class="muted small" style="margin-top:6px">${escHtml(opts.ayuda)}</p>`:''}
+    <div class="row" style="margin-top:16px"><button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+    <button class="${okClase}" id="mp-ok">${escHtml(opts.okLabel||'Guardar')}</button></div></div></div>`;
+  root.classList.add('show');
+  const inp=$('mp-txt'), ok=$('mp-ok');
+  // El botón nace apagado y solo se enciende cuando lo escrito vale: así el
+  // requisito se ve, en vez de descubrirse al tocar y que no pase nada.
+  const vale=()=> opts.requerido ? inp.value.trim()===opts.requerido : inp.value.trim().length>0;
+  const refrescar=()=>{ ok.disabled=!vale(); };
+  const aceptar=()=>{ if(!vale()) return; const v=inp.value.trim(); cerrarModal(); cb(v); };
+  inp.oninput=refrescar;
+  inp.onkeydown=(e)=>{ if(e.key==='Enter'){ e.preventDefault(); aceptar(); } };
+  ok.onclick=aceptar;
+  refrescar();
+  inp.focus();
+}
 function modalReason(cb){
   const root=$('modal-root');
   root.innerHTML=`<div class="modal-bg"><div class="modal">
@@ -3593,14 +3632,26 @@ async function descargarMisDatos(){
     toast('⬇️ Datos descargados');
   }catch(e){ toast((e&&e.message)||'No se pudo descargar'); }
 }
+// La acción más destructiva de la app: borra la cuenta y anonimiza los datos,
+// sin vuelta atrás. Se pregunta dentro de la app (modalPrompt) y no con el
+// prompt() del navegador, que sale como una ventanita gris del sistema, sin los
+// colores ni el tipo de letra de la app — y que en el móvil se puede silenciar,
+// dejando el botón mudo. Teclear ELIMINAR sigue siendo obligatorio: es lo que
+// separa un toque sin querer de una decisión.
 async function eliminarMiCuenta(){
-  const conf=prompt('Esto eliminará tu cuenta y anonimizará tus datos. Escribe ELIMINAR para confirmar:');
-  if(conf!=='ELIMINAR') return;
-  try{
-    await api('/cuenta/eliminar',{method:'POST'});
-    toast('Tu cuenta fue eliminada');
-    setTimeout(()=>salir(),800);
-  }catch(e){ toast((e&&e.message)||'No se pudo eliminar la cuenta'); }
+  modalPrompt(
+    'Se borrarán tu nombre, correo, teléfono, foto y cumpleaños, y no podrás volver a entrar. <b>Esto no se puede deshacer.</b>',
+    async()=>{
+      try{
+        await api('/cuenta/eliminar',{method:'POST'});
+        toast('Tu cuenta fue eliminada');
+        setTimeout(()=>salir(),800);
+      }catch(e){ toast((e&&e.message)||'No se pudo eliminar la cuenta'); }
+    },
+    { titulo:'Eliminar mi cuenta', requerido:'ELIMINAR', placeholder:'ELIMINAR',
+      ayuda:'Escribe ELIMINAR en mayúsculas para habilitar el botón.',
+      okLabel:'Eliminar mi cuenta', danger:true }
+  );
 }
 
 // ============================================================
@@ -3817,7 +3868,7 @@ async function vistaOrganizacion(){
     z.innerHTML = hojas.length ? hojas.map(h=>{
       const titulo = h.evento_titulo || h.titulo || '(sin título)';
       const fecha = h.evento_fecha || h.fecha;
-      return `<div class="item-card flex" style="margin-top:10px;cursor:pointer" onclick="Org.abrir(${h.id})">
+      return `<div class="item-card flex" style="margin-top:10px;cursor:pointer" onclick="Org.abrir(${h.id},'organizacion')">
         <div style="flex:1"><div class="item-titulo">${escHtml(titulo)}</div>
           <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''} · ${h.n_cosas||0} cosa(s)</div></div>
         <div style="text-align:right"><b>${money(h.total_gastado)}</b><div class="muted small">gastado</div></div>
@@ -3826,28 +3877,44 @@ async function vistaOrganizacion(){
   }catch(e){ const z=$('org-lista'); z.className='error'; z.textContent=(e&&e.message)||'No se pudo cargar'; }
 }
 
+// A la misma hoja se llega por dos puertas, y el "volver" tiene que devolver
+// por la que se entró: desde la lista de Organización, o desde el día abierto
+// del calendario (el botón "🗒️ Organización" de un evento). Antes siempre
+// llevaba a la lista, así que quien venía del calendario perdía el día que
+// estaba mirando y el menú lateral seguía marcando Calendario: el botón decía
+// una cosa y hacía otra.
+const ORG_ORIGEN = {
+  organizacion: { etiqueta:'Organización', ir:()=>vistaOrganizacion() },
+  calendario:   { etiqueta:'Calendario',   ir:()=>navTo('calendario') },
+};
+
 const Org = {
   // Crea una lista suelta (pide título) y la abre.
-  async nuevaHoja(){
-    const titulo=prompt('Título de la lista (ej. "Almuerzo de jóvenes")'); if(!titulo||!titulo.trim()) return;
-    await conBoton(botonActual(), async()=>{
-      try{ const r=await api('/organizacion',{method:'POST',body:JSON.stringify({titulo:titulo.trim()})}); Org.abrir(r.id); }
+  nuevaHoja(){
+    modalPrompt('Ponle un nombre para reconocerla en la lista.', async(titulo)=>{
+      try{ const r=await api('/organizacion',{method:'POST',body:JSON.stringify({titulo})}); Org.abrir(r.id,'organizacion'); }
       catch(e){ toast((e&&e.message)||'No se pudo crear'); }
-    });
+    }, { titulo:'Nueva lista', placeholder:'Ej. Almuerzo de jóvenes', okLabel:'Crear lista' });
   },
-  // Abre la hoja de un evento (la crea vacía la 1a vez).
+  // Abre la hoja de un evento (la crea vacía la 1a vez). Se llega desde el
+  // calendario, así que ahí es a donde vuelve.
   async abrirEvento(eventoId){
-    try{ const h=await api('/organizacion/evento/'+eventoId); Org._render(h); }
+    try{ const h=await api('/organizacion/evento/'+eventoId); Org._render(h,'calendario'); }
     catch(e){ toast((e&&e.message)||'No se pudo abrir'); }
   },
-  // Abre una hoja por id.
-  async abrir(id){
-    try{ const h=await api('/organizacion/'+id); Org._render(h); }
+  // Abre una hoja por id. `origen` solo se pasa al ENTRAR: las recargas de la
+  // propia hoja (añadir una cosa, un gasto) lo omiten y conservan el de entrada.
+  async abrir(id, origen){
+    try{ const h=await api('/organizacion/'+id); Org._render(h, origen); }
     catch(e){ toast((e&&e.message)||'No se pudo abrir'); }
   },
+  _origen:'organizacion',
+  volver(){ (ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion).ir(); },
   _hoja:null,
-  _render(h){
+  _render(h, origen){
     Org._hoja=h;
+    if(origen && ORG_ORIGEN[origen]) Org._origen=origen;
+    const volver=ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion;
     const ed=!!h.puede_editar;
     const titulo=(h.evento&&h.evento.titulo)||h.titulo||'(sin título)';
     const fecha=(h.evento&&h.evento.fecha)||h.fecha;
@@ -3888,6 +3955,10 @@ const Org = {
            iglesia y allí nadie sabe de dónde salió ni si es la última versión.
            En pantalla sobra, porque el nombre de la iglesia ya está en el menú. -->
       <div class="solo-print">${escHtml(ME.iglesia?ME.iglesia.nombre:'')} · impreso el ${escHtml(new Date().toLocaleDateString('es-CL'))}</div>
+      <!-- El "volver" va arriba a la izquierda y con la forma "‹ Destino" del
+           resto de sub-pantallas (Casos, Clases, Prédicas, Directorio…), no
+           mezclado entre los botones de acción de la derecha. -->
+      <button class="link no-print" onclick="Org.volver()">‹ ${escHtml(volver.etiqueta)}</button>
       <div class="head-row"><h2>🗒️ ${escHtml(titulo)}</h2>
         <!-- btn-fila, no row: .row reparte a lo ancho sin permitir salto de linea y a
              390px estos cuatro botones desbordaban la pagina (405px de contenido). -->
@@ -3898,7 +3969,7 @@ const Org = {
             title="En el diálogo de impresión, elige &quot;Guardar como PDF&quot; en el destino">🖨️ Imprimir / PDF</button>
           ${(h.gastos&&h.gastos.length)?`<button class="btn ghost small-btn" onclick="Org.imprimirRendicion()"
             title="El papel de las cuentas, para llevárselo al tesorero">🧾 Rendición</button>`:''}
-          <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div></div>
+        </div></div>
       <div class="card">
         <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''}</div>
         <!-- org-hora: la rendicion la oculta. Al tesorero la hora de llegada no
@@ -4005,7 +4076,9 @@ const Org = {
       try{
         const r=await api('/organizacion/'+Org._hoja.id+'/duplicar',{method:'POST'});
         toast('⧉ Lista duplicada');
-        Org.abrir(r.id);
+        // La copia nace suelta (sin evento), así que vive en la lista de
+        // Organización: de ahí en adelante ese es su "volver".
+        Org.abrir(r.id,'organizacion');
       }catch(e){ toast((e&&e.message)||'No se pudo duplicar'); }
     }, { okLabel:'Sí, duplicar' });
   },
@@ -4120,7 +4193,10 @@ const Org = {
   },
   borrarHoja(){
     modalConfirm('¿Borrar esta lista con sus cosas y gastos? No se puede deshacer.', async()=>{
-      try{ await api('/organizacion/'+Org._hoja.id,{method:'DELETE'}); toast('🗑️ Lista borrada'); vistaOrganizacion(); }
+      // Se sale por donde se entró: si la hoja se abrió desde un evento del
+      // calendario, borrarla no puede dejar a nadie en una lista que no estaba
+      // mirando.
+      try{ await api('/organizacion/'+Org._hoja.id,{method:'DELETE'}); toast('🗑️ Lista borrada'); Org.volver(); }
       catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
     }, { okLabel:'Sí, borrar', danger:true });
   }

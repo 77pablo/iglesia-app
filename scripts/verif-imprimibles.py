@@ -42,6 +42,21 @@ def entrar(page, url, iglesia, usuario, password):
     page.wait_for_load_state("networkidle")
 
 
+def crear_hoja(page, titulo):
+    """Crea una lista suelta desde la vista de Organizacion.
+
+    Ya no es un prompt() del navegador (no vale page.once('dialog')): el titulo
+    se pide con modalPrompt(), un modal propio de la app.
+    """
+    page.evaluate("navTo('organizacion')")
+    page.wait_for_timeout(900)
+    page.click('button:has-text("Nueva lista")')
+    page.wait_for_selector("#mp-txt", timeout=5000)
+    page.fill("#mp-txt", titulo)
+    page.click("#mp-ok")
+    page.wait_for_timeout(1200)
+
+
 def hoja_nueva_con_gastos(page, titulo):
     """Crea SIEMPRE una hoja nueva y la deja con cosas y un gasto.
 
@@ -49,11 +64,7 @@ def hoja_nueva_con_gastos(page, titulo):
     crea hojas al correr, asi que en la segunda corrida "la primera" ya no es la
     que uno cree. Una hoja propia por corrida hace el resultado repetible.
     """
-    page.evaluate("navTo('organizacion')")
-    page.wait_for_timeout(900)
-    page.once("dialog", lambda d: d.accept(titulo))
-    page.click('button:has-text("Nueva lista")')
-    page.wait_for_timeout(1200)
+    crear_hoja(page, titulo)
 
     for nombre, cant in [("Bebidas", 6), ("Pan amasado", 20)]:
         page.fill("#org-cosa-nombre", nombre)
@@ -152,11 +163,7 @@ def main():
 
         # Hoja SIN gastos: es otro estado, hace falta una hoja nueva.
         print("\n[D] Sin gastos no hay boton de rendicion")
-        page.evaluate("navTo('organizacion')")
-        page.wait_for_timeout(900)
-        page.once("dialog", lambda d: d.accept("Hoja sin gastos"))
-        page.click('button:has-text("Nueva lista")')
-        page.wait_for_timeout(1200)
+        crear_hoja(page, "Hoja sin gastos")
         check(page.locator('button:has-text("Rendición")').count() == 0,
               "sin gastos, el boton no se pinta",
               page.locator('button:has-text("Rendición")').count())
