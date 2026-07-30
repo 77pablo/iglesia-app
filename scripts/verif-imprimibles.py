@@ -89,6 +89,8 @@ def main():
         check(page.locator(".card-cosas").first.is_visible(), "salen las cosas a llevar")
         check(not page.locator(".card-gastos").first.is_visible(),
               "NO salen los gastos (se pega en la puerta)")
+        check(not page.locator(".solo-rendicion").first.is_visible(),
+              "la firma NO sale en la hoja de cosas")
         page.screenshot(path=args.capturas + "/papel-cosas.png", full_page=True)
         page.emulate_media(media="screen")
 
@@ -125,6 +127,11 @@ def main():
         check("Quién puso qué" in gcard, "sale el resumen de quien puso que", gcard[:60])
         check("Añadir" not in gcard, "NO sale el formulario de anadir gastos")
         check("Borrar esta lista" not in gcard, "NO sale el enlace de borrar")
+        firma = page.locator(".solo-rendicion")
+        check(firma.count() == 1, "existe el bloque de firma", firma.count())
+        check(firma.first.is_visible(), "la firma sale en el papel de rendicion")
+        check("Recibí conforme" in firma.first.inner_text(), "dice 'Recibi conforme'",
+              firma.first.inner_text())
         page.screenshot(path=args.capturas + "/papel-rendicion.png", full_page=True)
         page.emulate_media(media="screen")
 

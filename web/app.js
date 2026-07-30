@@ -3650,6 +3650,11 @@ const Org = {
         <div id="org-gastos">${gastos}</div>
         <div class="org-total">Total gastado: <b>${money(h.total_gastado)}</b></div>
         ${aportes}
+        <!-- Solo en el papel de rendicion: el tesorero firma que recibio las
+             cuentas. En pantalla no pinta nada, y en la hoja de la puerta
+             tampoco (alli no hay cuentas que recibir). -->
+        <div class="solo-rendicion">Recibí conforme: ______________________
+          &nbsp;&nbsp;&nbsp; Fecha: ________________</div>
         ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px">
           <input id="org-gasto-concepto" placeholder="Ej. Pan">
           <input id="org-gasto-monto" type="number" min="1" placeholder="Monto" style="max-width:110px">

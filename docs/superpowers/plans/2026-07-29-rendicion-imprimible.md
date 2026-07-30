@@ -1,6 +1,6 @@
 # Rendición imprimible — Plan de implementación
 
-> **Para quien lo ejecute:** SUB-SKILL OBLIGATORIA: usar `superpowers:subagent-driven-development` (recomendada) o `superpowers:executing-plans` para ejecutarlo tarea por tarea. Los pasos usan casillas (`- [ ]`) para ir marcando.
+> **Para quien lo ejecute:** SUB-SKILL OBLIGATORIA: usar `superpowers:subagent-driven-development` (recomendada) o `superpowers:executing-plans` para ejecutarlo tarea por tarea. Los pasos usan casillas (`- [x]`) para ir marcando.
 
 **Objetivo:** un segundo imprimible de la hoja de Organización —la rendición de gastos— que el líder le lleva al tesorero.
 
@@ -36,7 +36,7 @@
 
 Hace falta un servidor con datos. **No usar `with_server.py`**: en Windows dice "Server stopped" pero el proceso node sobrevive, y la siguiente corrida se conecta al servidor huérfano con su BD vieja, dando resultados falsos sin avisar.
 
-- [ ] **Sembrar una base de datos temporal**
+- [x] **Sembrar una base de datos temporal**
 
 ```bash
 cd "C:/Users/pdani/Documents/App-Iglesia/app/backend"
@@ -47,7 +47,7 @@ DB_PATH="$SCRATCH/verif.db" JWT_SECRET="verificacion-local-solo-para-pruebas-123
 
 Esperado: `[seed] Datos de prueba creados:` con la iglesia `MONTESION` y los usuarios (contraseña `1234`).
 
-- [ ] **Arrancar el servidor** (PowerShell, con `-PassThru` para poder matarlo después)
+- [x] **Arrancar el servidor** (PowerShell, con `-PassThru` para poder matarlo después)
 
 ```powershell
 $scratch = "C:\Users\pdani\AppData\Local\Temp\claude\C--Users-pdani-Documents-App-Iglesia-app\7b74f27a-f58a-40fa-935e-3b467206d928\scratchpad"
@@ -78,7 +78,7 @@ Antes de cambiar nada, se escribe el guion que comprueba lo que ya funciona. Si 
 **Interfaces:**
 - Produce: las clases CSS `card-cosas`, `card-gastos` y `org-hora`, de las que dependen las Tareas 2 y 3.
 
-- [ ] **Paso 1: Escribir el guion de verificación con las comprobaciones de HOY**
+- [x] **Paso 1: Escribir el guion de verificación con las comprobaciones de HOY**
 
 Crear `scripts/verif-imprimibles.py`:
 
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Paso 2: Correrlo y verlo FALLAR**
+- [x] **Paso 2: Correrlo y verlo FALLAR**
 
 ```bash
 cd "C:/Users/pdani/Documents/App-Iglesia/app"
@@ -202,7 +202,7 @@ PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhos
 
 Esperado: **FALLA**. Las clases `.card-cosas` y `.card-gastos` todavía no existen, así que Playwright no encuentra los elementos y revienta con un error de localizador. Eso es lo que se va a arreglar en el paso siguiente.
 
-- [ ] **Paso 3: Poner las clases estables en el marcado**
+- [x] **Paso 3: Poner las clases estables en el marcado**
 
 En `web/app.js`, dentro de `Org._render()`. Las tres cards son hoy `.card` a secas; se les da nombre para poder decidir cuál sale en cada papel. **Ningún cambio visible en pantalla.**
 
@@ -250,7 +250,7 @@ por:
 
 Se conserva `no-print`: en el papel normal la card sigue sin salir, que es la decisión de diseño de siempre.
 
-- [ ] **Paso 4: Correrlo y verlo PASAR**
+- [x] **Paso 4: Correrlo y verlo PASAR**
 
 ```bash
 PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhost:3071 --capturas "$SCRATCH"
@@ -258,7 +258,7 @@ PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhos
 
 Esperado: `TODO OK`, con las cuatro comprobaciones del bloque `[A]` en verde.
 
-- [ ] **Paso 5: Comprobar que el backend no se movió**
+- [x] **Paso 5: Comprobar que el backend no se movió**
 
 ```bash
 cd "C:/Users/pdani/Documents/App-Iglesia/app/backend" && npm test 2>&1 | tail -8
@@ -266,7 +266,7 @@ cd "C:/Users/pdani/Documents/App-Iglesia/app/backend" && npm test 2>&1 | tail -8
 
 Esperado: `tests 317 / pass 317 / fail 0`.
 
-- [ ] **Paso 6: Commit**
+- [x] **Paso 6: Commit**
 
 ```bash
 cd "C:/Users/pdani/Documents/App-Iglesia/app"
@@ -299,7 +299,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Consume: `card-cosas`, `card-gastos`, `org-hora` (Tarea 1).
 - Produce: `Org.imprimirRendicion()` y la clase `modo-rendicion` en `<body>`; la Tarea 3 añade la firma dentro de ese modo.
 
-- [ ] **Paso 1: Escribir las comprobaciones que fallan**
+- [x] **Paso 1: Escribir las comprobaciones que fallan**
 
 En `scripts/verif-imprimibles.py`, insertar este bloque justo antes de `reales = [e for e in errores ...]`:
 
@@ -367,7 +367,7 @@ En `scripts/verif-imprimibles.py`, insertar este bloque justo antes de `reales =
               page.locator('button:has-text("Rendición")').count())
 ```
 
-- [ ] **Paso 2: Correrlo y verlo FALLAR**
+- [x] **Paso 2: Correrlo y verlo FALLAR**
 
 ```bash
 PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhost:3071 --capturas "$SCRATCH"
@@ -375,7 +375,7 @@ PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhos
 
 Esperado: **FALLA** en `hay un boton de rendicion -> 0`. El bloque `[A]` sigue en verde.
 
-- [ ] **Paso 3: Añadir el botón**
+- [x] **Paso 3: Añadir el botón**
 
 En `web/app.js`, en la `btn-fila`, después del botón de imprimir y antes del de volver. Solo se pinta si hay gastos:
 
@@ -387,7 +387,7 @@ En `web/app.js`, en la `btn-fila`, después del botón de imprimir y antes del d
           <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div></div>
 ```
 
-- [ ] **Paso 4: Marcar `no-print` los controles internos de la card de gastos**
+- [x] **Paso 4: Marcar `no-print` los controles internos de la card de gastos**
 
 Hasta ahora no lo necesitaban: la card entera era invisible en papel. En modo rendición se vuelve visible, así que el formulario de añadir y el enlace de borrar **saldrían impresos**.
 
@@ -417,7 +417,7 @@ por:
         ${ed?`<div class="no-print" style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red-tx)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
 ```
 
-- [ ] **Paso 5: Escribir `Org.imprimirRendicion()` y el candado de `Org.imprimir()`**
+- [x] **Paso 5: Escribir `Org.imprimirRendicion()` y el candado de `Org.imprimir()`**
 
 En `web/app.js`, sustituir el método `imprimir()` entero por estos dos. Se comparte el cuerpo en `_conPapel()` para no repetir los candados en dos sitios:
 
@@ -454,7 +454,7 @@ En `web/app.js`, sustituir el método `imprimir()` entero por estos dos. Se comp
   imprimirRendicion(){ Org._conPapel(true); },
 ```
 
-- [ ] **Paso 6: Escribir las reglas de impresión**
+- [x] **Paso 6: Escribir las reglas de impresión**
 
 En `web/styles.css`, **dentro** del bloque `@media print{...}`, justo antes de la línea `.org-row{padding:10px 0;border-bottom:1px solid #ddd;}`:
 
@@ -469,7 +469,7 @@ En `web/styles.css`, **dentro** del bloque `@media print{...}`, justo antes de l
   .modo-rendicion .org-hora{display:none !important;}
 ```
 
-- [ ] **Paso 7: Correrlo y verlo PASAR**
+- [x] **Paso 7: Correrlo y verlo PASAR**
 
 ```bash
 PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhost:3071 --capturas "$SCRATCH"
@@ -477,11 +477,11 @@ PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhos
 
 Esperado: `TODO OK`. Bloques `[A]`, `[B]` y `[C]` en verde.
 
-- [ ] **Paso 8: Mirar la captura**
+- [x] **Paso 8: Mirar la captura**
 
 Abrir `$SCRATCH/papel-rendicion.png` y comprobar con los ojos: sale la cabecera de la iglesia, el título, los gastos con quién puso cada uno, el total, el resumen "Quién puso qué"; **no** salen las cosas a llevar, ni los botones, ni el formulario de añadir. Una aserción puede pasar y el papel verse mal igualmente.
 
-- [ ] **Paso 9: Commit**
+- [x] **Paso 9: Commit**
 
 ```bash
 cd "C:/Users/pdani/Documents/App-Iglesia/app"
@@ -525,7 +525,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 **Interfaces:**
 - Consume: la clase `modo-rendicion` (Tarea 2).
 
-- [ ] **Paso 1: Escribir la comprobación que falla**
+- [x] **Paso 1: Escribir la comprobación que falla**
 
 En `scripts/verif-imprimibles.py`, dentro del bloque `[B]`, justo después de la comprobación `NO sale el enlace de borrar`:
 
@@ -544,7 +544,7 @@ Y en el bloque `[A]`, después de `NO salen los gastos`:
               "la firma NO sale en la hoja de cosas")
 ```
 
-- [ ] **Paso 2: Correrlo y verlo FALLAR**
+- [x] **Paso 2: Correrlo y verlo FALLAR**
 
 ```bash
 PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhost:3071 --capturas "$SCRATCH"
@@ -552,7 +552,7 @@ PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhos
 
 Esperado: **FALLA** en `existe el bloque de firma -> 0`.
 
-- [ ] **Paso 3: Añadir el bloque de firma**
+- [x] **Paso 3: Añadir el bloque de firma**
 
 En `web/app.js`, dentro de la card de gastos, justo después de `${aportes}`:
 
@@ -565,7 +565,7 @@ En `web/app.js`, dentro de la card de gastos, justo después de `${aportes}`:
           &nbsp;&nbsp;&nbsp; Fecha: ________________</div>
 ```
 
-- [ ] **Paso 4: Añadir el CSS**
+- [x] **Paso 4: Añadir el CSS**
 
 En `web/styles.css`, junto a `.solo-print{display:none;}` (fuera de `@media print`):
 
@@ -582,7 +582,7 @@ Y **dentro** de `@media print`, junto a las otras reglas de `.modo-rendicion`:
 
 Dos clases y `!important`: por lo mismo que la card de gastos, y además porque `.solo-rendicion{display:none}` vive **más abajo** en el archivo y a igual especificidad ganaría ella.
 
-- [ ] **Paso 5: Correrlo y verlo PASAR**
+- [x] **Paso 5: Correrlo y verlo PASAR**
 
 ```bash
 PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhost:3071 --capturas "$SCRATCH"
@@ -590,7 +590,7 @@ PYTHONIOENCODING=utf-8 python scripts/verif-imprimibles.py --url http://localhos
 
 Esperado: `TODO OK`, con las cuatro comprobaciones nuevas en verde.
 
-- [ ] **Paso 6: Correr la suite del backend por última vez**
+- [x] **Paso 6: Correr la suite del backend por última vez**
 
 ```bash
 cd "C:/Users/pdani/Documents/App-Iglesia/app/backend" && npm test 2>&1 | tail -8
@@ -598,7 +598,7 @@ cd "C:/Users/pdani/Documents/App-Iglesia/app/backend" && npm test 2>&1 | tail -8
 
 Esperado: `tests 317 / pass 317 / fail 0`. Si cambió algo, el trabajo se salió del alcance.
 
-- [ ] **Paso 7: Parar el servidor**
+- [x] **Paso 7: Parar el servidor**
 
 ```powershell
 Stop-Process -Id <PID> -Force
@@ -607,7 +607,7 @@ Get-NetTCPConnection -LocalPort 3071 -State Listen -ErrorAction SilentlyContinue
 
 Esperado: nada escuchando en el 3071. Un servidor huérfano falsea la siguiente corrida.
 
-- [ ] **Paso 8: Actualizar `ESTADO.md`**
+- [x] **Paso 8: Actualizar `ESTADO.md`**
 
 En la sección de la Fase 10 (Organización v2), añadir bajo la línea de **Imprimir**:
 
@@ -621,7 +621,7 @@ Y en "Abierto de verdad", bajo la sección de Organización ↔ Tesorería, sust
 - ✅ ~~**Antes de escribir en `movimiento`, probar el papel**~~ — hecho el 29 jul (ver Fase 10, *Rendición*). Queda por saber si en uso real basta con el papel o hace falta la integración; esa respuesta la da la iglesia usándolo, no otro spec.
 ```
 
-- [ ] **Paso 9: Commit**
+- [x] **Paso 9: Commit**
 
 ```bash
 cd "C:/Users/pdani/Documents/App-Iglesia/app"

@@ -662,6 +662,11 @@ body{transition:background-color .3s ease,color .3s ease;}
   .modo-rendicion .card-gastos{display:block !important;}
   .modo-rendicion .card-cosas{display:none !important;}
   .modo-rendicion .org-hora{display:none !important;}
+  /* Dos clases y !important: por lo mismo que la card de gastos, y ademas porque
+     .solo-rendicion{display:none} vive MAS ABAJO en el archivo y a igual
+     especificidad ganaria ella. */
+  .modo-rendicion .solo-rendicion{display:block !important;margin-top:26px;
+    padding-top:10px;border-top:1px solid #ccc;color:#000;}
   .org-row{padding:10px 0;border-bottom:1px solid #ddd;}
   /* Se oculta el ✕ y el botón "Asignar", pero NUNCA el nombre: una hoja impresa
      sin nombres no sirve para repartir nada. Lo que falta por asignar deja una
@@ -694,4 +699,5 @@ body{transition:background-color .3s ease,color .3s ease;}
 .org-quien{font-size:0.8125rem;flex-shrink:0;max-width:45%;text-align:right;}
 .org-firma{display:none;}   /* solo aparece en la hoja impresa */
 .solo-print{display:none;}  /* al reves que .no-print: en pantalla no, en papel si */
+.solo-rendicion{display:none;}  /* solo en el papel de rendicion, ver @media print */
 @media(max-width:520px){ .org-row{flex-wrap:wrap;} .org-quien{max-width:100%;text-align:left;} }
