@@ -143,3 +143,16 @@ test('sin fecha o con fecha invalida -> 400 (esto estrena validar(...,"query"))'
   assert.equal((await noDisp(SEM.lider, '')).status, 400);
   assert.equal((await noDisp(SEM.lider, '7-8-2026')).status, 400);
 });
+
+test('al eliminar mi cuenta desaparecen mis periodos de no disponible', async () => {
+  await crear(SEM.miembro1, { desde: '2026-08-05', hasta: '2026-08-12', motivo: 'Tratamiento medico' });
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM fecha_no_disp').get().n, 1);
+
+  const res = await fetch(base + '/api/cuenta/eliminar', { method: 'POST', headers: H(SEM.miembro1), body: '{}' });
+  assert.equal(res.status, 200);
+
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM fecha_no_disp WHERE persona_id = ?').get(SEM.miembro1.id).n, 0,
+    'el motivo es un dato personal: no puede sobrevivir a la baja'
+  );
+});
