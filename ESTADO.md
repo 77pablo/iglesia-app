@@ -1,5 +1,39 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 29 de julio de 2026, noche (`/api/health` estaba dentro del limitador y eso reinicia el servicio en bucle; el indicador de respaldo estaba ciego; la rendición imprimible para el tesorero — 325 tests, todo desplegado)*
+*Última actualización: 30 de julio de 2026 (auditoría con 5 agentes en paralelo: la zona horaria del contenedor hacía inertes los arreglos de fecha, un borrado cruzaba iglesias, tres XSS, el himnario tenía 72 alabanzas invisibles y media colección inalcanzable — **366 tests**, 4 commits SIN SUBIR)*
+
+---
+
+## 🆕 30 DE JULIO DE 2026 — auditoría con agentes y tres tandas de arreglos
+
+Cinco agentes en paralelo (backend, frontend, pulido/UX, modelo Organización↔Tesorería, ideas nuevas) sobre el código ya desplegado. **Encontraron cosas que llevaban meses ahí.** Tres commits, ninguno subido todavía.
+
+### 🔴 `TZ` no estaba definida: los tres arreglos de fecha eran INERTES en producción
+`fechaLocal()` (`backend/src/fechas.js`) calcula el día con `getFullYear/getMonth/getDate`, que dependen de **la zona del proceso**. El `Dockerfile` definía `NODE_ENV`, `PORT`, `DB_PATH` y `UPLOADS_DIR` — **pero no `TZ`**, y `node:24-slim` corre en UTC. O sea que todo el trabajo de fechas de las fases anteriores no hacía nada en el servidor, y arrastraba dos fallos más que nadie había visto: el saludo de cumpleaños salía la víspera a las 20:00, el "📅 mañana tienes X" llegaba **dos** días antes, y los ingresos del último día del mes caían en el mes siguiente.
+**Lo que hacía pasar la suite:** los tests de fecha se fijan `TZ` a mano — eran los únicos sitios del proyecto donde el código corría en la zona correcta. **Lección:** un test que se arregla a sí mismo el entorno no prueba que el entorno esté arreglado.
+Cerrado en `Dockerfile` y en `render.yaml`, y el arranque anuncia la zona en el log.
+
+### 🔴 Borrar una canción vaciaba el orden del servicio de OTRA iglesia
+`musica.js` hacía `DELETE FROM setlist_item WHERE cancion_id = ?` con el id crudo de la URL y filtraba por iglesia **una línea después**. Un líder de música podía dejar sin repertorio el domingo de otra congregación y recibía un 404 que le decía que no había pasado nada. Ahora resuelve acotado por iglesia, borra en transacción y audita.
+
+### 🟠 El pastor podía desactivar al obispo
+`PATCH /admin/usuarios/:id` no llevaba el guardia de `rol_global` que sí tenía el reset de clave 30 líneas más abajo, y el botón "Desactivar" **se pintaba** en su fila. Un clic y el obispo quedaba fuera de **todas** las iglesias. Cerrado en backend y ocultado en la interfaz.
+
+### 🔴 Tres XSS almacenados en atributos
+El **tono de una canción** (escalada líder de música → pastor), el **color de un grupo** (lo ejecuta toda la iglesia al abrir el calendario) y **dos nombres** que filtraban comillas pero no el `&`, con lo que las entidades HTML se decodificaban a comillas antes de compilar el JS. Nuevos `escJsAttr()` y `safeColor()` en `web/app.js` + validación hexadecimal en la API. ⚠️ **La CSP no cubre nada de esto: usa `'unsafe-inline'`.**
+
+### 🎵 El himnario: eran 450 alabanzas y son 522
+Regenerado desde el PDF nuevo del dueño (*Respaldo Himnario Nuevo*, 224 págs). Comparado antes contra el viejo: **448 coincidían exactas en título y tono, 0 títulos perdidos**. Cuatro fallos:
+1. **72 alabanzas quedaban PEGADAS dentro de la anterior** porque su título no lleva el tono entre paréntesis. Buscar *"Días de Elías"* o *"Si mi pueblo"* no daba nada; 16 vivían dentro de *"Fidelidad"*.
+2. **La app seleccionaba por número** (`find(h=>h.n===n)`) y los números **se repiten entre las dos secciones**: tocar cualquier corito abría el himno tradicional del mismo número. **Media colección era inalcanzable**, sin dar ningún error. Cada alabanza lleva ahora un **`id` estable** (`"2-45"`).
+3. La **alineación del acorde sobre su sílaba** se había perdido en las 450 sin excepción. Ahora se conserva en 465.
+4. El **índice alfabético** del final del PDF se pegaba entero a la última alabanza (12.237 caracteres) y un himno arrastraba folios sueltos.
+Aplicadas las **4 anotaciones a lápiz** del dueño (págs. 1, 14, 49 y 114). Van como **línea de acordes pura**, sin guiones ni prosa: `_esLineaAcordes()` pide que el 60% de las palabras sean acordes, y de otro modo el transpositor las ignoraría y al cambiar de tono la anotación se quedaría en el viejo.
+> ⏳ **Decisión pendiente del dueño:** el PDF descargable (`web/assets/himnario-nuevo.pdf`) sigue siendo el **viejo**, así que va desacompasado con la letra. Reemplazarlo por el nuevo implica que **los trazos a lápiz quedan visibles** para toda la congregación.
+
+### 🟠 Cinco fallos que mentían al usuario
+Cambiar **el grupo de un evento** decía "actualizado" y no cambiaba nada (`validar()` descarta en silencio las claves que el esquema no declara) · el **contador de mensajes** no subía nunca fuera de la vista de Mensajes · un fallo de red dejaba **`[]` cacheado para siempre** en la lista de personas y los desplegables salían vacíos el resto de la sesión · **"Altas este mes"** se ponía a 0 las últimas horas de cada mes (**quinta** aparición del desfase UTC; ahora hay `mesLocal()`) · **"Orden del servicio"** se quedaba en `…` para siempre sin eventos.
+
+---
 
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
 
@@ -401,7 +435,27 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 29 jul 2026 · noche — todo desplegado, **325 tests en verde**, nada pendiente de subir)
+### 👉 POR DÓNDE RETOMAR (al 30 jul 2026 — **366 tests en verde**, ⚠️ **4 commits SIN SUBIR**)
+
+**Lo primero: subir.** `main` va **4 commits por delante** de GitHub (`git log origin/main..main`). Hasta que Pablo los suba con GitHub Desktop, **nada de esto está en producción** — incluida la zona horaria, que es la que arregla cinco fallos de fecha de golpe. *(El documento anterior decía "nada pendiente de subir" y ya entonces había uno.)*
+
+**Acciones del dueño, por orden:**
+1. **Subir los 4 commits** con GitHub Desktop → redeploy automático.
+2. **Comprobar en los logs de Render** la línea nueva `[startup] zona horaria: America/Santiago`. Si dijera `UTC`, la variable no llegó.
+3. **Render → Logs**, buscar `restaurando`: si sale una vez por despliegue, no hay bucle de reinicios. Después, la tarjeta **💾 Respaldo** del panel del super-admin.
+4. **`SMTP_USER` / `SMTP_PASS`** (contraseña de aplicación de Gmail) y **`SUPERADMIN_PASSWORD`**.
+5. Decidir si se reemplaza el **PDF descargable del himnario** por el nuevo (los trazos a lápiz quedarían visibles).
+
+**Trabajo abierto, priorizado:**
+- **Pulido de UX (15 hallazgos medidos, sin tocar todavía).** Los tres primeros por impacto ÷ esfuerzo: `api()` muestra **"Failed to fetch"** en crudo cuando no hay señal y no echa al login cuando caduca la sesión (~10 líneas, arregla los 114 sitios que hacen `toast(e.message)`) · **Tesorería** sin datos deja dos regiones literalmente en blanco · el menú lateral llama a los cargos por su nombre de base de datos (**"Lider ed"**, **"Admin"**) cuando `rolLabel()` ya existe.
+- **Bugs menores aún abiertos:** el service worker borra la caché buena si falla el precacheo y deja la PWA sin shell offline · "Quitar" en Mi Grupo falla con miembros de rol distinto de `miembro` · borrar un gasto de Organización **no pregunta**.
+- **Fuente del gasto (Organización ↔ Tesorería):** diseño **a medias**. El dueño ya decidió que el modelo es **mixto de verdad**: conviven adelanto del pastor, reembolso a la persona y aporte que no se devuelve. Falta elegir cómo modelarlo (el informe del agente propone 4 caminos; el de "reciclar `pagado_por IS NULL` = la iglesia" está **descartado**: choca con los gastos históricos, que ya significan "no se sabe quién puso"). Retomar con el skill de *brainstorming*.
+- **Editar el himnario desde la app:** el dueño lo pidió. Hoy `himnario.json` es un archivo fijo del programa. Necesita spec propio.
+- **6 propuestas de módulos nuevos** levantadas por el agente de producto, ordenadas por valor ÷ esfuerzo: peticiones de oración (el hueco más evidente: **nadie puede pedir oración**, `cuidado.js` solo deja abrir casos al pastor) · corregir/anular movimientos de Tesorería · eventos que se repiten · seguimiento de visitas (**los mensajes del portal público ya se están perdiendo**: solo llega un campanazo) · retiro seguro de niños · ficha de membresía. Sin presentar todavía.
+
+---
+
+### 👉 POR DÓNDE RETOMAR (al 29 jul 2026 · noche — 325 tests, superado por lo del 30 jul)
 
 **Lo único abierto, y es de mirar, no de programar:** entrar al panel de Render → servicio `iglesia-app` → pestaña **Logs** o **Events**, y buscar la línea `[litestream] restaurando /data/iglesia.db desde R2`. Sale **una vez por arranque**.
 
