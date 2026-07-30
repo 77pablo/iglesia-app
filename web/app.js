@@ -22,7 +22,7 @@ const NAV = [
   ['ninos','👶','Niños / Esc. Dominical'],
   ['tesoreria','💰','Tesorería'],
   ['organizacion','🗒️','Organización'],
-  ['predica','📖','Predica'],
+  ['predica','📖','Prédica'],
   ['panel_obispo','👑','Panel del Obispo'],
   ['superadmin','🛡️','Super-admin'],
   ['ajustes','🎨','Ajustes'],
@@ -2468,7 +2468,8 @@ async function vistaPredica(){
   let data; try{ data=await api('/predica'); }catch{ $('pr').innerHTML='<p class="error">No se pudo cargar.</p>'; return; }
   window._predicaEdit=!!data.puedeEditar;
   $('pr').className='';
-  $('pr').innerHTML=`<div class="head-row"><h2>📖 Predica</h2>${data.puedeEditar?'<button class="btn small-btn" onclick="formPredica(0)">+ Nueva prédica</button>':''}</div>
+  $('pr').innerHTML=`<div class="head-row"><h2>📖 Prédica</h2>${data.puedeEditar?'<button class="btn small-btn" onclick="formPredica(0)">+ Nueva prédica</button>':''}</div>
+    <div id="form-predica"></div>
     ${ME.persona.es_pastor?'<div id="pr-pred"></div>':''}
     <div id="pr-lista" class="muted">…</div>`;
   renderPredicas(data.items||[]);
@@ -2484,7 +2485,7 @@ function renderPredicas(items){
     <span class="muted" style="font-size:20px">›</span></div>`).join('');
 }
 async function verPredica(id){
-  $('content').innerHTML='<button class="link" onclick="vistaPredica()">‹ Predicas</button><div id="prd" class="muted">Cargando…</div>';
+  $('content').innerHTML='<button class="link" onclick="vistaPredica()">‹ Prédicas</button><div id="prd" class="muted">Cargando…</div>';
   let d; try{ d=await api('/predica/'+id); }catch{ $('prd').innerHTML=errCargar('verPredica('+Number(id)+')','la prédica'); return; }
   window._predActual=id; const edit=d.puedeEditar;
   const recs=(d.recursos||[]).map(r=>{
@@ -2493,7 +2494,8 @@ async function verPredica(id){
     return `<div class="item-card flex"><div style="flex:1"><b>${ic} ${escHtml(r.titulo)}</b> <span class="muted small">${link}</span></div>${edit?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar recurso" onclick="borrarRecPredica(${r.id})">🗑️</button>`:''}</div>`;
   }).join('');
   $('prd').className='';
-  $('prd').innerHTML=`<div class="card">
+  $('prd').innerHTML=`<div id="form-predica"></div>
+  <div class="card">
     <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar predicación" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
     <div class="muted small" style="margin-top:4px">${d.fecha?'📅 '+fechaTxt(d.fecha):''}${d.predicador?' · 🎤 '+escHtml(d.predicador):''}</div>
     ${d.notas?`<div style="margin-top:14px;white-space:pre-wrap;line-height:1.5">${escHtml(d.notas)}</div>`:'<p class="muted small" style="margin-top:10px">Sin notas.</p>'}
@@ -2502,11 +2504,18 @@ async function verPredica(id){
     <div id="prd-recform"></div>
     <div class="list" style="margin-top:8px">${recs||'<p class="muted small">Sin recursos.</p>'}</div></div>`;
 }
+// Crear/editar una prédica en un panel que se abre EN SITIO, como el resto de
+// la app (evento, anuncio, caso, clase, lección, niño, aviso, recurso, tarea,
+// usuario, grupo…). Era la única entidad cuyo "+ Nuevo" se llevaba por delante
+// la pantalla entera: se perdía de vista la lista y para volver había un "‹
+// Volver" que no decía a dónde. El mismo botón que abre el panel lo cierra,
+// igual que en los demás.
 async function formPredica(id){
+  const z=$('form-predica'); if(!z) return;
+  if(z.innerHTML){ z.innerHTML=''; return; }
   let p={}; if(id){ try{ p=await api('/predica/'+id); }catch{} }
   const v=(x)=>x?String(x).replace(/"/g,'&quot;'):'';
-  $('content').innerHTML=`<button class="link" onclick="${id?`verPredica(${id})`:'vistaPredica()'}">‹ Volver</button>
-   <div class="card" style="margin-top:8px"><h2 style="font-size:18px">${id?'Editar prédica':'Nueva prédica'}</h2>
+  z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${id?'Editar prédica':'Nueva prédica'}</h3>
     <label for="pp-titulo">Nombre de la prédica</label><input id="pp-titulo" value="${v(p.titulo)}" placeholder="Ej. El amor de Dios"/>
     <label>Fecha</label><div>${fechaSelectHTML('pp', p.fecha||'')}</div>
     <label for="pp-predicador">Predicador</label><input id="pp-predicador" value="${v(p.predicador)}" placeholder="Quién predicó"/>
