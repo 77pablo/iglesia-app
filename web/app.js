@@ -1073,7 +1073,7 @@ async function vistaServicio(){
         <option value="aseo">🧹 Aseo</option></select>
       <p id="sv-msg" class="small" style="margin-top:10px"></p>
       <button class="btn" style="margin-top:8px" onclick="asignar()">Asignar y avisar</button></div>`;
-  }catch{ $('sv').innerHTML='<p class="error">Error.</p>'; }
+  }catch{ $('sv').innerHTML=errCargar('vistaServicio()','los servicios'); }
 }
 async function asignar(){
   const body={evento_id:$('sv-ev').value,persona_id:$('sv-persona').value,tipo:$('sv-tipo').value};
@@ -1092,7 +1092,13 @@ async function actualizarCampana(){
 async function verNotificaciones(){
   $('page-title').textContent='Notificaciones';
   document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
-  const c=$('content'); c.innerHTML=`<div id="ln" class="muted">Cargando…</div>`;
+  // Con "‹ Inicio", como el resto de sub-pantallas. Se llega aquí tocando la
+  // campana, y no había ninguna salida: además esta vista apaga el resaltado
+  // del menú, así que quien entraba desde el móvil ni siquiera sabía dónde
+  // estaba. La única forma de salir era abrir la hamburguesa y adivinar.
+  const c=$('content'); c.innerHTML=`
+    <button class="link" onclick="navTo('inicio')" style="margin-bottom:10px">‹ Inicio</button>
+    <div id="ln" class="muted">Cargando…</div>`;
   try{
     const d=await api('/notificaciones'); const cont=$('ln');
     if(!d.items.length){ cont.innerHTML='<div class="placeholder"><div class="big">🔔</div><p>Sin notificaciones.</p></div>'; return; }
@@ -1134,7 +1140,7 @@ async function vistaAsistencia(){
     $('lista').innerHTML=ev.map(e=>`<div class="item-card flex" style="cursor:pointer" onclick="hojaAsistencia(${e.id})">
       ${fechaChip(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
       <div class="muted small">${escHtml(e.grupo||'')}</div></div><span class="muted" style="font-size:20px">›</span></div>`).join('');
-  }catch{ $('lista').innerHTML='<p class="error">Error.</p>'; }
+  }catch{ $('lista').innerHTML=errCargar('vistaAsistencia()','la hoja de asistencia'); }
 }
 
 async function hojaAsistencia(id){
@@ -1567,7 +1573,7 @@ async function cargarSetlist(eventoId){
         <button class="btn small-btn" onclick="agregarSetlist()">Agregar</button></div>`;
     }
     $('setlist').className=''; $('setlist').innerHTML=html;
-  }catch{ $('setlist').innerHTML='<p class="error">Error.</p>'; }
+  }catch{ $('setlist').className=''; $('setlist').innerHTML=errCargar('cargarSetlist(window._setEv)','el orden del servicio'); }
 }
 async function agregarSetlist(){
   try{ await api('/musica/setlist/'+window._setEv,{method:'POST',body:JSON.stringify({cancion_id:$('set-cancion').value})}); cargarSetlist(window._setEv); }
@@ -2203,6 +2209,21 @@ function safeColor(c, porDefecto='var(--primary)'){
   return /^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|var\(--[a-zA-Z0-9-]+\))$/.test(s) ? s : porDefecto;
 }
 
+// Bloque de "no se pudo cargar", con enlace para volver a intentarlo.
+//
+// Siete pantallas mostraban únicamente «Error.», que no dice qué falló, ni si
+// es culpa de la persona, ni qué puede hacer — y deja la vista muerta: la única
+// salida era cambiar de módulo y volver a entrar. El mismo archivo ya lo
+// resolvía bien en otros ocho sitios, con el enlace de reintentar; esto pone
+// los siete restantes en esa misma forma, ahora escrita una sola vez.
+//
+// `reintentar` es una llamada literal escrita aquí en el código, nunca un dato
+// del usuario: va dentro de un href="javascript:…".
+function errCargar(reintentar, que=''){
+  return `<p class="error small">No se pudo cargar${que?' '+que:''} · `
+    + `<a href="javascript:${reintentar}" class="link" style="display:inline;padding:0">Reintentar</a></p>`;
+}
+
 // La lista de personas de la iglesia, guardada en memoria para no pedirla en
 // cada pantalla. Solo se guarda si trae a alguien.
 //
@@ -2286,7 +2307,7 @@ async function cargarAvisosGrupo(){
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin avisos todavía.</p>'; return; }
     c.className='list';
     c.innerHTML=list.map(a=>`<div class="item-card flex"><div style="flex:1"><b>${a.tipo==='recordatorio'?'⏰':'📢'} ${escHtml(a.titulo)}</b>${a.fecha?` <span class="estado-chip">${fechaTxt(a.fecha)}</span>`:''}<div class="muted small">${escHtml(a.texto||'')}</div></div>${lider?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar aviso" onclick="borrarAvisoGrupo(${a.id})">🗑️</button>`:''}</div>`).join('');
-  }catch{ $('mg-avisos').innerHTML='<p class="error">Error.</p>'; }
+  }catch{ $('mg-avisos').innerHTML=errCargar('cargarAvisosGrupo()','los avisos del grupo'); }
 }
 function formAvisoGrupo(){ const z=$('mg-aviso-form'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="form-panel">
@@ -2308,7 +2329,7 @@ async function cargarRecursosGrupo(){
     if(!list.length){ c.className='muted'; c.innerHTML='<p class="small">Sin recursos todavía.</p>'; return; }
     c.className='list';
     c.innerHTML=list.map(rc=>`<div class="item-card flex"><div style="flex:1"><b>${rc.tipo==='archivo'?'📎':'🔗'} ${escHtml(rc.titulo)}</b><div class="muted small"><a href="${escHtml(safeUrl(rc.url))}" target="_blank">${rc.tipo==='archivo'?'Abrir / descargar':'Abrir enlace'}</a></div></div>${lider?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar recurso" onclick="borrarRecursoGrupo(${rc.id})">🗑️</button>`:''}</div>`).join('');
-  }catch{ $('mg-recursos').innerHTML='<p class="error">Error.</p>'; }
+  }catch{ $('mg-recursos').innerHTML=errCargar('cargarRecursosGrupo()','los recursos del grupo'); }
 }
 function formRecursoGrupo(){ const z=$('mg-rec-form'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="form-panel">
@@ -2338,7 +2359,7 @@ async function cargarMiembrosGrupo(){
     c.className='list';
     c.innerHTML=list.map(m=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(m.nombre)}</b>${m.esLider?' <span class="estado-chip estado-aceptado">Líder</span>':''}</div>${(lider&&!m.esLider)?`<button class="link" style="color:var(--red-tx)" onclick="quitarMiembroGrupo(${m.id},${escJsAttr(m.nombre||'')})">Quitar</button>`:''}</div>`).join('');
     if(lider) renderAvisarBox();
-  }catch{ $('mg-miembros').innerHTML='<p class="error">Error.</p>'; }
+  }catch{ $('mg-miembros').innerHTML=errCargar('cargarMiembrosGrupo()','los miembros del grupo'); }
 }
 function renderAvisarBox(){
   const cont=$('mg-avisar'); if(!cont) return;
@@ -2416,7 +2437,7 @@ function renderPredicas(items){
 }
 async function verPredica(id){
   $('content').innerHTML='<button class="link" onclick="vistaPredica()">‹ Predicas</button><div id="prd" class="muted">Cargando…</div>';
-  let d; try{ d=await api('/predica/'+id); }catch{ $('prd').innerHTML='<p class="error">Error.</p>'; return; }
+  let d; try{ d=await api('/predica/'+id); }catch{ $('prd').innerHTML=errCargar('verPredica('+Number(id)+')','la prédica'); return; }
   window._predActual=id; const edit=d.puedeEditar;
   const recs=(d.recursos||[]).map(r=>{
     const ic=r.tipo==='archivo'?'📎':r.tipo==='libro'?'📚':'🔗';
@@ -3874,11 +3895,16 @@ const Org = {
     try{ await api('/organizacion/cosas/'+id,{method:'PATCH',body:JSON.stringify({listo})}); }
     catch(e){ toast((e&&e.message)||'No se pudo actualizar'); Org._recargar(); }
   },
+  // Preguntar antes de borrar: la ✕ es un botón pequeño en una lista larga, en
+  // un teléfono, y esta línea puede llevar ya un responsable asignado y avisado.
   async borrarCosa(id){
-    await conBoton(botonActual(), async()=>{
+    // escHtml: modalConfirm mete el mensaje crudo en innerHTML, y el nombre de
+    // la cosa lo escribe cualquier líder.
+    const c=(Org._hoja&&Org._hoja.cosas||[]).find(x=>x.id===id);
+    modalConfirm(`¿Quitar "${escHtml((c&&c.nombre)||'esta cosa')}" de la lista?`, async()=>{
       try{ await api('/organizacion/cosas/'+id,{method:'DELETE'}); Org._recargar(); }
       catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
-    });
+    }, {danger:true});
   },
   async addGasto(){
     const concepto=$('org-gasto-concepto').value.trim(); const monto=Number($('org-gasto-monto').value);
@@ -3891,11 +3917,22 @@ const Org = {
       catch(e){ toast((e&&e.message)||'No se pudo añadir'); }
     });
   },
+  // Un gasto lleva el monto y quién puso el dinero: es el registro con el que se
+  // le devuelve la plata a esa persona, y al borrarlo no queda rastro. Iba sin
+  // preguntar, a un toque, mientras quitar una canción del repertorio —que se
+  // rehace en dos toques— sí preguntaba.
   async borrarGasto(id){
-    await conBoton(botonActual(), async()=>{
-      try{ await api('/organizacion/gastos/'+id,{method:'DELETE'}); Org._recargar(); }
-      catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
-    });
+    // escHtml: modalConfirm mete el mensaje crudo en innerHTML, y tanto el
+    // concepto como el nombre de quien pagó vienen de la base de datos.
+    const g=(Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===id);
+    const quien=g&&g.pagado_por_nombre?` que puso ${escHtml(g.pagado_por_nombre)}`:'';
+    modalConfirm(
+      g?`¿Borrar el gasto "${escHtml(g.concepto)}" de ${money(g.monto)}${quien}? No queda registro de él.`
+       :'¿Borrar este gasto? No queda registro de él.',
+      async()=>{
+        try{ await api('/organizacion/gastos/'+id,{method:'DELETE'}); Org._recargar(); }
+        catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
+      }, {danger:true});
   },
   // Duplicar: se copia la lista de cosas en limpio para el evento que viene.
   // No hace falta poder editar la hoja, así que un líder puede partir de la
