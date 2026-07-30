@@ -2920,12 +2920,48 @@ function _persFila(etiqueta,b){
   </div>`;
 }
 
+// "El servicio acaba de arrancar" es un estado TRANSITORIO: el backend perdona
+// los 3 primeros minutos para no dar una alarma falsa mientras el respaldo da su
+// primera vuelta (GRACIA_ARRANQUE_SEG en persistencia.js). Pero esta tarjeta se
+// pintaba UNA sola vez al abrir el panel, asi que ese texto se quedaba congelado
+// en pantalla indefinidamente y quien lo leia no tenia forma de saber que solo
+// hacia falta esperar -- ni de distinguirlo de un indicador roto. Se vuelve a
+// preguntar sola mientras el estado siga siendo transitorio.
+//
+// Cada 30 s porque es lo que el backend cachea ese estado (CACHE_ARRANCANDO_MS):
+// preguntar antes devuelve el mismo valor cacheado. Y CON TOPE: sondear para
+// siempre por si acaso es otra forma de no tener indicador, y el propio caso que
+// motivo esto -- un servicio que reinicia en bucle y nunca sale de la gracia --
+// dejaria la pestana pidiendo cada 30 s durante horas.
+const PERS_REINTENTO_MS=30*1000;
+const PERS_REINTENTOS_MAX=8;          // ~4 min: cubre la gracia de 3 min con margen
+let _persTimer=null,_persIntentos=0;
+
 async function saCargarPersistencia(){
   const c=$('sa-persistencia'); if(!c) return;
+  if(_persTimer){ clearTimeout(_persTimer); _persTimer=null; }
   try{
     const e=await api('/superadmin/persistencia');
     c.className='muted small';
     c.innerHTML=_persFila('Base de datos',e.bd)+_persFila('Archivos subidos',e.uploads);
+    const transitorio=e.bd.motivo==='arrancando'||e.uploads.motivo==='arrancando';
+    if(transitorio&&_persIntentos<PERS_REINTENTOS_MAX){
+      _persIntentos++;
+      c.innerHTML+=`<div class="muted small" style="margin-top:6px">⏳ Comprobando de nuevo en
+        ${PERS_REINTENTO_MS/1000} s (intento ${_persIntentos} de ${PERS_REINTENTOS_MAX})…</div>`;
+      _persTimer=setTimeout(saCargarPersistencia,PERS_REINTENTO_MS);
+    }else if(transitorio){
+      // Agotados los reintentos y sigue "arrancando": eso ya NO es el arranque
+      // normal. Lo mas probable es que el servicio se este reiniciando en bucle,
+      // que es justo lo que paso el 29 jul con /api/health limitada. Decirlo,
+      // en vez de dejar un "no se pudo comprobar" que parece inocente.
+      c.innerHTML+=`<div style="margin-top:6px;color:var(--red-tx)">⚠️ Lleva
+        ${Math.round(PERS_REINTENTOS_MAX*PERS_REINTENTO_MS/60000)} minutos diciendo que acaba de
+        arrancar. Si fuera un arranque normal ya habría terminado: puede que el servicio se esté
+        reiniciando en bucle. Mira los registros del servicio (Events/Logs).</div>`;
+    }else{
+      _persIntentos=0;   // estado resuelto: el proximo arranque vuelve a tener sus 8 intentos
+    }
   }catch(err){ c.className='error'; c.textContent='No se pudo consultar el estado del respaldo.'; }
   // El super-admin no pasa por el dashboard, que es quien normalmente rellena
   // la campana: aqui se hace explicito, si no su aviso no se veria nunca.
