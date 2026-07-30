@@ -1,5 +1,32 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 30 de julio de 2026 (auditoría con 5 agentes + cinco tandas de arreglos: la zona horaria del contenedor hacía inertes los arreglos de fecha, un borrado cruzaba iglesias, tres XSS, el himnario tenía 72 alabanzas invisibles y media colección inalcanzable, y la PWA podía quedarse en blanco para siempre — **409 tests**, ⚠️ **11 commits SIN SUBIR**)*
+*Última actualización: 30 de julio de 2026, tarde (los mensajes de error dejan de hablar en jerga, pulido de UX, y Escuela Dominical deja de pasar lista — **420 tests**, ⚠️ **SIN SUBIR**)*
+
+---
+
+## 🆕 30 DE JULIO DE 2026 · TARDE — cuatro frentes en paralelo
+
+Los 11 commits de la mañana **ya están subidos y desplegados** (verificado: el `app.js` que sirve Render trae `escJsAttr` y `safeColor`). Lo de esta tarde es lo siguiente, y **está sin subir**.
+
+### 🗣️ Los mensajes de error hablaban en jerga de programador
+`validar()` (`seguridad.js`) respondía `'Datos invalidos: revisa ' + las CLAVES de zod`: la gente leía *"revisa hora_inicio"*, *"revisa persona_id"*. Y de paso **tiraba a la basura los mensajes en castellano que los esquemas ya traían escritos**. Ahora el 400 sale de ahí; si el campo no tiene mensaje propio, se le nombra en castellano ("revisa la contraseña").
+
+**El caso grave estaba en la puerta legal del registro:** `registro.js` usaba `z.literal(true, { errorMap: … })`, que es el nombre de **zod 3**. El proyecto usa **zod 4**, donde el parámetro se llama `error` y `errorMap` **se ignora en silencio** — así que quien no marcaba la casilla de consentimiento leía *"Datos invalidos: revisa acepto"*. Era el único `errorMap` del proyecto.
+
+> **El log NO cambió a propósito:** `[seguridad] entrada rechazada: … campos invalidos: acepto` sigue diciendo el nombre técnico. Cambia lo que ve la persona, no lo que ve quien depura. **No existía ningún test que asertara ese log** (el que provocaba el rechazo solo miraba el 400); ahora sí.
+
+Se re-midieron contra un servidor real las cuatro salidas que `INFORME-SEGURIDAD.md` citaba como medidas: **las cuatro habían dejado de ser ciertas**, y una lo era desde antes (decía que el login rechazaba `iglesia`, campo que pasó a ser opcional con el login de super-admin).
+
+### ✨ Pulido de UX
+Los **7 botones de "volver" son ahora idénticos y todos nombran su destino** — el de la hoja de Organización te dejaba en la lista aunque hubieras entrado desde el calendario, y ahora vuelve al calendario **con el mismo día abierto**. Nuevo helper **`modalPrompt`**: ya no queda ni un `prompt`/`confirm`/`alert` nativo en `web/`, incluido el de **eliminar mi cuenta** (hay que teclear `ELIMINAR` exacto; el botón nace apagado). **"Prédica"** con tilde. Y `formPredica`, el único "+ Nuevo" que se llevaba la pantalla por delante, pasa a panel en sitio como los otros 17.
+
+> Inventario de las formas de crear: **17 panel en sitio · 1 pantalla completa · 4 fila de inputs siempre visible**. Las 4 filas **no se tocaron y está justificado**: son alta repetitiva de renglones dentro de una lista que ya estás editando.
+
+### 👶 Escuela Dominical ya no pasa lista — decisión del dueño
+La iglesia no la usa. Fuera la tarjeta "✅ Asistencia" y fuera `POST /api/ninos/asistencia`. Se quedan las clases, los niños y las lecciones.
+
+> **La tabla `asistencia_nino` NO se borró, a propósito.** Borrarla es irreversible y en producción hay una iglesia de verdad; su índice único sigue en `db.js` protegiendo lo ya anotado. Nada la escribe ahora.
+> **Consecuencia asumida:** `retiro_por` ("quién se llevó al niño ese domingo") queda sin forma de rellenarse. `nino.autorizados` —quién *puede* retirarlo— vive en la ficha del niño y sigue en pie.
+> Efecto lateral encontrado al sacarlo: `auditar` era importado y **lo único que se auditaba en el módulo era la asistencia**. Crear una clase, inscribir un niño o subir una lección **nunca se auditaron**. Hueco previo, sigue abierto.
 
 ---
 
@@ -439,7 +466,36 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 30 jul 2026 — **409 tests en verde**, ⚠️ **11 commits SIN SUBIR**)
+### 👉 POR DÓNDE RETOMAR (al 30 jul 2026 · tarde — **420 tests en verde**)
+
+**Lo primero: subir.** Lo de esta tarde está en `main` local y **sin subir**. Comprueba de verdad con `git log origin/main..main --oneline` antes de creerte esta línea o la de abajo: **las dos secciones anteriores de este documento afirmaron cosas sobre el push que ya no eran ciertas al leerlas.**
+
+**Decisiones que tomó el dueño esta tarde y que aún NO están en código:**
+1. **Fuente del gasto → camino A.** Una casilla más en cada gasto con tres respuestas: *la pagó la caja de la iglesia · se le devuelve a quien la puso · es un aporte que no se devuelve*. Puramente aditivo, no toca Tesorería, no toca los gastos ya guardados. Descartados por ahora B/C/D (ver `docs` del análisis). **Condición que puso el dueño:** debe incluir **poder corregir un gasto**, porque hoy un gasto solo se puede crear y borrar.
+2. **Las correcciones llevan rastro.** Vale tanto para los gastos como para Tesorería: se puede arreglar un monto mal tecleado, pero queda escrito quién lo cambió y cuándo. Esto **cierra** la pregunta de diseño que estaba abierta (`UPDATE` a secas queda descartado).
+3. El dueño respondió que **la caja de la iglesia casi nunca adelanta** (0-2 de cada 10 eventos): por eso A y no D.
+
+**Trabajo abierto, priorizado:**
+
+1. **La casilla de la fuente del gasto + corregir un gasto con rastro** (decisiones 1 y 2 de arriba). Ya no necesita brainstorming: está decidido, necesita spec y plan.
+2. **Dos funciones a medio construir que solo necesitan la pantalla** — son lo más barato del proyecto:
+   - **"No puedo servir ese día"** (`fecha_no_disp`): la tabla existe, `asignaciones.js` la lee al asignar y **la pantalla del líder ya pinta el aviso**. Nada la escribe jamás. **Media tarde.**
+   - **Retiro seguro de niños**: la BD y el servidor ya aceptan y guardan `nino.autorizados`; solo falta el campo en el formulario. ⚠️ **Ojo:** la mitad de "quién retiró" se fue con la asistencia (ver arriba), así que hoy esto es solo *quién puede retirarlo*. Y **la autorización que firman los padres ya promete recoger ese dato** (`legal/consentimientos.md:133`): hay una brecha entre el documento legal y lo que hace el sistema.
+3. **Corregir el nombre de una persona** — el documento viejo lo pintaba caro ("queda así para siempre en el directorio, las asistencias y los impresos", que suena a datos duplicados). **Es falso:** el nombre vive solo en `persona.nombre` y todo lo demás llega por `JOIN`. Es añadir una columna a un esquema zod que ya existe.
+4. **Escuela Dominical no tiene editar ni borrar nada** (`ninos.js` no tiene ni un `PATCH` ni un `DELETE`). Bloquea el punto 2: una lista de autorizados que no se puede corregir sirve de poco cuando la abuela cambia.
+5. **El formulario público de visitas no pide ningún dato de contacto** mientras la página promete "te contactaremos pronto", y **no hay ninguna pantalla que liste `contacto_publico`**. Hay mensajes de visitas guardados que nadie ha mirado nunca. *(Matiz: la notificación sí lleva el texto completo, así que no se pierden del todo.)*
+6. **Peticiones de oración** — matiz importante frente a la nota vieja: *sí* se puede pedir oración hoy, por chat directo con el pastor. Lo que no existe es la petición como objeto (estado, lista, anonimato). Es la única propuesta que sirve a **toda** la congregación. Dato sensible: hay que pasar por el consentimiento versionado que ya existe.
+7. **Editar el himnario desde la app** · **eventos que se repiten** · **ficha de membresía** (fecha de bautismo = dato sensible).
+
+**Huecos verificados que nadie había anotado:**
+- **Nada del módulo de niños se audita** salvo lo que ya se quitó (ver arriba).
+- **Borrar un gasto de Organización no deja auditoría**, a diferencia del resto del módulo.
+- **`upload-validacion.test.js` fija el puerto 3941 a mano** → dos suites a la vez se pisan, y el síntoma ("el servidor de pruebas no respondió a tiempo") no dice nada de la causa.
+- Tablas sin usar: **`recurso`** (cero referencias) y **`dispositivo_push`** (legacy, pero **su endpoint de escritura sigue vivo y expuesto** en `server.js`).
+
+---
+
+### 👉 POR DÓNDE RETOMAR (al 30 jul 2026 · mañana — 409 tests; los 11 commits de aquí YA se subieron)
 
 **Lo primero: subir.** `main` va **11 commits por delante** de GitHub (`git log origin/main..main`). Hasta que Pablo los suba con GitHub Desktop, **nada de esto está en producción** — incluida la zona horaria, que es la que arregla cinco fallos de fecha de golpe. *(El documento anterior decía "nada pendiente de subir" y ya entonces había uno.)*
 
