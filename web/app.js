@@ -1198,6 +1198,11 @@ async function pintarNoDispServicio(){
     // consulta resolviera, no lo pisamos limpiando algo que no es nuestro.
     if(m && m.textContent===MSG_NO_DISP_ERROR){ m.style.color='var(--muted)'; m.textContent=''; }
   }catch{
+    // Misma guarda que la rama de exito: si la respuesta (fallida) ya es
+    // vieja porque el evento elegido cambio mientras esperabamos, no hay que
+    // pintar "no se pudo comprobar" encima de una comprobacion posterior que
+    // si funciono.
+    if((selEv.selectedOptions[0]?.dataset.fecha||'')!==fecha) return;
     // Nunca bloquea ni rompe la pantalla: sin marcas se puede asignar igual.
     // Pero sin este aviso, "nadie marco nada" y "no se pudo comprobar" se ven
     // identicos (el desplegable queda igual de limpio en los dos casos).
