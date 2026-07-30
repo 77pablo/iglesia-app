@@ -80,16 +80,30 @@ function _sesionCaducada(){
 }
 async function api(path, opts={}){
   const teniaToken = !!token();
-  let r;
+  // Doble toque = registro duplicado. Existía conBoton() para evitarlo, pero
+  // solo lo usaban 9 de ~79 manejadores que escriben, y justo se quedaban fuera
+  // los que usa la gente no técnica: guardar asistencia, crear una clase,
+  // publicar un aviso, aceptar un servicio. En vez de envolverlos uno a uno
+  // —79 sitios donde equivocarse, y el siguiente que alguien escriba volvería a
+  // salir sin protección— se bloquea aquí, que es por donde pasan todos.
+  //
+  // botonActual() lee el `event` en curso, así que solo funciona mientras el
+  // manejador va sin interrupciones. Los que suben un archivo primero (hay 6)
+  // llegan aquí con el evento ya perdido: esos llevan su conBoton() explícito.
+  const soltar = /^(POST|PATCH|PUT|DELETE)$/i.test(opts.method||'GET')
+    ? _tomarBoton(botonActual()) : null;
   try{
-    r = await fetch(API+path, { ...opts,
-      headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+token(), ...(opts.headers||{}) }});
-  }catch{ throw new Error(ERR_CONEXION); }
-  const data = await r.json().catch(()=>({}));
-  if(r.status===401 && teniaToken){ _sesionCaducada(); throw new Error(ERR_SESION); }
-  if(r.status===429) throw new Error('Estás yendo muy rápido. Espera un momento y vuelve a intentarlo.');
-  if(!r.ok) throw new Error(data.error||'No se pudo completar la acción. Inténtalo otra vez.');
-  return data;
+    let r;
+    try{
+      r = await fetch(API+path, { ...opts,
+        headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+token(), ...(opts.headers||{}) }});
+    }catch{ throw new Error(ERR_CONEXION); }
+    const data = await r.json().catch(()=>({}));
+    if(r.status===401 && teniaToken){ _sesionCaducada(); throw new Error(ERR_SESION); }
+    if(r.status===429) throw new Error('Estás yendo muy rápido. Espera un momento y vuelve a intentarlo.');
+    if(!r.ok) throw new Error(data.error||'No se pudo completar la acción. Inténtalo otra vez.');
+    return data;
+  } finally { if(soltar) soltar(); }
 }
 // Pone el https:// que el backend exige a un enlace pegado como lo copia la
 // gente desde el navegador del teléfono ("www.youtube.com/watch?v=…").
@@ -128,11 +142,32 @@ function botonActual(){
   try{ return (typeof event!=='undefined' && event && event.target && event.target.closest) ? event.target.closest('button') : (document.activeElement && document.activeElement.tagName==='BUTTON' ? document.activeElement : null); }
   catch{ return null; }
 }
-async function conBoton(btn, fn){
+// Cuenta cuántas peticiones tiene en vuelo cada botón: dos peticiones seguidas
+// del mismo manejador (subir el archivo y luego guardar) no pueden soltarlo a
+// mitad de camino, que es justo cuando el segundo toque duplica el registro.
+const _enVuelo=new WeakMap();
+function _tomarBoton(btn, texto){
+  if(!btn) return ()=>{};
+  const n=(_enVuelo.get(btn)||0)+1;
+  _enVuelo.set(btn,n);
+  if(n===1){
+    btn.disabled=true;
+    if(texto){ btn.dataset.textoOriginal=btn.textContent; btn.textContent=texto; }
+  }
+  return ()=>{
+    const m=(_enVuelo.get(btn)||1)-1;
+    _enVuelo.set(btn,m);
+    if(m<=0){
+      btn.disabled=false;
+      if(btn.dataset.textoOriginal!==undefined){ btn.textContent=btn.dataset.textoOriginal; delete btn.dataset.textoOriginal; }
+    }
+  };
+}
+async function conBoton(btn, fn, texto){
   if(btn && btn.disabled) return;
-  if(btn) btn.disabled=true;
+  const soltar=_tomarBoton(btn, texto);
   try{ return await fn(); }
-  finally{ if(btn) btn.disabled=false; }
+  finally{ soltar(); }
 }
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?{m:p[1],d:p[2]}:null; }
@@ -1683,12 +1718,16 @@ async function guardarMaterialMus(){
   if(!titulo){ toast('Pon un título'); return; }
   const file=$('mm-file').files[0];
   if(!file){ toast('Elige un archivo'); return; }
-  try{
-    toast('Subiendo archivo…');
-    const archivo_url=await uploadArchivo(file);
-    await api('/musica/material',{method:'POST',body:JSON.stringify({titulo,archivo_url})});
-    $('form-material-mus').innerHTML=''; cargarMaterialMusica(); toast('📎 Material compartido');
-  }catch(e){ toast(e.message); }
+  // Subir por datos móviles tarda, y el aviso "Subiendo…" se borraba solo a los
+  // 2,8 s: el botón seguía vivo y sin cambiar de aspecto, así que quien tocaba
+  // otra vez subía el archivo dos veces. El texto del botón lo dice mientras dura.
+  await conBoton(botonActual(), async()=>{
+    try{
+      const archivo_url=await uploadArchivo(file);
+      await api('/musica/material',{method:'POST',body:JSON.stringify({titulo,archivo_url})});
+      $('form-material-mus').innerHTML=''; cargarMaterialMusica(); toast('📎 Material compartido');
+    }catch(e){ toast(e.message); }
+  }, 'Subiendo…');
 }
 function borrarMaterialMus(id){ modalConfirm('¿Eliminar este material?', async()=>{
   try{ await api('/musica/material/'+id,{method:'DELETE'}); cargarMaterialMusica(); toast('Material eliminado'); }catch(e){ toast(e.message); } }); }
@@ -2124,12 +2163,17 @@ async function guardarMaterial(){
   const titulo=$('m-titulo').value.trim();
   if(!titulo){ toast('Pon un título'); return; }
   const file=$('m-file').files[0];
-  try{
-    let material_url='';
-    if(file){ toast('Subiendo documento…'); material_url=await uploadArchivo(file); }
-    await api('/ninos/material',{method:'POST',body:JSON.stringify({clase_id:_claseActual,titulo,fecha:fechaSelectValor('m'),versiculo:$('m-vers').value.trim(),material_url})});
-    $('form-material').innerHTML=''; cargarMaterial(); toast('📖 Lección agregada');
-  }catch(e){ toast(e.message); }
+  // Este es el caso que lo destapó: la maestra sube el PDF de la lección desde
+  // datos móviles, el aviso desaparece a los 2,8 s, no pasa nada durante 20, y
+  // al volver a tocar "Guardar" quedan DOS lecciones.
+  await conBoton(botonActual(), async()=>{
+    try{
+      let material_url='';
+      if(file) material_url=await uploadArchivo(file);
+      await api('/ninos/material',{method:'POST',body:JSON.stringify({clase_id:_claseActual,titulo,fecha:fechaSelectValor('m'),versiculo:$('m-vers').value.trim(),material_url})});
+      $('form-material').innerHTML=''; cargarMaterial(); toast('📖 Lección agregada');
+    }catch(e){ toast(e.message); }
+  }, file?'Subiendo…':'Guardando…');
 }
 async function cargarNinos(){
   const c=$('ninos-lista');
@@ -2344,13 +2388,17 @@ function _rgTipo(v){ const link=v==='link'; if($('rg-url'))$('rg-url').style.dis
 async function guardarRecursoGrupo(){
   const titulo=$('rg-titulo').value.trim(); if(!titulo) return toast('Pon un título');
   const tipo=$('rg-tipo').value;
-  try{
-    let url;
-    if(tipo==='archivo'){ const f=$('rg-file').files[0]; if(!f) return toast('Elige un archivo'); toast('Subiendo…'); url=await uploadArchivo(f); }
-    else { url=normalizarEnlace($('rg-url').value); if(!url) return toast('Pega el link'); }
-    await api('/grupo/'+_grupoSel+'/recursos',{method:'POST',body:JSON.stringify({tipo,titulo,url})});
-    $('mg-rec-form').innerHTML=''; cargarRecursosGrupo(); toast('🔗 Recurso compartido');
-  }catch(e){ toast(e.message); }
+  const archivo = tipo==='archivo' ? ($('rg-file').files[0]||null) : null;
+  if(tipo==='archivo' && !archivo) return toast('Elige un archivo');
+  await conBoton(botonActual(), async()=>{
+    try{
+      let url;
+      if(archivo) url=await uploadArchivo(archivo);
+      else { url=normalizarEnlace($('rg-url').value); if(!url) return toast('Pega el link'); }
+      await api('/grupo/'+_grupoSel+'/recursos',{method:'POST',body:JSON.stringify({tipo,titulo,url})});
+      $('mg-rec-form').innerHTML=''; cargarRecursosGrupo(); toast('🔗 Recurso compartido');
+    }catch(e){ toast(e.message); }
+  }, archivo?'Subiendo…':'Guardando…');
 }
 function borrarRecursoGrupo(id){ modalConfirm('¿Eliminar este recurso?', async()=>{ try{ await api('/grupo/'+_grupoSel+'/recursos/'+id,{method:'DELETE'}); cargarRecursosGrupo(); toast('Recurso eliminado'); }catch(e){ toast(e.message);} }); }
 // --- Miembros + avisar a uno/todos ---
@@ -2488,15 +2536,19 @@ function _prrTipo(v){ const f=v==='archivo'; if($('prr-file-zona'))$('prr-file-z
 async function guardarRecPredica(){
   const titulo=$('prr-titulo').value.trim(); if(!titulo) return toast('Pon un título');
   const tipo=$('prr-tipo').value;
-  try{
-    let url='';
-    if(tipo==='archivo'){ const f=$('prr-file').files[0]; if(!f) return toast('Elige un archivo'); toast('Subiendo…'); url=await uploadArchivo(f); }
-    // Solo 'link' es una URL. 'libro' es una referencia de texto libre
-    // ("Comentario de Juan (Hendriksen)") y ponerle https:// la destrozaría.
-    else { const v=$('prr-url').value; url = tipo==='link' ? normalizarEnlace(v) : v.trim(); }
-    await api('/predica/'+window._predActual+'/recurso',{method:'POST',body:JSON.stringify({tipo,titulo,url})});
-    toast('Recurso agregado'); verPredica(window._predActual);
-  }catch(e){ toast(e.message); }
+  const archivo = tipo==='archivo' ? ($('prr-file').files[0]||null) : null;
+  if(tipo==='archivo' && !archivo) return toast('Elige un archivo');
+  await conBoton(botonActual(), async()=>{
+    try{
+      let url='';
+      if(archivo) url=await uploadArchivo(archivo);
+      // Solo 'link' es una URL. 'libro' es una referencia de texto libre
+      // ("Comentario de Juan (Hendriksen)") y ponerle https:// la destrozaría.
+      else { const v=$('prr-url').value; url = tipo==='link' ? normalizarEnlace(v) : v.trim(); }
+      await api('/predica/'+window._predActual+'/recurso',{method:'POST',body:JSON.stringify({tipo,titulo,url})});
+      toast('Recurso agregado'); verPredica(window._predActual);
+    }catch(e){ toast(e.message); }
+  }, archivo?'Subiendo…':'Guardando…');
 }
 function borrarRecPredica(rid){ modalConfirm('¿Eliminar este recurso?', async()=>{ try{ await api('/predica/recurso/'+rid,{method:'DELETE'}); verPredica(window._predActual); toast('Recurso eliminado'); }catch(e){ toast(e.message);} }); }
 // --- Gestión del rol Predicador (solo el pastor) ---
@@ -2704,13 +2756,15 @@ async function guardarPerfilDirectorio(){
     mostrar_telefono:$('dp-mostrar-tel').checked,
     mostrar_email:$('dp-mostrar-email').checked,
   };
-  try{
-    const file=$('dp-foto').files[0];
-    if(file){ toast('Subiendo foto…'); body.foto_url=await uploadArchivo(file); }
-    await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
-    toast('✅ Perfil actualizado');
-    vistaDirectorio();
-  }catch(e){ toast(e.message); }
+  const file=$('dp-foto').files[0];
+  await conBoton(botonActual(), async()=>{
+    try{
+      if(file) body.foto_url=await uploadArchivo(file);
+      await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
+      toast('✅ Perfil actualizado');
+      vistaDirectorio();
+    }catch(e){ toast(e.message); }
+  }, file?'Subiendo foto…':'Guardando…');
 }
 
 // ============================================================

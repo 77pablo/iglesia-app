@@ -91,6 +91,25 @@ h1,h2,h3{letter-spacing:-.018em;line-height:1.25;}
 .btn.danger{background:var(--red);box-shadow:0 1px 2px rgba(220,38,38,.2);}
 .btn.danger:hover{background:var(--red-tx);box-shadow:0 6px 20px rgba(220,38,38,.28);}
 .btn.small-btn{flex:none;width:auto;padding:10px 16px;font-size:.844rem;}
+/* Botón trabajando.
+   Existía conBoton(), que deshabilita el botón mientras dura la petición, pero
+   en las 703 líneas de este archivo NO había ni una regla :disabled: como .btn
+   trae su propio fondo, el navegador no lo apagaba y no cambiaba absolutamente
+   nada a la vista. La protección estaba puesta y era invisible, así que la
+   persona volvía a tocar igual — y en las subidas por datos móviles eso son 20
+   segundos de nada, y dos lecciones subidas.
+   El cursor "progress" y el 55% de opacidad son el aviso; los :hover se anulan
+   porque un botón apagado que sigue reaccionando al dedo dice lo contrario. */
+.btn:disabled,.btn.ghost:disabled,.btn.danger:disabled,.link:disabled,.cal-navbtn:disabled{
+  opacity:.55;cursor:progress;box-shadow:none;transform:none;}
+/* Se repiten los valores de reposo en vez de usar `inherit`, que tomaría los del
+   contenedor y no los del propio botón (un .btn ghost apagado se volvería del
+   color de la tarjeta). Van aquí abajo y con más especificidad que los :hover
+   de arriba, que es lo que las hace ganar. */
+.btn:disabled:hover{background:var(--primary);}
+.btn.ghost:disabled:hover{background:var(--surface);border-color:var(--border);filter:none;}
+.btn.danger:disabled:hover{background:var(--red);}
+.link:disabled:hover{color:var(--primary-tx);gap:4px;}
 .row{display:flex;gap:10px;}
 .row > .btn{flex:1;}                      /* solo los botones en fila comparten ancho */
 .login-card .step > .btn{width:100%;}     /* botón único de paso: full-width consistente */
