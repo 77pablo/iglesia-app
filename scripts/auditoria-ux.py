@@ -219,8 +219,12 @@ def preparar(page, extra):
         if tarjeta.count():
             tarjeta.first.click()
         else:
-            page.once("dialog", lambda d: d.accept("Lista de prueba"))
+            # El titulo se pide con modalPrompt(), un modal de la propia app:
+            # ya no hay prompt() del navegador que atrapar con page.once.
             page.click('button:has-text("Nueva lista")')
+            page.wait_for_selector("#mp-txt", timeout=5000)
+            page.fill("#mp-txt", "Lista de prueba")
+            page.click("#mp-ok")
         page.wait_for_timeout(800)
     elif extra == "caso":
         tarjeta = page.locator("#lista-casos .item-card")
