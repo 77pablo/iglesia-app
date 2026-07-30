@@ -48,11 +48,47 @@ const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 // ---------- Helpers ----------
 function $(id){ return document.getElementById(id); }
 function token(){ return localStorage.getItem('token'); }
+// Mensajes que entiende una persona, no un programador.
+//
+// Toda la app pide datos por aquí, y hay 114 sitios que hacen toast(e.message)
+// o pintan e.message en rojo. Así que lo que salga de esta función es,
+// literalmente, lo que lee la congregación cuando algo falla. Salían tres cosas
+// que no se pueden leer:
+//
+//  - Sin señal, fetch rechaza con un TypeError cuyo mensaje es "Failed to
+//    fetch". Una feligresa en el subterráneo del templo tocaba "✅ Acepto" y
+//    leía eso, en inglés.
+//  - El token dura 30 días. Al día 31 el backend responde 401 "Token invalido o
+//    expirado", se pintaba en rojo en mitad de la pantalla y la app se quedaba
+//    ahí: la única salida era saber buscar "Cerrar sesión" en el menú.
+//  - Al pasarse del límite de peticiones, un 429 sin decir cuánto esperar.
+const ERR_CONEXION = 'No hay conexión. Revisa tus datos o el wifi e inténtalo otra vez.';
+const ERR_SESION   = 'Tu sesión se cerró por seguridad. Vuelve a entrar.';
+let _avisandoSesion = false;
+function _sesionCaducada(){
+  localStorage.removeItem('token');
+  const app=$('app');
+  // Si la app todavía no está a la vista, estamos arrancando con un token viejo
+  // y no hay nada que interrumpir: cargarApp() enseña el login por su cuenta.
+  if(!app || app.classList.contains('hidden')) return;
+  if(_avisandoSesion) return;   // varias peticiones a la vez → un solo aviso
+  _avisandoSesion=true;
+  try{ toast(ERR_SESION); }catch{}
+  // Se recarga en vez de solo enseñar el login: media app quedaría pintada
+  // detrás con los datos de la sesión anterior.
+  setTimeout(()=>location.reload(), 1500);
+}
 async function api(path, opts={}){
-  const r = await fetch(API+path, { ...opts,
-    headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+token(), ...(opts.headers||{}) }});
+  const teniaToken = !!token();
+  let r;
+  try{
+    r = await fetch(API+path, { ...opts,
+      headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+token(), ...(opts.headers||{}) }});
+  }catch{ throw new Error(ERR_CONEXION); }
   const data = await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(data.error||'Error');
+  if(r.status===401 && teniaToken){ _sesionCaducada(); throw new Error(ERR_SESION); }
+  if(r.status===429) throw new Error('Estás yendo muy rápido. Espera un momento y vuelve a intentarlo.');
+  if(!r.ok) throw new Error(data.error||'No se pudo completar la acción. Inténtalo otra vez.');
   return data;
 }
 // Pone el https:// que el backend exige a un enlace pegado como lo copia la
@@ -74,8 +110,13 @@ function normalizarEnlace(v){
 // Sube un archivo y devuelve su URL
 async function uploadArchivo(file){
   const fd=new FormData(); fd.append('archivo',file);
-  const r=await fetch(API+'/upload',{method:'POST',headers:{Authorization:'Bearer '+token()},body:fd});
+  let r;
+  // Subir por datos móviles es justo donde se corta la conexión, y aquí también
+  // salía "Failed to fetch" (esta ruta no pasa por api()).
+  try{ r=await fetch(API+'/upload',{method:'POST',headers:{Authorization:'Bearer '+token()},body:fd}); }
+  catch{ throw new Error(ERR_CONEXION); }
   const d=await r.json().catch(()=>({}));
+  if(r.status===401){ _sesionCaducada(); throw new Error(ERR_SESION); }
   if(!r.ok) throw new Error(d.error||'No se pudo subir el archivo');
   return d.url;
 }
