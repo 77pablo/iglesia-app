@@ -36,6 +36,30 @@ test('parsearDuracion entiende el formato de duracion de Go', () => {
   assert.equal(parsearDuracion(null), null);
 });
 
+// Go imprime las duraciones diminutas en microsegundos (con el signo micro) y en
+// nanosegundos: truncateDuration (cmd/litestream/generations.go) deja pasar esas
+// unidades cuando el retraso es menor de 1 ms, que es justo el caso de un
+// respaldo perfectamente al dia. Sin estas unidades, lo mas sano posible se leia
+// como formato irreconocible.
+test('parsearDuracion entiende microsegundos y nanosegundos', () => {
+  // Con tolerancia: son productos en coma flotante (900 * 1e-9 no da 9e-7 exacto).
+  const cerca = (a, b) => assert.ok(Math.abs(a - b) < 1e-15, `${a} deberia ser ~${b}`);
+  cerca(parsearDuracion('250µs'), 0.00025);   // signo micro, el que emite Go
+  cerca(parsearDuracion('250us'), 0.00025);   // por si el binario/consola lo degrada a ASCII
+  cerca(parsearDuracion('900ns'), 0.0000009);
+  cerca(parsearDuracion('1.5ms'), 0.0015);
+  // Y lo que importa de verdad: un retraso diminuto es SANO, no formato raro.
+  assert.equal(interpretarGeneraciones(salidaCon('250µs', '2026-07-28T14:59:00.000Z')).estado, 'ok');
+});
+
+// Un retraso NEGATIVO significa que la replica no va por detras (no hay nada
+// pendiente). Ignorar el signo convertia "-2h0m0s" en 7200 segundos de retraso:
+// una alarma roja falsa en el caso mas sano que existe.
+test('parsearDuracion respeta el signo: un retraso negativo no es retraso', () => {
+  assert.equal(parsearDuracion('-1.5s'), -1.5);
+  assert.equal(interpretarGeneraciones(salidaCon('-2h0m0s', '2026-07-28T14:59:00.000Z')).estado, 'ok');
+});
+
 test('retraso pequeno -> ok, y devuelve la fecha del ultimo dato replicado', () => {
   const r = interpretarGeneraciones(salidaCon('1.2s', '2026-07-28T14:58:00.000Z'));
   assert.equal(r.estado, 'ok');
@@ -88,6 +112,47 @@ test('formato irreconocible -> desconocido, NUNCA mal', () => {
   const r = interpretarGeneraciones('vaya cosa mas rara\nsin columnas');
   assert.equal(r.estado, 'desconocido');
   assert.equal(r.motivo, 'formato_no_reconocido');
+});
+
+// --- Litestream mezcla su log con la tabla (el fallo visto en Render) -------
+//
+// litestream v0.3.13 manda su log a STDOUT salvo que se le pida lo contrario
+// (cmd/litestream/main.go: `logOutput := os.Stdout`), y la tabla la escribe con
+// un tabwriter que solo se vuelca al terminar (`defer w.Flush()`). Consecuencia:
+// las lineas de log salen ANTES de la cabecera. Leer lineas[0] como cabecera
+// daba "formato_no_reconocido" con una tabla perfectamente valida debajo.
+const LOG_INFO = 'time=2026-07-28T14:59:59.000Z level=INFO msg="replica syncing" name=s3';
+const LOG_ERROR = 'time=2026-07-28T14:59:59.000Z level=ERROR msg="cannot list generations" '
+  + 'error="AccessDenied: endpoint=https://abc123.r2.cloudflarestorage.com key=AKIAsecreta"';
+
+test('un log de litestream antes de la cabecera no impide leer la tabla', () => {
+  const r = interpretarGeneraciones(LOG_INFO + '\n' + salidaCon('2s', '2026-07-28T14:59:00.000Z'));
+  assert.equal(r.estado, 'ok');
+  assert.equal(r.ultimo, '2026-07-28T14:59:00.000Z');
+});
+
+// Este es el caso peligroso: cuando listar generaciones falla de verdad,
+// generations.go escribe el ERROR y CONTINUA, asi que la tabla sale vacia. Se
+// veia como ambar ("no se pudo comprobar", sin aviso) cuando es un respaldo
+// roto. El indicador existe precisamente para que eso no pase inadvertido.
+test('si litestream loguea un ERROR el respaldo esta MAL, no "no se pudo comprobar"', () => {
+  const r = interpretarGeneraciones(LOG_ERROR + '\n' + CABECERA);
+  assert.equal(r.estado, 'mal');
+  assert.equal(r.motivo, 'salida_con_error');
+});
+
+test('un ERROR manda aunque venga una tabla con datos detras', () => {
+  // Con varias replicas, una puede fallar y otra responder. Si litestream dice
+  // que algo no pudo listar, la foto esta incompleta: no se declara sana.
+  const r = interpretarGeneraciones(LOG_ERROR + '\n' + salidaCon('1s', '2026-07-28T14:59:00.000Z'));
+  assert.equal(r.estado, 'mal');
+  assert.equal(r.motivo, 'salida_con_error');
+});
+
+test('el caso del ERROR tampoco filtra credenciales', () => {
+  const r = interpretarGeneraciones(LOG_ERROR + '\n' + CABECERA);
+  assert.ok(!/cloudflarestorage|AKIA|key=/.test(JSON.stringify(r)),
+    'el resultado no puede arrastrar la salida cruda de litestream');
 });
 
 test('con varias generaciones se toma la mas reciente', () => {
@@ -303,20 +368,41 @@ test('decidirBd: gracia un segundo antes del limite (179s de vida) -> todavia pr
   assert.equal(r.motivo, 'arrancando');
 });
 
+// El conjunto de motivos es CERRADO y compartido con el frontend. Vive aqui
+// arriba porque lo usan dos tests: el de "ninguna rama da undefined" y el que
+// comprueba que la tarjeta sabe pintar todos.
+const MOTIVOS_CERRADOS = new Set([
+  'sin_generaciones', 'retraso_alto', 'formato_no_reconocido', 'comando_fallo',
+  'salida_con_error', 'tiempo_agotado', 'binario_ausente', 'sello_ausente',
+  'sello_viejo', 'arrancando', 'error_interno', 'sin_configurar'
+]);
+
+// Un motivo sin etiqueta en el frontend no revienta nada: deja un renglon a
+// medias en la tarjeta, que es como no tener indicador. Se paga cada vez que se
+// anade un motivo aqui y se olvida alla (paso al anadir 'salida_con_error'), asi
+// que se comprueba leyendo el propio web/app.js -- no hay forma de importarlo.
+test('la tarjeta del panel sabe pintar TODOS los motivos', async () => {
+  const fs = await import('node:fs');
+  const url = new URL('../../web/app.js', import.meta.url);
+  const src = fs.readFileSync(url, 'utf8');
+  const bloque = src.match(/const PERS_MOTIVO=\{([\s\S]*?)\};/);
+  assert.ok(bloque, 'no se encontro PERS_MOTIVO en web/app.js');
+  const etiquetados = new Set([...bloque[1].matchAll(/(\w+)\s*:\s*'/g)].map(m => m[1]));
+  for (const motivo of MOTIVOS_CERRADOS) {
+    assert.ok(etiquetados.has(motivo), `el motivo '${motivo}' no tiene etiqueta en PERS_MOTIVO`);
+  }
+});
+
 test('decidirBd: por ningun camino sale motivo undefined', () => {
   // El conjunto de motivos es cerrado (ver comentario junto a la constante de
   // motivos del spec) y 'undefined' no pertenece a el: si alguna rama lo
   // produjera, se rompe el contrato de "modo/motivo" que consume el resto del
   // modulo y el frontend.
-  const MOTIVOS_CERRADOS = new Set([
-    'sin_generaciones', 'retraso_alto', 'formato_no_reconocido', 'comando_fallo',
-    'tiempo_agotado', 'binario_ausente', 'sello_ausente', 'sello_viejo',
-    'arrancando', 'error_interno', 'sin_configurar'
-  ]);
   const casos = [
     { r: { salida: salidaCon('1.2s', '2026-07-28T14:58:00.000Z') } },   // ok, motivo null
     { r: { salida: '' }, arranqueMs: ARRANQUE_VIEJO },
     { r: { salida: 'vaya cosa mas rara\nsin columnas' } },
+    { r: { salida: LOG_ERROR + '\n' + CABECERA } },
     { r: { motivo: 'binario_ausente' } },
     { r: { motivo: 'tiempo_agotado' } },
     { r: { motivo: 'comando_fallo' } }

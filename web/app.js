@@ -2893,6 +2893,7 @@ const PERS_PINTA={ok:['✅','--green-tx','Respaldando'],mal:['⛔','--red-tx','S
   desconocido:['⚠️','--amber-tx','No se pudo comprobar'],no_aplica:['—','--muted','Esta instancia no replica']};
 const PERS_MOTIVO={sin_generaciones:'nunca se ha replicado nada',retraso_alto:'el respaldo va muy atrasado',
   formato_no_reconocido:'respuesta inesperada de Litestream',comando_fallo:'Litestream devolvió un error',
+  salida_con_error:'Litestream no pudo leer el respaldo (revisa las variables R2_*/LITESTREAM_*)',
   tiempo_agotado:'Litestream no respondió a tiempo',binario_ausente:'no hay Litestream en esta máquina',
   sello_ausente:'el respaldo de archivos no ha corrido nunca',sello_viejo:'el respaldo de archivos está detenido',
   arrancando:'el servicio acaba de arrancar',error_interno:'error al comprobar',

@@ -12,6 +12,15 @@
 #    LITESTREAM_ACCESS_KEY_ID     Access Key ID del token R2
 #    LITESTREAM_SECRET_ACCESS_KEY Secret Access Key del token R2
 # ============================================================
+# El log va a STDERR, no a stdout (el defecto de litestream v0.3.13 es stdout).
+# No es cosmetico: `litestream generations` escribe la tabla con un tabwriter que
+# solo se vuelca al terminar, asi que cualquier linea de log sale ANTES de la
+# cabecera y contamina la salida que lee el indicador de respaldo
+# (backend/src/persistencia.js). Con stderr, stdout queda limpio: solo la tabla.
+# En Render no se pierde nada, los dos canales van al mismo registro.
+logging:
+  stderr: true
+
 dbs:
   - path: ${DB_PATH}
     replicas:

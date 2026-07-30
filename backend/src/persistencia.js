@@ -25,22 +25,41 @@ export const GRACIA_ARRANQUE_SEG = 3 * 60;   // margen para la primera vuelta de
 // despertar del sueno del plan free, /data viene vacio y el sello aun no existe.
 export const ARRANQUE_MS = Date.now();
 
-// Duracion en formato Go ("1.5s", "2m30s", "1h0m0s", "500ms"), que es como la
-// imprime litestream. Devuelve segundos, o null si no se reconoce.
+// Duracion en formato Go ("1.5s", "2m30s", "1h0m0s", "500ms", "250µs"), que es
+// como la imprime litestream. Devuelve segundos, o null si no se reconoce.
+//
+// Las unidades diminutas ('ns', 'µs') NO son un caso exotico: truncateDuration
+// (cmd/litestream/generations.go) las emite en cuanto el retraso baja de 1 ms, o
+// sea cuando la replica va perfectamente al dia. Sin ellas, el estado mas sano
+// posible se leia como formato irreconocible y la tarjeta salia ambar.
 export function parsearDuracion(txt) {
   const s = String(txt ?? '').trim();
   if (!s) return null;
-  const factor = { ms: 0.001, s: 1, m: 60, h: 3600 };
-  const re = /(\d+(?:\.\d+)?)(ms|h|m|s)/g;   // 'ms' primero: si no, "500ms" leeria "500m"
+  const factor = { ns: 1e-9, 'µs': 1e-6, us: 1e-6, ms: 0.001, s: 1, m: 60, h: 3600 };
+  // Las unidades de dos letras van primero en el alternador: si 'm' se probara
+  // antes que 'ms', "500ms" se leeria como 500 minutos.
+  const re = /(\d+(?:\.\d+)?)(ns|µs|us|ms|h|m|s)/g;
   let total = 0, hubo = false, m;
   while ((m = re.exec(s)) !== null) { total += parseFloat(m[1]) * factor[m[2]]; hubo = true; }
-  return hubo ? total : null;
+  if (!hubo) return null;
+  // El signo se respeta: un retraso negativo significa que la replica NO va por
+  // detras. Ignorarlo convertia "-2h0m0s" en 7200 segundos de retraso, o sea una
+  // alarma roja falsa en el caso mas sano que hay.
+  return s.startsWith('-') ? -total : total;
 }
 
 // Interpreta la salida de `litestream generations`.
-// La cabecera se lee por NOMBRE de columna, no por posicion: si una version
-// futura reordena o renombra columnas, el resultado es 'desconocido' (ambar, sin
-// aviso) en vez de una alarma falsa. Ante la duda, callar, no gritar.
+//
+// OJO: esa salida NO es solo la tabla. litestream v0.3.13 manda su log a STDOUT
+// salvo que se le pida lo contrario (cmd/litestream/main.go: `logOutput :=
+// os.Stdout`; se lo pedimos con `logging: stderr: true` en litestream.yml), y la
+// tabla la escribe con un tabwriter que solo se vuelca al terminar (`defer
+// w.Flush()`). O sea que las lineas de log salen ANTES de la cabecera. Por eso
+// aqui la cabecera se BUSCA y no se supone en la linea 0.
+//
+// La cabecera se identifica por NOMBRE de columna, no por posicion: si una
+// version futura reordena o renombra columnas, el resultado es 'desconocido'
+// (ambar, sin aviso) en vez de una alarma falsa. Ante la duda, callar, no gritar.
 export function interpretarGeneraciones(salida) {
   const nada = { estado: 'mal', motivo: 'sin_generaciones', ultimo: null, retraso_seg: null };
   const raro = { estado: 'desconocido', motivo: 'formato_no_reconocido', ultimo: null, retraso_seg: null };
@@ -48,14 +67,31 @@ export function interpretarGeneraciones(salida) {
   const lineas = String(salida ?? '').split('\n').map(l => l.trim()).filter(Boolean);
   if (lineas.length === 0) return nada;
 
-  const cab = lineas[0].toLowerCase().split(/\s+/);
+  // Un level=ERROR significa que litestream no pudo listar alguna replica y
+  // siguio adelante (generations.go: loguea el error y `continue`), asi que la
+  // tabla que venga detras esta incompleta. Eso es un respaldo roto, no un "no
+  // pude comprobarlo": antes se leia como ambar, sin aviso, que es exactamente
+  // el fallo silencioso que este modulo existe para delatar. Se mira ANTES de la
+  // tabla, y solo se devuelve el motivo -- nunca el texto, que trae el endpoint
+  // y las llaves.
+  if (lineas.some(l => /\blevel=ERROR\b/.test(l))) {
+    return { estado: 'mal', motivo: 'salida_con_error', ultimo: null, retraso_seg: null };
+  }
+
+  const iCab = lineas.findIndex(l => {
+    const c = l.toLowerCase().split(/\s+/);
+    return c.includes('lag') && c.includes('end');
+  });
+  if (iCab === -1) return raro;
+
+  const cab = lineas[iCab].toLowerCase().split(/\s+/);
   const iLag = cab.indexOf('lag');
   const iEnd = cab.indexOf('end');
-  if (iLag === -1 || iEnd === -1) return raro;
-  if (lineas.length === 1) return nada;   // cabecera sola: nunca se replico
+  const filas = lineas.slice(iCab + 1);
+  if (filas.length === 0) return nada;   // cabecera sola: nunca se replico
 
   let mejor = null;
-  for (const fila of lineas.slice(1)) {
+  for (const fila of filas) {
     const col = fila.split(/\s+/);
     const t = Date.parse(col[iEnd]);
     if (!Number.isFinite(t)) continue;
@@ -72,7 +108,10 @@ export function interpretarGeneraciones(salida) {
     estado: alto ? 'mal' : 'ok',
     motivo: alto ? 'retraso_alto' : null,
     ultimo,
-    retraso_seg: Math.round(retraso)
+    // Un retraso negativo (replica por delante del mtime local) se pinta como 0:
+    // "nada pendiente de replicar" es lo que significa, y "-2 s de retraso" no
+    // le dice nada a quien mira la tarjeta.
+    retraso_seg: Math.max(0, Math.round(retraso))
   };
 }
 
