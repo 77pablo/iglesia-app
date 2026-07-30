@@ -4,7 +4,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware, esLiderEdOPastor, esLiderEdEstricto, esObispo, auditar } from './auth.js';
+// Sin `auditar`: lo unico que se auditaba en este modulo era la asistencia, que
+// ya no existe. Crear clase / inscribir nino / subir leccion nunca se auditaron.
+import { authMiddleware, esLiderEdOPastor, esLiderEdEstricto, esObispo } from './auth.js';
 import { validar, zRutaSubidaOpcional } from './seguridad.js';
 
 const r = Router();
@@ -86,38 +88,17 @@ r.post('/material', soloEncargado, validar(materialSchema), (req, res) => {
   res.json({ ok: true });
 });
 
-// --- Asistencia ---
-const asistenciaNinoSchema = z.object({
-  clase_id: z.coerce.number().int().positive('falta la clase'),
-  fecha: z.string().trim().min(1, 'falta la fecha'),
-  presentes: z.array(z.object({
-    nino_id: z.coerce.number().int().positive(),
-    retiro_por: z.string().trim().optional()
-  })).optional()
-});
-r.post('/asistencia', soloEncargado, validar(asistenciaNinoSchema), (req, res) => {
-  const { clase_id, fecha, presentes } = req.body;
-  if (!claseDeIglesia(clase_id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
-  // No confiar en nino_id tal cual: debe pertenecer a esta clase (evita
-  // vincular asistencia a un nino de otra clase/iglesia; ver auditoria
-  // backend.md #7).
-  const ninosValidos = new Set(
-    db.prepare('SELECT id FROM nino WHERE clase_id = ?').all(clase_id).map(n => n.id)
-  );
-  const presentesValidos = (presentes || []).filter(p => ninosValidos.has(p.nino_id));
-  // DELETE + INSERTs en una sola transaccion (mismo motivo que asistencia.js).
-  db.exec('BEGIN');
-  try {
-    db.prepare('DELETE FROM asistencia_nino WHERE clase_id = ? AND fecha = ?').run(clase_id, fecha);
-    const st = db.prepare('INSERT INTO asistencia_nino (clase_id, nino_id, fecha, retiro_por) VALUES (?,?,?,?)');
-    for (const p of presentesValidos) st.run(clase_id, p.nino_id, fecha, p.retiro_por || null);
-    db.exec('COMMIT');
-  } catch (e) {
-    db.exec('ROLLBACK');
-    return res.status(500).json({ error: 'No se pudo guardar la asistencia' });
-  }
-  auditar(req.user.iglesia_id, req.user.persona_id, 'asistencia_ninos', 'ninos', 'clase ' + clase_id);
-  res.json({ ok: true, total: presentesValidos.length });
-});
+// --- Asistencia: RETIRADA (decision del dueno, 30 jul 2026) ---
+// La iglesia no pasa lista de los ninos, asi que POST /asistencia salio de la
+// app junto con su tarjeta en la pantalla de la clase.
+//
+// La tabla `asistencia_nino` NO se borro a proposito: en produccion hay una
+// iglesia de verdad y lo ya anotado se conserva. Nada la escribe ahora mismo;
+// su indice unico sigue en db.js protegiendo ese historial.
+//
+// Efecto colateral asumido: `asistencia_nino.retiro_por` ("quien se llevo al
+// nino ese domingo") queda sin forma de rellenarse. `nino.autorizados` —quien
+// PUEDE retirarlo— vive en la ficha del nino y sigue en pie.
+// Regresion en test/ninos-sin-asistencia.test.js.
 
 export default r;

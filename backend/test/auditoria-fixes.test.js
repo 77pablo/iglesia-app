@@ -243,24 +243,10 @@ test('asistencia.js: un persona_id ajeno al grupo del evento se descarta silenci
 });
 
 // ------------------------------------------------------------
-// 6b. ninos.js — los nino_id de "presentes" se validan contra la clase.
+// 6b. ninos.js — RETIRADO el 30 jul 2026.
+//
+// Este test comprobaba que POST /api/ninos/asistencia descartaba un nino_id de
+// otra clase (hallazgo #7 de la auditoria de backend). Se fue con el endpoint:
+// la iglesia no pasa lista de los ninos. Ver test/ninos-sin-asistencia.test.js.
+// El aislamiento entre clases lo siguen cubriendo los tests de clase_ed/nino.
 // ------------------------------------------------------------
-test('ninos.js: un nino_id que pertenece a OTRA clase se descarta silenciosamente', async () => {
-  db.prepare('INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?,?)').run(SEM.lider.id, SEM.grupoId, 'lider_ed');
-
-  const claseA = Number(db.prepare("INSERT INTO clase_ed (iglesia_id, nombre) VALUES (?, 'Parvulos')").run(SEM.iglesiaId).lastInsertRowid);
-  const claseB = Number(db.prepare("INSERT INTO clase_ed (iglesia_id, nombre) VALUES (?, 'Primaria')").run(SEM.iglesiaId).lastInsertRowid);
-  const ninoA = Number(db.prepare("INSERT INTO nino (iglesia_id, clase_id, nombre) VALUES (?,?, 'Nino A')").run(SEM.iglesiaId, claseA).lastInsertRowid);
-  const ninoB = Number(db.prepare("INSERT INTO nino (iglesia_id, clase_id, nombre) VALUES (?,?, 'Nino B')").run(SEM.iglesiaId, claseB).lastInsertRowid);
-
-  const res = await fetch(base + '/api/ninos/asistencia', {
-    method: 'POST', headers: H(SEM.lider),
-    body: JSON.stringify({ clase_id: claseA, fecha: '2026-08-02', presentes: [{ nino_id: ninoA }, { nino_id: ninoB }] })
-  });
-  assert.equal(res.status, 200);
-  const body = await res.json();
-  assert.equal(body.total, 1);
-
-  const guardados = db.prepare('SELECT nino_id FROM asistencia_nino WHERE clase_id = ?').all(claseA).map(x => x.nino_id);
-  assert.deepEqual(guardados, [ninoA]);
-});

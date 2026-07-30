@@ -2136,9 +2136,7 @@ async function vistaClase(id,nombre){
       <div id="form-material"></div><div id="material" class="muted">…</div></div>
     <div class="card" style="margin-bottom:14px"><div class="head-row"><h3 style="font-size:16px">👦 Niños</h3>
       ${editar?`<button class="btn small-btn" onclick="formNino()">+ Niño</button>`:''}</div>
-      <div id="form-nino"></div><div id="ninos-lista" class="muted">…</div></div>
-    <div class="card"><h3 style="font-size:16px;margin-bottom:8px">✅ Asistencia</h3>
-      <div id="asist-ninos" class="muted">…</div></div>`;
+      <div id="form-nino"></div><div id="ninos-lista" class="muted">…</div></div>`;
   cargarMaterial(); cargarNinos();
 }
 async function cargarMaterial(){
@@ -2182,13 +2180,9 @@ async function cargarNinos(){
     c.innerHTML=n.length? n.map(x=>`<div class="item-card"><b>${escHtml(x.nombre)}</b>${x.edad?' <span class="muted small">'+escHtml(String(x.edad))+' años</span>':''}
       ${x.alergias?` <span class="estado-chip estado-rechazado">⚠️ ${escHtml(x.alergias)}</span>`:''}
       <div class="muted small">${x.familia?'Familia '+escHtml(x.familia):''}</div></div>`).join('') : '<p class="small">Sin niños.</p>';
-    renderAsistNinos();
   }catch{
     if(c){ c.className='muted'; c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarNinos()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; }
-    // Un fallo aquí no debe dejar "Asistencia" colgada en "Cargando…"
     window._ninos=[];
-    const asist=$('asist-ninos');
-    if(asist){ asist.className='muted'; asist.innerHTML='<p class="small">No se pudo cargar la lista de niños.</p>'; }
   }
 }
 function formNino(){ const z=$('form-nino'); if(z.innerHTML){z.innerHTML='';return;}
@@ -2200,22 +2194,9 @@ function formNino(){ const z=$('form-nino'); if(z.innerHTML){z.innerHTML='';retu
 async function guardarNino(){
   try{ await api('/ninos/ninos',{method:'POST',body:JSON.stringify({clase_id:_claseActual,nombre:$('n-nombre').value.trim(),edad:$('n-edad').value,familia:$('n-familia').value.trim(),alergias:$('n-alergias').value.trim()})});
     $('form-nino').innerHTML=''; cargarNinos(); toast('Niño agregado'); }catch(e){ toast(e.message);} }
-function renderAsistNinos(){
-  const c=$('asist-ninos'); const ninos=window._ninos||[];
-  if(!ninos.length){ c.className='muted'; c.innerHTML='<p class="small">Agrega niños primero.</p>'; return; }
-  c.className='';
-  const editar=esLiderEdUI();
-  c.innerHTML=`<label>Fecha</label><div>${fechaSelectHTML('asist','')}</div>
-    <div class="list" style="margin-top:10px">${ninos.map(n=>`<div class="item-card flex">
-      <label class="check" style="margin:0;flex:1"><input type="checkbox" class="nino-chk" data-id="${n.id}" ${editar?'':'disabled'}/> ${escHtml(n.nombre)}</label></div>`).join('')}</div>
-    ${editar?`<button class="btn" style="margin-top:12px" onclick="guardarAsistNinos()">Guardar asistencia</button>`:''}`;
-}
-async function guardarAsistNinos(){
-  const fecha=fechaSelectValor('asist'); if(!fecha) return toast('Pon la fecha');
-  const presentes=[...document.querySelectorAll('.nino-chk')].filter(c=>c.checked).map(c=>({ nino_id:c.dataset.id }));
-  if(!presentes.length) return toast('Marca al menos un niño');
-  try{ const r=await api('/ninos/asistencia',{method:'POST',body:JSON.stringify({clase_id:_claseActual,fecha,presentes})});
-    toast('✅ Asistencia guardada: '+r.total+' niños'); }catch(e){ toast(e.message);} }
+// Aquí vivían renderAsistNinos() y guardarAsistNinos(): pasar lista de los
+// niños. Se retiraron el 30 jul 2026 porque la iglesia no la usa. La tabla
+// asistencia_nino se conserva en la base de datos con lo ya anotado.
 
 // ============================================================
 // ============================================================

@@ -69,24 +69,13 @@ test('POST /api/tesoreria/movimientos: sin fecha (omitida) sigue funcionando con
 });
 
 // ------------------------------------------------------------
-// 2. ninos.js / db.js: dos asistencias iguales (clase_id, nino_id, fecha) no duplican.
+// 2. db.js: el indice unico de asistencia_nino.
+//
+// Aqui habia ademas un test de que POST /api/ninos/asistencia era idempotente.
+// Se cayo con el endpoint el 30 jul 2026 (la iglesia no pasa lista de ninos;
+// ver test/ninos-sin-asistencia.test.js). El indice SI se conserva: la tabla
+// sigue existiendo con el historial ya anotado y hay que protegerlo.
 // ------------------------------------------------------------
-test('POST /api/ninos/asistencia dos veces con los mismos datos no duplica la fila en asistencia_nino', async () => {
-  db.prepare('INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?,?)').run(SEM.lider.id, SEM.grupoId, 'lider_ed');
-  const claseId = Number(db.prepare("INSERT INTO clase_ed (iglesia_id, nombre) VALUES (?, 'Parvulos')").run(SEM.iglesiaId).lastInsertRowid);
-  const ninoId = Number(db.prepare("INSERT INTO nino (iglesia_id, clase_id, nombre) VALUES (?,?, 'Nino A')").run(SEM.iglesiaId, claseId).lastInsertRowid);
-
-  const body = JSON.stringify({ clase_id: claseId, fecha: '2026-08-02', presentes: [{ nino_id: ninoId }] });
-  let res = await fetch(base + '/api/ninos/asistencia', { method: 'POST', headers: H(SEM.lider), body });
-  assert.equal(res.status, 200);
-  res = await fetch(base + '/api/ninos/asistencia', { method: 'POST', headers: H(SEM.lider), body });
-  assert.equal(res.status, 200);
-
-  const filas = db.prepare('SELECT * FROM asistencia_nino WHERE clase_id = ? AND nino_id = ? AND fecha = ?')
-    .all(claseId, ninoId, '2026-08-02');
-  assert.equal(filas.length, 1, 'no debe haber filas duplicadas para la misma clase+nino+fecha');
-});
-
 test('db.js: el indice unico de asistencia_nino existe y bloquea duplicados a nivel de BD', async () => {
   const claseId = Number(db.prepare("INSERT INTO clase_ed (iglesia_id, nombre) VALUES (?, 'Primaria')").run(SEM.iglesiaId).lastInsertRowid);
   const ninoId = Number(db.prepare("INSERT INTO nino (iglesia_id, clase_id, nombre) VALUES (?,?, 'Nino B')").run(SEM.iglesiaId, claseId).lastInsertRowid);
