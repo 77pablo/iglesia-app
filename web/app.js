@@ -1174,7 +1174,7 @@ async function vistaServicio(){
 // Se hace ANTES de asignar a proposito: el aviso de despues llega cuando a la
 // persona ya le salto el push "te asignaron".
 async function pintarNoDispServicio(){
-  const selEv=$('sv-ev'), selP=$('sv-persona');
+  const selEv=$('sv-ev'), selP=$('sv-persona'), m=$('sv-msg');
   if(!selEv||!selP) return;
   const fecha=selEv.selectedOptions[0]?.dataset.fecha||'';
   // Limpiar siempre primero: si falla la consulta, mejor sin marcas que con
@@ -1190,7 +1190,13 @@ async function pintarNoDispServicio(){
     if((selEv.selectedOptions[0]?.dataset.fecha||'')!==fecha) return;
     const set=new Set(ids.map(String));
     for(const o of selP.options) if(set.has(o.value)) o.textContent=o.dataset.nombre+' ⚠️ no disponible';
-  }catch{ /* sin marcas: nunca bloquea ni rompe la pantalla */ }
+    if(m){ m.style.color='var(--muted)'; m.textContent=''; }
+  }catch{
+    // Nunca bloquea ni rompe la pantalla: sin marcas se puede asignar igual.
+    // Pero sin este aviso, "nadie marco nada" y "no se pudo comprobar" se ven
+    // identicos (el desplegable queda igual de limpio en los dos casos).
+    if(m){ m.style.color='var(--muted)'; m.textContent='No se pudo comprobar quién no está disponible; puedes asignar igual.'; }
+  }
 }
 async function asignar(){
   const body={evento_id:$('sv-ev').value,persona_id:$('sv-persona').value,tipo:$('sv-tipo').value};
