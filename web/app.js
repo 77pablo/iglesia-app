@@ -1353,7 +1353,7 @@ async function vistaReportes(){
     ]);
     $('rep').className='';
     const ultimaAsis=asis.mensual[asis.mensual.length-1];
-    const mesActual=new Date().toISOString().slice(0,7);
+    const mesActual=mesLocal();
     const altasMesActual=(crec.mensual.find(m=>m.mes===mesActual)||{altas:0}).altas;
 
     $('rep').innerHTML=`
@@ -1445,10 +1445,16 @@ async function vistaMusica(){
   cargarMaterialMusica();
   try{
     const ev=await api('/eventos');
-    $('set-ev').innerHTML=ev.length? ev.map(e=>`<option value="${e.id}">${escHtml(e.titulo)} (${fechaTxt(e.fecha)})</option>`).join('') : '<option value="">(sin eventos)</option>';
+    $('set-ev').innerHTML=ev.length? ev.map(e=>`<option value="${e.id}">${escHtml(e.titulo)} (${fechaTxt(e.fecha)})</option>`).join('') : '<option value="">Todavía no hay eventos</option>';
     $('set-ev').onchange=()=>{ cargarSetlist($('set-ev').value); cargarPlan($('set-ev').value); };
     if(ev.length){ cargarSetlist(ev[0].id); cargarPlan(ev[0].id); }
-    else $('plan').innerHTML='<p class="muted small">Crea un evento para planificar el equipo y el ensayo.</p>';
+    else {
+      // Sin eventos nadie tocaba #setlist, que arranca con "…": el líder de
+      // música veía tres puntos suspensivos que no se resolvían nunca y parecía
+      // que la app se había colgado. Se explica igual que #plan.
+      $('plan').innerHTML='<p class="muted small">Crea un evento para planificar el equipo y el ensayo.</p>';
+      const s=$('setlist'); if(s){ s.className=''; s.innerHTML='<p class="muted small">Crea un evento en el Calendario para armar el orden del servicio.</p>'; }
+    }
   }catch{
     const retry='<a href="javascript:vistaMusica()" class="link" style="display:inline;padding:0">Reintentar</a>';
     const set=$('setlist'); if(set){ set.className='error small'; set.innerHTML='No se pudo cargar · '+retry; }
@@ -1559,7 +1565,7 @@ async function cargarPlan(eventoId){
     // Form para agregar (solo líder)
     let addHtml='';
     if(lider){
-      const personas=window._personasCache||(window._personasCache=await api('/personas'));
+      const personas=await _personas();
       const popts=personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
       const iopts=d.instrumentos.map(i=>`<option value="${escHtml(i)}">${escHtml(i)}</option>`).join('');
       addHtml=`<div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px">
@@ -2148,6 +2154,29 @@ function safeColor(c, porDefecto='var(--primary)'){
   return /^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|var\(--[a-zA-Z0-9-]+\))$/.test(s) ? s : porDefecto;
 }
 
+// La lista de personas de la iglesia, guardada en memoria para no pedirla en
+// cada pantalla. Solo se guarda si trae a alguien.
+//
+// Antes era  cache || (cache = await api('/personas').catch(()=>[]))  y un fallo
+// puntual —el límite de peticiones, la red del teléfono, el arranque frío del
+// servidor— dejaba `[]` guardado. Y `[]` es truthy, así que el `||` no volvía a
+// intentarlo jamás: hasta recargar la página, los desplegables de "+ Agregar
+// integrante" y de "Predicadores" salían en blanco, sin ningún mensaje. El líder
+// de música concluía que en la iglesia no hay nadie a quien poner en el equipo.
+async function _personas(){
+  if(window._personasCache && window._personasCache.length) return window._personasCache;
+  const l=await api('/personas');
+  if(l && l.length) window._personasCache=l;
+  return l||[];
+}
+
+// El mes en curso como "AAAA-MM", en hora de Chile. new Date().toISOString() da
+// el mes en UTC: el 31 a las 21:00 ya es día 1 del mes siguiente, y la tarjeta
+// "Altas este mes" mostraba 0 aunque ese mes hubieran entrado doce personas.
+function mesLocal(d=new Date()){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
 // ============================================================
 //  MI GRUPO — centro del líder de cuerpo (ej. Jóvenes)
 // ============================================================
@@ -2405,7 +2434,7 @@ async function cargarPredicadores(){
   const cont=$('pr-pred'); if(!cont) return;
   let list=[], fallo=false;
   try{ list=await api('/predica/predicadores'); }catch{ fallo=true; }
-  const personas=window._personasCache||(window._personasCache=await api('/personas').catch(()=>[]));
+  const personas=await _personas().catch(()=>[]);
   cont.innerHTML=`<div class="card" style="margin-bottom:16px"><div class="widget-head">🎤 Predicadores (rol con vigencia)</div>
     <div class="row" style="flex-wrap:wrap;gap:8px;margin:10px 0;align-items:center">
       <select id="prp-persona" style="max-width:200px">${personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('')}</select>
@@ -3465,11 +3494,17 @@ const Chat = {
     let convs=[];
     try{ convs=await api('/mensajes/conversaciones'); }
     catch(e){ const c=$('chatLista'); if(c) c.innerHTML='<p class="error small">'+escHtml(e.message)+'</p>'; return; }
+    // El contador del menú se actualiza ANTES de mirar si la vista de Mensajes
+    // está montada. Antes iba al final, después de un `if(!cont) return`: como
+    // el manejador de SSE llama a cargarLista() con cada mensaje entrante, el
+    // badge solo subía si ya estabas dentro de Mensajes — justo cuando no hace
+    // falta. Estando en Calendario podían llegar cinco mensajes y el menú
+    // seguía marcando cero.
+    const totalNoLeidos=convs.reduce((a,c)=>a+(c.no_leidos||0),0);
+    this.actualizarBadgeNav(totalNoLeidos);
     const cont=$('chatLista'); if(!cont) return;
     cont.innerHTML='<button id="btnNuevoChat" class="btn ghost small-btn" style="width:100%;margin-bottom:10px">+ Nuevo chat</button><div id="nuevoChatForm"></div>';
-    let totalNoLeidos=0;
     for(const c of convs){
-      totalNoLeidos+=c.no_leidos||0;
       const el=document.createElement('div');
       el.className='chat-item'+(c.no_leidos?' no-leido':'')+(c.id===this.convActual?' sel':'');
       el.innerHTML=`<div class="ci-titulo">${escHtml(c.titulo||'(sin nombre)')}</div>
@@ -3478,7 +3513,6 @@ const Chat = {
       el.onclick=()=>this.abrirConversacion(c.id, c.titulo);
       cont.appendChild(el);
     }
-    this.actualizarBadgeNav(totalNoLeidos);
     $('btnNuevoChat').onclick=()=>this.toggleNuevoChat();
   },
   async toggleNuevoChat(){

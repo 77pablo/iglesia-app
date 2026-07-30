@@ -63,6 +63,17 @@ const crearEventoSchema = z.object({
   lugar: z.string().trim().optional(),
   descripcion: z.string().trim().optional()
 });
+// El grupo tiene que ser de TU iglesia. esAdminDeGrupo() no lo comprueba: le
+// dice que si a cualquier pastor sea cual sea el grupo, asi que sin esto un
+// evento podia quedar apuntando al grupo de otra congregacion (y el calendario
+// mostraria su nombre y su color a gente que no es de ahi).
+function grupoDeIglesia(grupoId, iglesiaId) {
+  return db.prepare('SELECT id FROM grupo WHERE id = ? AND iglesia_id = ?').get(grupoId, iglesiaId);
+}
+function puedeUsarGrupo(personaId, grupoId, iglesiaId) {
+  return !!grupoDeIglesia(grupoId, iglesiaId) && esAdminDeGrupo(personaId, Number(grupoId));
+}
+
 // Deteccion de choque: mismo dia + mismo lugar + horarios que se solapan.
 // excluirId: al editar un evento, no debe chocar consigo mismo.
 function detectarChoque(iglesiaId, fecha, lugar, hora_inicio, hora_fin, excluirId) {
@@ -80,7 +91,7 @@ r.post('/', validar(crearEventoSchema), (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const { grupo_id, titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body;
 
-  if (!esAdminDeGrupo(persona_id, Number(grupo_id)))
+  if (!puedeUsarGrupo(persona_id, grupo_id, iglesia_id))
     return res.status(403).json({ error: 'No tienes permiso para crear eventos en ese grupo' });
 
   const choque = detectarChoque(iglesia_id, fecha, lugar, hora_inicio, hora_fin);
@@ -211,7 +222,12 @@ r.get('/historial/aprobaciones', (req, res) => {
 });
 
 // --- Editar evento ---
+// grupo_id va aqui porque el formulario de edicion SIEMPRE lo manda (pinta el
+// desplegable de Grupo tambien al editar). Sin declararlo, validar() lo tiraba
+// en silencio —no da 400, se limita a quedarse con las claves que conoce— y
+// cambiar de grupo respondia "Evento actualizado" sin cambiar nada.
 const editarEventoSchema = z.object({
+  grupo_id: z.coerce.number().int().positive().optional(),
   titulo: z.string().trim().optional(),
   fecha: z.string().trim().optional(),
   hora_inicio: horaSchema,
@@ -224,7 +240,15 @@ r.patch('/:id', validar(editarEventoSchema), (req, res) => {
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
   if (!ev) return res.status(404).json({ error: 'No encontrado' });
   if (!puedeGestionar(persona_id, ev)) return res.status(403).json({ error: 'No tienes permiso' });
-  const { titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body;
+  const { grupo_id, titulo, fecha, hora_inicio, hora_fin, lugar, descripcion } = req.body;
+
+  // Cambiar de grupo se revalida: el permiso se comprueba al CREAR, y sin esto
+  // editar seria la puerta de atras para meter un evento en el grupo de otro.
+  const grupoFinal = grupo_id ?? ev.grupo_id;
+  if (grupo_id !== undefined && Number(grupo_id) !== ev.grupo_id &&
+      !puedeUsarGrupo(persona_id, grupo_id, iglesia_id))
+    return res.status(403).json({ error: 'No tienes permiso para mover el evento a ese grupo' });
+
   // PATCH parcial: un campo ausente (undefined) conserva el valor actual,
   // no lo borra (ver auditoria backend.md #3).
   const fechaFinal = fecha ?? ev.fecha;
@@ -239,8 +263,9 @@ r.patch('/:id', validar(editarEventoSchema), (req, res) => {
   if (choque)
     return res.status(409).json({ error: `El lugar "${lugarFinal}" ya esta ocupado a esa hora por "${choque.titulo}". Elige otro horario o lugar.` });
 
-  db.prepare('UPDATE evento SET titulo=?, fecha=?, hora_inicio=?, hora_fin=?, lugar=?, descripcion=? WHERE id=?')
+  db.prepare('UPDATE evento SET grupo_id=?, titulo=?, fecha=?, hora_inicio=?, hora_fin=?, lugar=?, descripcion=? WHERE id=?')
     .run(
+      grupoFinal,
       titulo ?? ev.titulo,
       fechaFinal,
       horaInicioFinal,
