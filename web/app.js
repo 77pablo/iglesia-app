@@ -380,7 +380,11 @@ function abrirApp(){
   $('u-rol').textContent = ME.persona.rol_global==='obispo' ? 'Obispo'
     : ME.persona.rol_global==='super_admin' ? 'Super-admin'
     : ME.persona.es_pastor ? 'Pastor'
-    : (ME.roles.pertenencias.map(p=>cap(p.rol.replace('_',' '))).join(', ') || 'Feligrés');
+    // rolLabel() y no cap(rol.replace('_',' ')): esto sale bajo el nombre de la
+    // persona en TODAS las pantallas, y la maestra de Escuela Dominical leía
+    // "Lider ed", el líder de música "Lider musica" y el de jóvenes "Admin" —
+    // los nombres de la base de datos. La traducción ya estaba escrita.
+    : (ME.roles.pertenencias.map(p=>rolLabel(p.rol)).join(', ') || 'Feligrés');
   buildNav();
   // (La campana la actualiza el dashboard con su propia carga; evitamos pedir /notificaciones dos veces.)
   pushAutoResuscribir();   // mantiene el push activo entre sesiones (si ya dio permiso)
@@ -1983,15 +1987,19 @@ async function vistaTesoreria(){
           return `<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:14px">
             <b>${escHtml(c.nombre)}</b><span class="muted">${money(c.recaudado)} / ${money(c.meta)}</span></div>
             <div class="trend-track" style="margin-top:6px"><div class="trend-bar" style="width:${pct}%">${pct}%</div></div></div>`;}).join('')
-          : '<p class="muted small">Sin campañas.</p>'}
+          : `<p class="muted small">Todavía no hay campañas.${esTesoreroUI()?' Una campaña sirve para juntar para algo concreto —el techo, un viaje misionero— y ver cuánto falta.':''}</p>`}
       </div>
       <div class="card" style="margin-bottom:18px"><div class="widget-head">🔓 Transparencia</div>
         <p class="small" style="margin:6px 0 14px">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
-        ${trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0;
-          return `<div class="dato-row"><span>${cap(g.categoria)}</span><span class="val">${pct}% · ${money(g.monto)}</span></div>`;}).join('')}
+        ${trans.porCategoria.length
+          ? trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0;
+              return `<div class="dato-row"><span>${cap(g.categoria)}</span><span class="val">${pct}% · ${money(g.monto)}</span></div>`;}).join('')
+          : '<p class="muted small">Cuando se registren gastos, aquí se verá en qué se fue el dinero.</p>'}
       </div>
       <div class="card"><div class="widget-head">Movimientos</div>
-        <div class="list" id="mov-list" style="margin-top:8px">${movs.map(filaMov).join('')}</div>
+        <div class="list" id="mov-list" style="margin-top:8px">${movs.length
+          ? movs.map(filaMov).join('')
+          : `<p class="muted small">Todavía no hay movimientos registrados.${esTesoreroUI()?' Toca «+ Ingreso» para anotar la primera ofrenda.':''}</p>`}</div>
         ${hayMas?`<button class="btn ghost small-btn" id="mov-mas" style="margin-top:10px" onclick="cargarMasMovimientos()">Ver más</button>`:''}
       </div>`;
   }catch(e){ $('tz').innerHTML='<p class="error">'+e.message+'</p>'; }
@@ -2546,7 +2554,7 @@ async function verIglesiaObispo(id, mes){
       <div class="widget"><div class="widget-head">👶 Niños / clases</div><div class="stat-num">${d.ninos.ninos}</div><div class="muted small">${d.ninos.clases} clase(s)</div></div>
     </div>
     ${card('🧩 Grupos', lista(d.grupos, g=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(g.nombre)}</b></div><span class="estado-chip">👥 ${g.miembros}</span></div>`, 'Sin grupos.'))}
-    ${card('⭐ Líderes', lista(d.lideres, l=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(l.nombre)}</b><div class="muted small">${cap((l.rol||'').replace('_',' '))} · ${escHtml(l.grupo)}</div></div></div>`, 'Sin líderes.'))}`;
+    ${card('⭐ Líderes', lista(d.lideres, l=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(l.nombre)}</b><div class="muted small">${escHtml(rolLabel(l.rol||''))} · ${escHtml(l.grupo)}</div></div></div>`, 'Sin líderes.'))}`;
 }
 // --- Modal genérico de detalle (drill-down del obispo) ---
 function modalDetalle(titulo, html){
@@ -2751,7 +2759,14 @@ const ROL_INFO={
   tesorero:     {label:'Tesorero',               acc:['Tesorería']},
   miembro:      {label:'Miembro',                acc:['Pertenece al grupo (ve "Mi Grupo", recibe avisos)']},
 };
-function rolLabel(r){ return (ROL_INFO[r]&&ROL_INFO[r].label)||r; }
+// El nombre del cargo tal como se dice en la iglesia. El respaldo ya no
+// devuelve la clave cruda: si mañana aparece un rol que no está en ROL_INFO,
+// "lider_nuevo" se leería con el guion bajo a la vista bajo el nombre de la
+// persona. Al menos sale como "Lider nuevo" mientras nadie le pone su nombre.
+function rolLabel(r){
+  const s=String(r||'');
+  return (ROL_INFO[s]&&ROL_INFO[s].label) || (s?cap(s.replace(/_/g,' ')):'');
+}
 
 async function vistaAdmin(){
   $('content').innerHTML='<div id="adm" class="muted">Cargando…</div>';
@@ -2805,8 +2820,10 @@ function renderAdmin(){
       <div style="flex:1"><b>${escHtml(g.nombre)}</b></div>
       <button class="link" onclick="adminFormGrupo(${g.id})">✏️ Editar</button></div>`).join('');
   // --- Leyenda de roles ---
+  // Sin la clave interna al lado: "Líder Esc. Dominical (lider_ed)" no le dice
+  // nada al pastor, que es quien lee esta leyenda para repartir los roles.
   const leyenda=Object.entries(ROL_INFO).map(([k,v])=>`<div style="margin:6px 0">
-      <b>${escHtml(v.label)}</b> <span class="muted small">(${k})</span>
+      <b>${escHtml(v.label)}</b>
       <div class="muted small">Accesos: ${v.acc.map(escHtml).join(' · ')}</div></div>`).join('');
 
   cont.innerHTML=`
