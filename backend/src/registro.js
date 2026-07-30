@@ -20,7 +20,10 @@ const registroSchema = z.object({
   password: z.string().min(6, 'la contraseña debe tener al menos 6 caracteres'),
   email: z.string().trim().email('correo invalido').optional().or(z.literal('')),
   telefono: z.string().trim().max(50).optional().or(z.literal('')),
-  acepto: z.literal(true, { errorMap: () => ({ message: 'debes aceptar los Términos y la Política de Privacidad' }) })
+  // El parametro se llama `error` (zod 4). Con el nombre viejo de zod 3
+  // (`errorMap`) zod lo IGNORA en silencio y quien no marcaba la casilla leia
+  // "revisa acepto" justo en la puerta legal del registro.
+  acepto: z.literal(true, { error: 'debes aceptar los Términos y la Política de Privacidad' })
 });
 
 // POST /api/registro — crea la cuenta del feligres y devuelve { token, persona }

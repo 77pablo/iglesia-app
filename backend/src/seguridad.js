@@ -105,19 +105,85 @@ export const limiterChat = rateLimit({
   skip: (req) => saltarEnTest() || req.path === '/stream'
 });
 
+// ============================================================
+//  El texto del 400: en castellano y para una persona
+//  Antes se respondia 'Datos invalidos: revisa ' + las CLAVES de zod, o sea
+//  que en la pantalla se leia "revisa hora_inicio", "revisa persona_id",
+//  "revisa acepto"... y de paso se tiraban a la basura los mensajes que los
+//  esquemas de la app ya traen escritos en castellano ('falta el titulo',
+//  'hora invalida (usa HH:MM)'). Ahora el mensaje sale de ahi.
+//
+//  Para distinguir el mensaje que ESCRIBIO el esquema del texto por defecto
+//  de zod (en ingles: "Invalid input: expected string, received undefined")
+//  se aprovecha el orden de prioridad documentado de zod 4: el mensaje del
+//  esquema gana al mapa de errores que se le pasa al parseo. Asi que se
+//  parsea con un mapa que devuelve esta senal: el issue que la lleva es uno
+//  que NADIE escribio, y para ese se usa el nombre humano del campo.
+// ============================================================
+const SIN_MENSAJE_PROPIO = '__mensaje_por_defecto_de_zod__';
+
+// Como se llama cada campo cuando hay que nombrarlo delante de una persona.
+// Solo hacen falta los que no traen mensaje propio en su esquema.
+const NOMBRE_DEL_CAMPO = {
+  nombre: 'el nombre', titulo: 'el título', descripcion: 'la descripción',
+  fecha: 'la fecha', desde: 'la fecha de inicio', hasta: 'la fecha de término',
+  fecha_inicio: 'la fecha de inicio', fecha_fin: 'la fecha de término',
+  hora: 'la hora', hora_inicio: 'la hora de inicio', hora_fin: 'la hora de término',
+  lugar: 'el lugar', motivo: 'el motivo', notas: 'las notas', texto: 'el texto',
+  mensaje: 'el mensaje', comentario: 'el comentario', color: 'el color', tipo: 'el tipo',
+  estado: 'el estado', rol: 'el rol', cargo: 'el cargo', monto: 'el monto',
+  categoria: 'la categoría', metodo: 'la forma de pago', usuario: 'el usuario',
+  password: 'la contraseña', clave: 'la contraseña', email: 'el correo',
+  correo: 'el correo', telefono: 'el teléfono', direccion: 'la dirección',
+  codigo: 'el código de la iglesia', iglesia: 'la iglesia', url: 'el enlace',
+  enlace: 'el enlace', acepto: 'la casilla de los Términos',
+  // Los '<algo>_id' entran por aqui: se les quita el sufijo antes de buscarlos.
+  persona: 'la persona', grupo: 'el grupo', evento: 'el evento', clase: 'la clase',
+  cancion: 'la canción', conversacion: 'la conversación', responsable: 'el responsable',
+  nino: 'el niño', predica: 'la prédica', texto_base: 'el texto base',
+  predicador: 'el predicador', letra: 'la letra', tono: 'el tono', autor: 'el autor',
+  contenido: 'el contenido', edad: 'la edad', cantidad: 'la cantidad',
+  nota: 'la nota', puntos: 'los puntos', bosquejo: 'el bosquejo', versiculo: 'el versículo'
+};
+
+// Nombre presentable de un campo a partir de su ruta en el esquema.
+// Sin entrada en el diccionario se humaniza la clave: se le quita el '_id'
+// (que solo significa algo para quien programa) y los guiones bajos.
+function nombreDelCampo(ruta) {
+  const clave = [...ruta].reverse().find(p => typeof p === 'string');
+  if (!clave) return 'el formulario';
+  if (NOMBRE_DEL_CAMPO[clave]) return NOMBRE_DEL_CAMPO[clave];
+  const base = clave.replace(/_id$/, '');
+  if (NOMBRE_DEL_CAMPO[base]) return NOMBRE_DEL_CAMPO[base];
+  return base.replace(/_/g, ' ');
+}
+
+// Que se le dice a la persona sobre UN fallo concreto.
+function motivoDelIssue(issue) {
+  if (issue.message && issue.message !== SIN_MENSAJE_PROPIO) return issue.message;
+  // En una union (p. ej. `.optional().or(z.literal(''))`) el mensaje escrito
+  // puede estar en una de las ramas, no en el issue de arriba.
+  const deLasRamas = (issue.errors || []).flat()
+    .map(i => i?.message).find(m => m && m !== SIN_MENSAJE_PROPIO);
+  if (deLasRamas) return deLasRamas;
+  return 'revisa ' + nombreDelCampo(issue.path || []);
+}
+
 // --- Validacion de entrada con zod ---
 // Uso: r.post('/algo', validar(esquema), (req, res) => {...})
 // fuente: 'body' (por defecto), 'query' o 'params'.
-// En fallo: responde 400 con mensaje claro y loguea SOLO la ruta y los
-// campos invalidos (nunca el valor recibido, que podria traer datos
-// personales o contrasenas).
+// En fallo: responde 400 con un mensaje que se entiende sin saber programar y
+// loguea SOLO la ruta y los campos invalidos POR SU NOMBRE TECNICO (eso es lo
+// unico que sirve para depurar; nunca el valor recibido, que podria traer
+// datos personales o contrasenas).
 export function validar(schema, fuente = 'body') {
   return (req, res, next) => {
-    const resultado = schema.safeParse(req[fuente]);
+    const resultado = schema.safeParse(req[fuente], { error: () => SIN_MENSAJE_PROPIO });
     if (!resultado.success) {
       const campos = [...new Set(resultado.error.issues.map(i => i.path.join('.') || '(raiz)'))];
       console.warn(`[seguridad] entrada rechazada: ${req.method} ${req.originalUrl} - campos invalidos: ${campos.join(', ') || '(desconocido)'}`);
-      return res.status(400).json({ error: 'Datos invalidos: revisa ' + (campos.join(', ') || 'el formulario') });
+      const motivos = [...new Set(resultado.error.issues.map(motivoDelIssue))];
+      return res.status(400).json({ error: 'Datos inválidos: ' + (motivos.join('; ') || 'revisa el formulario') });
     }
     req[fuente] = resultado.data;
     next();
