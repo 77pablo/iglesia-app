@@ -63,12 +63,20 @@ r.get('/:gid/miembros', (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   if (!puedeVer(req.user.persona_id, g.id)) return res.status(403).json({ error: 'No perteneces a este grupo' });
+  // esLider decide quien lleva boton "Quitar" en la pantalla del lider, asi que
+  // tiene que salir de la MISMA lista de roles que esEncargadoGrupo() y que el
+  // DELETE de mas abajo. Antes se calculaba con /admin|lider_/ sobre el
+  // GROUP_CONCAT de roles: acertaba de casualidad con los roles de hoy, pero
+  // cualquier rol nuevo que contenga esos trozos (un 'admin_finanzas', un
+  // 'lider_jovenes' que no fuera encargado) se pintaria como lider intocable
+  // sin que nadie tocara este archivo. Se compara contra la lista exacta.
   const miembros = db.prepare(
-    `SELECT p.id, p.nombre, GROUP_CONCAT(pe.rol) AS roles
+    `SELECT p.id, p.nombre,
+            MAX(CASE WHEN pe.rol IN ('admin','lider_musica','lider_ed') THEN 1 ELSE 0 END) AS esLider
        FROM persona p JOIN pertenencia pe ON pe.persona_id = p.id
       WHERE pe.grupo_id = ? AND p.activo = 1 GROUP BY p.id ORDER BY p.nombre`
   ).all(g.id);
-  res.json(miembros.map(m => ({ id: m.id, nombre: m.nombre, esLider: /admin|lider_/.test(m.roles || '') })));
+  res.json(miembros.map(m => ({ id: m.id, nombre: m.nombre, esLider: !!m.esLider })));
 });
 
 // --- Personas de la iglesia que NO están en el grupo (para agregar) ---
@@ -104,15 +112,39 @@ r.post('/:gid/miembros', validar(miembroSchema), (req, res) => {
   res.json({ ok: true });
 });
 
-// --- Quitar un miembro (solo el rol 'miembro'; nunca quita a un líder) ---
+// --- Quitar a alguien del grupo (toda pertenencia que NO sea de liderazgo) ---
+// El pastor le dio a Ana el rol "musico" en Alabanza. El lider de Alabanza la
+// veia en la lista con su boton "Quitar" (el frontend lo muestra a todo el que
+// no es lider), lo pulsaba, confirmaba... y le salia "No es miembro del grupo
+// (o es un lider)": el DELETE borraba SOLO las filas con rol 'miembro', asi que
+// musicos y tesoreros eran inexpulsables y encima el mensaje le contradecia lo
+// que tenia delante. Ana seguia ahi y el lider no tenia por donde sacarla.
+//
+// "Quitar" significa sacar del grupo, no borrar una etiqueta: se van TODAS sus
+// pertenencias a ESTE grupo (la UNIQUE es (persona, grupo, rol), asi que Ana
+// puede ser 'miembro' y 'musico' a la vez y hay que llevarse las dos; dejar una
+// la devolveria a la lista y el boton no habria servido de nada) menos las de
+// liderazgo, que se siguen protegiendo: un lider no echa a otro lider, eso es
+// del pastor. Se pregunta con esEncargadoGrupo() para que la lista de roles que
+// mandan sea una sola en todo el proyecto (auth.js) y no tres copias sueltas.
 r.delete('/:gid/miembros/:pid', (req, res) => {
   const g = grupoDeIglesia(req.params.gid, req.user.iglesia_id);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
   if (!esEncargadoGrupo(req.user.persona_id, g.id)) return res.status(403).json({ error: 'Solo el líder del grupo' });
-  const info = db.prepare("DELETE FROM pertenencia WHERE persona_id = ? AND grupo_id = ? AND rol = 'miembro'")
-    .run(req.params.pid, g.id);
-  if (info.changes === 0) return res.status(404).json({ error: 'No es miembro del grupo (o es un líder)' });
-  auditar(req.user.iglesia_id, req.user.persona_id, 'grupo_quita_miembro', 'grupo', String(req.params.pid));
+  // La persona tiene que ser de MI iglesia. El grupo ya viene acotado por
+  // iglesia_id, pero dejarlo explicito (igual que al agregar) evita depender de
+  // esa cadena, y de paso da el nombre para la auditoria: antes se registraba
+  // el id pelado, ilegible para el pastor que revisa el historial.
+  const p = db.prepare('SELECT id, nombre FROM persona WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.pid, req.user.iglesia_id);
+  if (!p) return res.status(404).json({ error: 'Persona no encontrada en tu iglesia' });
+  if (esEncargadoGrupo(p.id, g.id)) return res.status(403).json({ error: 'No puedes quitar a un líder del grupo' });
+  const info = db.prepare(
+    `DELETE FROM pertenencia WHERE persona_id = ? AND grupo_id = ?
+        AND rol NOT IN ('admin','lider_musica','lider_ed')`
+  ).run(p.id, g.id);
+  if (info.changes === 0) return res.status(404).json({ error: 'No es miembro del grupo' });
+  auditar(req.user.iglesia_id, req.user.persona_id, 'grupo_quita_miembro', 'grupo', `${p.nombre} ✕ ${g.nombre}`);
   res.json({ ok: true });
 });
 
