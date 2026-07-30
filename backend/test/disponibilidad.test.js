@@ -139,6 +139,37 @@ test('un feligres cualquiera no puede consultar la lista', async () => {
   assert.equal((await noDisp(SEM.miembro2, '2026-08-07')).status, 403);
 });
 
+// ------------------------------------------------------------
+//  Estrecho a "quien ve servicio_gestion" (el pastor, o el lider de
+//  cuerpo con rol='admin'): NI lider_musica NI lider_ed ven esa pantalla,
+//  aunque esLiderOAdmin (el guardia mas ancho, de otros endpoints) los deje pasar.
+// ------------------------------------------------------------
+function agregarPersonaConRol(usuario, nombre, rol) {
+  const id = Number(db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo) VALUES (?,?,?,?,1)"
+  ).run(SEM.iglesiaId, usuario, nombre, 'x').lastInsertRowid);
+  db.prepare('INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?,?)').run(id, SEM.grupoId, rol);
+  return { id };
+}
+
+test('un lider_musica NO puede consultar (no ve el modulo de gestion de servicio)', async () => {
+  const p = agregarPersonaConRol('mus', 'Lider Musica', 'lider_musica');
+  assert.equal((await noDisp(p, '2026-08-07')).status, 403);
+});
+
+test('un lider_ed NO puede consultar (no ve el modulo de gestion de servicio)', async () => {
+  const p = agregarPersonaConRol('ed', 'Lider ED', 'lider_ed');
+  assert.equal((await noDisp(p, '2026-08-07')).status, 403);
+});
+
+test('el pastor SI puede consultar', async () => {
+  assert.equal((await noDisp(SEM.pastor, '2026-08-07')).status, 200);
+});
+
+test('el lider de cuerpo (rol admin) SI puede consultar', async () => {
+  assert.equal((await noDisp(SEM.lider, '2026-08-07')).status, 200);
+});
+
 test('sin fecha o con fecha invalida -> 400 (esto estrena validar(...,"query"))', async () => {
   assert.equal((await noDisp(SEM.lider, '')).status, 400);
   assert.equal((await noDisp(SEM.lider, '7-8-2026')).status, 400);

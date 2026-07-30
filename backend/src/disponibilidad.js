@@ -10,7 +10,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware, esLiderOAdmin } from './auth.js';
+import { authMiddleware, veServicioGestion } from './auth.js';
 import { validar } from './seguridad.js';
 
 const r = Router();
@@ -64,8 +64,14 @@ const fechaQuerySchema = z.object({
   fecha: z.string().trim().regex(FECHA, 'elige una fecha')
 });
 r.get('/no-disponibles', validar(fechaQuerySchema, 'query'), (req, res) => {
-  if (!esLiderOAdmin(req.user.persona_id))
-    return res.status(403).json({ error: 'Solo quien asigna servicios puede ver esto' });
+  // Estrecho a proposito: solo quien VE el modulo "servicio_gestion" (el
+  // pastor, o el lider de cuerpo). esLiderOAdmin es mas ancho (incluye
+  // lider_musica y lider_ed) y ninguno de los dos ve esta pantalla; podian
+  // pedir el endpoint a mano y reconstruir el calendario de ausencias de
+  // toda la congregacion. Musica ya no lo necesita: desde el arreglo de
+  // fecha_no_disp en musica.js, avisa por su cuenta desde el servidor.
+  if (!veServicioGestion(req.user.persona_id))
+    return res.status(403).json({ error: 'Solo el pastor o un líder de cuerpo puede ver esto' });
   // El JOIN con persona es lo que impide ver a gente de otra iglesia:
   // fecha_no_disp NO tiene columna de iglesia, cuelga de la persona.
   const filas = db.prepare(
