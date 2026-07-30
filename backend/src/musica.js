@@ -112,11 +112,31 @@ r.delete('/setlist/item/:id', (req, res) => {
 });
 
 // --- Eliminar canción del cancionero ---
+// El orden importa: PRIMERO se resuelve la canción acotada por iglesia_id y
+// SOLO entonces se borra. Antes se borraba `setlist_item WHERE cancion_id = ?`
+// con el id crudo de la URL y el filtro por iglesia llegaba una línea más tarde:
+// un líder de música podía vaciar el orden del servicio del domingo de OTRA
+// congregación y recibir un 404 que le decía que no había pasado nada.
 r.delete('/canciones/:id', (req, res) => {
-  if (!esLiderMusicaEstricto(req.user.persona_id)) return res.status(403).json({ error: SOLO_LIDER });
-  db.prepare('DELETE FROM setlist_item WHERE cancion_id = ?').run(req.params.id);
-  const info = db.prepare('DELETE FROM cancion WHERE id = ? AND iglesia_id = ?').run(req.params.id, req.user.iglesia_id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Canción no encontrada' });
+  const { persona_id, iglesia_id } = req.user;
+  if (!esLiderMusicaEstricto(persona_id)) return res.status(403).json({ error: SOLO_LIDER });
+  const cancion = db.prepare('SELECT id, titulo FROM cancion WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, iglesia_id);
+  // 404 y no 403: un 403 confirmaría que esa canción existe en otra iglesia.
+  if (!cancion) return res.status(404).json({ error: 'Canción no encontrada' });
+
+  // Los dos borrados van juntos o no van: si el segundo fallara, la canción se
+  // quedaría fuera del orden del servicio sin que nadie la haya quitado.
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM setlist_item WHERE cancion_id = ?').run(cancion.id);
+    db.prepare('DELETE FROM cancion WHERE id = ?').run(cancion.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  auditar(iglesia_id, persona_id, 'eliminar_cancion', 'musica', cancion.titulo);
   res.json({ ok: true });
 });
 

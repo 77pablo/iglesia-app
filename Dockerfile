@@ -36,6 +36,14 @@ WORKDIR /app/backend
 
 ENV NODE_ENV=production
 ENV PORT=3000
+# Zona horaria de la congregación. SIN esto el contenedor corre en UTC y
+# fechaLocal() (src/fechas.js) devuelve el día equivocado durante las últimas
+# cuatro horas de cada día en Chile: los eventos de hoy desaparecían del portal
+# público a las 20:00, el saludo de cumpleaños salía la víspera, el recordatorio
+# "mañana tienes X" llegaba dos días antes y los ingresos del último día del mes
+# caían en el mes siguiente. Los arreglos de fecha ya estaban en el código; lo
+# que faltaba era que el proceso supiera en qué día vive.
+ENV TZ=America/Santiago
 # BD local (efímera en free); Litestream la respalda/restaura desde R2.
 ENV DB_PATH=/data/iglesia.db
 # Uploads (efímeros en free); rclone los respalda/restaura desde R2 (subcarpeta uploads/).

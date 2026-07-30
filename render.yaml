@@ -13,6 +13,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Zona horaria de la congregación: sin ella el proceso corre en UTC y
+      # todas las fechas del calendario de la gente se van un día durante las
+      # últimas 4 horas de cada día en Chile. Va también en el Dockerfile; aquí
+      # queda visible y cambiable desde el panel sin reconstruir la imagen.
+      - key: TZ
+        value: America/Santiago
       - key: JWT_SECRET
         generateValue: true          # Render genera un secreto seguro
       - key: SEED_ON_EMPTY

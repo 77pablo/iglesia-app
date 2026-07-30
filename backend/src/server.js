@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import db from './db.js';
+import { fechaLocal } from './fechas.js';
 import { login, authMiddleware, getRoles, modulosVisibles, perfilPublico, auditar, hashPassword } from './auth.js';
 import { limiterGeneral, limiterLogin, limiterSensible, limiterChat, validar } from './seguridad.js';
 import eventosRouter from './eventos.js';
@@ -474,6 +475,19 @@ try {
     }
   }
 } catch (e) { console.error('[startup] no se pudo asegurar super_admin:', e.message); }
+
+// Zona horaria: se anuncia al arrancar porque de ella depende TODA fecha del
+// calendario de la gente (fechaLocal, los 'localtime' de SQL, diasHasta). Si el
+// proceso corre en UTC, esas fechas se van un día durante las últimas 4 horas de
+// cada día en Chile, y el fallo es invisible: la app responde 200 a todo y solo
+// se nota en que el portal público esconde el culto de esta noche. Ese fue el
+// estado real de producción hasta el 30 jul 2026. Se registra siempre, y se
+// avisa fuerte solo en producción, que es donde el contenedor la trae en UTC.
+const zonaHoraria = Intl.DateTimeFormat().resolvedOptions().timeZone || '(desconocida)';
+console.log(`[startup] zona horaria: ${zonaHoraria} · hoy aquí es ${fechaLocal()}`);
+if (process.env.NODE_ENV === 'production' && !process.env.TZ) {
+  console.warn('[startup] TZ no está definida: el contenedor corre en UTC y las fechas del calendario se irán un día cada noche. Define TZ=America/Santiago.');
+}
 
 const PORT = process.env.PORT || 3000;
 const ejecutadoDirecto = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

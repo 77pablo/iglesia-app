@@ -89,6 +89,15 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   const p = personaDeIglesia(req.params.id, ig);
   if (!p) return res.status(404).json({ error: 'Usuario no encontrado' });
   const yo = req.user.persona_id;
+
+  // Mismo guardia que el reset de clave de mas abajo, y por la misma razon: el
+  // super-admin y el obispo no son miembros de la congregacion, sus cuentas
+  // estan por encima del pastor. Sin esto, el pastor podia desactivar al obispo
+  // —que se queda fuera de TODAS las iglesias, no solo de esta— o meterle
+  // es_pastor. El supervisado no administra al supervisor.
+  if (p.rol_global === 'super_admin' || p.rol_global === 'obispo')
+    return res.status(403).json({ error: 'Esta cuenta no se administra desde la iglesia' });
+
   const { activo, es_pastor } = req.body;
   if (typeof activo === 'boolean') {
     if (p.id === yo && !activo) return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta' });
@@ -179,10 +188,17 @@ r.delete('/rol/:pertenenciaId', (req, res) => {
   res.json({ ok: true });
 });
 
+// El color de un grupo es lo que pinta el chip del evento en el calendario que
+// ve TODA la iglesia. La UI lo manda desde un <input type="color">, o sea
+// siempre #rrggbb, pero la API lo aceptaba como texto libre: un PATCH a mano con
+// `red" onmouseover="…` cerraba el atributo style y colaba un manejador. El
+// frontend ya lo filtra por forma (safeColor), y aqui esta el segundo candado.
+const zColorHex = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'el color debe ser un hexadecimal como #2563EB').optional();
+
 // --- Crear grupo ---
 const crearGrupoSchema = z.object({
   nombre: z.string().trim().min(1, 'falta el nombre del grupo'),
-  color: z.string().trim().optional()
+  color: zColorHex
 });
 r.post('/grupos', validar(crearGrupoSchema), (req, res) => {
   const ig = req.user.iglesia_id;
@@ -195,7 +211,7 @@ r.post('/grupos', validar(crearGrupoSchema), (req, res) => {
 // --- Editar grupo (nombre / color) ---
 const editarGrupoSchema = z.object({
   nombre: z.string().trim().min(1).optional(),
-  color: z.string().trim().optional()
+  color: zColorHex
 });
 r.patch('/grupos/:id', validar(editarGrupoSchema), (req, res) => {
   const ig = req.user.iglesia_id;

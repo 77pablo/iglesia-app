@@ -745,7 +745,7 @@ function renderCalendario(){
     const esHoy=mesActual && hoy.getDate()===dia;
     const sel=_calDiaSel===fecha;
     const chips=delDia.slice(0,3).map(e=>{
-      const col=e.grupo_color||'var(--primary)';
+      const col=safeColor(e.grupo_color);
       const pend=e.estado && e.estado!=='aprobado';
       return `<div class="cal-ev${pend?' pend':''}" style="border-left-color:${col}"
         title="${escHtml(e.titulo)}${e.grupo?' · '+escHtml(e.grupo):''}${e.hora_inicio?' · '+escHtml(e.hora_inicio):''}"
@@ -773,7 +773,7 @@ function renderCalendario(){
   // leyenda de grupos (colores)
   const leg=new Map(); evs.forEach(e=>{ if(e.grupo) leg.set(e.grupo, e.grupo_color||'#2563EB'); });
   $('cal-leyenda').innerHTML = leg.size
-    ? '<div class="cal-leyenda">'+[...leg].map(([n,c])=>`<span class="cal-leg"><span class="cal-leg-dot" style="background:${c}"></span>${n}</span>`).join('')+'</div>' : '';
+    ? '<div class="cal-leyenda">'+[...leg].map(([n,c])=>`<span class="cal-leg"><span class="cal-leg-dot" style="background:${safeColor(c,'#2563EB')}"></span>${escHtml(n)}</span>`).join('')+'</div>' : '';
 }
 function verDia(fecha){
   _calDiaSel=fecha; renderCalendario();
@@ -788,7 +788,7 @@ function verDia(fecha){
   else inner+=evs.map(e=>{
     const puede=puedeGestionarEvento(e), puedeBorrar=puedeBorrarEvento(e);
     const badge=e.estado==='pendiente'?'<span class="estado-chip estado-pendiente">⏳ Pendiente</span>':e.estado==='rechazado'?'<span class="estado-chip estado-rechazado">🔴 Rechazada</span>':'<span class="estado-chip estado-aceptado">✅ Aprobado</span>';
-    return `<div class="item-card flex" style="margin-top:10px;border-left:4px solid ${e.grupo_color||'var(--primary)'}">
+    return `<div class="item-card flex" style="margin-top:10px;border-left:4px solid ${safeColor(e.grupo_color)}">
       <div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
         <div class="muted small">${e.grupo?'🏷️ '+escHtml(e.grupo):''}${e.hora_inicio?' · 🕐 '+e.hora_inicio+(e.hora_fin?'–'+e.hora_fin:''):''}${e.lugar?' · 📍 '+escHtml(e.lugar):''}</div>
         <div style="margin-top:6px">${badge}</div></div>
@@ -1506,7 +1506,7 @@ async function cargarSetlist(eventoId){
     let html = items.length
       ? '<div class="list">'+items.map((s,i)=>`<div class="item-card flex">
           <span class="mini-date" style="min-width:34px"><b>${i+1}</b></span>
-          <div style="flex:1;cursor:pointer" onclick="abrirVisorSetlist(${s.cancion_id},'${(s.tono_dia||'').replace(/'/g,'')}')" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
+          <div style="flex:1;cursor:pointer" onclick="abrirVisorSetlist(${s.cancion_id},${escJsAttr(s.tono_dia||'')})" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
           <div class="muted small">${escHtml(s.autor||'')}</div></div>
           ${lider?`<button class="link" onclick="quitarSetlist(${s.id})">Quitar</button>`:''}</div>`).join('')+'</div>'
       : '<p class="muted small">Sin canciones en este servicio.</p>';
@@ -1990,7 +1990,7 @@ async function cargarClases(){
     const cl=await api('/ninos/clases'); const c=$('clases');
     if(!cl.length){ c.className='muted'; c.innerHTML='<div class="placeholder"><div class="big">👶</div><p>No hay clases aún.</p></div>'; return; }
     c.className='grid';
-    c.innerHTML=cl.map(x=>`<div class="module-card" onclick="vistaClase(${x.id},'${(x.nombre||'').replace(/['"\\]/g,'')}')">
+    c.innerHTML=cl.map(x=>`<div class="module-card" onclick="vistaClase(${x.id},${escJsAttr(x.nombre||'')})">
       <div class="icon">📚</div><div class="label">${escHtml(x.nombre)}</div>
       <div class="muted small">${x.edad||''} · ${x.ninos} niños</div></div>`).join('');
   }catch(e){ $('clases').innerHTML='<p class="error">'+e.message+'</p>'; }
@@ -2097,6 +2097,33 @@ function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/
 // Neutraliza URLs peligrosas (javascript:, data:, vbscript:) antes de ponerlas en un href.
 // Deja pasar http/https, rutas relativas y enlaces sin esquema (no rompe links legítimos).
 function safeUrl(u){ const s=String(u==null?'':u).trim(); return /^\s*(javascript|data|vbscript):/i.test(s) ? '#' : s; }
+
+// Un texto que va a viajar como ARGUMENTO de una función dentro de un onclick.
+// Devuelve el literal JS entrecomillado y ya escapado para HTML: se usa SIN
+// comillas alrededor —  onclick="f(${escJsAttr(x)})"  — no con ellas.
+//
+// Hacía falta porque quitar a mano las comillas del texto (.replace(/'/g,'')) no
+// basta y falla de dos maneras distintas, ambas explotadas en la app:
+//   1. Filtrar solo la comilla simple deja pasar la doble, que cierra el propio
+//      atributo y permite añadir otro (onmouseover=…). Pasaba con el tono de una
+//      canción, que escribe el líder de música y ejecuta hasta el pastor.
+//   2. Filtrar las tres comillas deja pasar el "&": el parser de HTML decodifica
+//      las entidades del atributo ANTES de que el JS se compile, así que un
+//      nombre guardado como &#39;+alert(1)+&#39; llega al motor ya como comillas.
+// JSON.stringify neutraliza comillas y barras; escHtml neutraliza el "&" que
+// haría el truco de las entidades. La CSP no ayuda aquí: usa 'unsafe-inline'.
+function escJsAttr(v){ return escHtml(JSON.stringify(String(v==null?'':v))); }
+
+// Un color que viene de la BD y va dentro de un atributo style. Lista blanca:
+// solo #rgb, #rrggbb o var(--algo). Cualquier otra cosa cae al color por defecto.
+// El color de un grupo lo pone el pastor con <input type="color">, pero la API lo
+// acepta como texto libre: un PATCH a mano con  red" onmouseover="…  cerraba el
+// atributo, y ese chip lo ve TODA la iglesia en el calendario. Se valida por
+// forma y no escapando, porque un color tiene una forma conocida y corta.
+function safeColor(c, porDefecto='var(--primary)'){
+  const s=String(c==null?'':c).trim();
+  return /^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|var\(--[a-zA-Z0-9-]+\))$/.test(s) ? s : porDefecto;
+}
 
 // ============================================================
 //  MI GRUPO — centro del líder de cuerpo (ej. Jóvenes)
@@ -2208,7 +2235,7 @@ function borrarRecursoGrupo(id){ modalConfirm('¿Eliminar este recurso?', async(
 async function cargarMiembrosGrupo(){
   try{ const list=await api('/grupo/'+_grupoSel+'/miembros'); window._mgMiembros=list.filter(m=>!m.esLider); const c=$('mg-miembros'); const lider=window._grupoLider;
     c.className='list';
-    c.innerHTML=list.map(m=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(m.nombre)}</b>${m.esLider?' <span class="estado-chip estado-aceptado">Líder</span>':''}</div>${(lider&&!m.esLider)?`<button class="link" style="color:var(--red-tx)" onclick="quitarMiembroGrupo(${m.id},'${(m.nombre||'').replace(/['"\\]/g,'')}')">Quitar</button>`:''}</div>`).join('');
+    c.innerHTML=list.map(m=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(m.nombre)}</b>${m.esLider?' <span class="estado-chip estado-aceptado">Líder</span>':''}</div>${(lider&&!m.esLider)?`<button class="link" style="color:var(--red-tx)" onclick="quitarMiembroGrupo(${m.id},${escJsAttr(m.nombre||'')})">Quitar</button>`:''}</div>`).join('');
     if(lider) renderAvisarBox();
   }catch{ $('mg-miembros').innerHTML='<p class="error">Error.</p>'; }
 }
@@ -2653,10 +2680,14 @@ function renderAdmin(){
           <a href="javascript:adminQuitarRol(${r.pertenencia_id})" style="color:var(--red-tx);margin-left:4px" title="Quitar">✕</a></span>`).join('')
       : '<span class="muted small">Sin roles</span>';
     const badges=`${u.es_pastor?'<span class="estado-chip estado-aceptado">⛪ Pastor</span> ':''}${!u.activo?'<span class="estado-chip estado-rechazado">Inactivo</span>':''}`;
-    // "Restablecer contraseña": no se ofrece en cuentas que el backend rechaza
-    // (uno mismo -> usa Ajustes; super-admin/obispo -> no los administra el pastor).
+    // El super-admin y el obispo no son miembros de la congregación: el pastor
+    // no los administra (el backend responde 403 en las tres acciones). Antes
+    // solo se ocultaba "Restablecer contraseña", así que el botón "Desactivar"
+    // seguía pintado en la fila del obispo — y desactivarlo lo dejaba fuera de
+    // TODAS las iglesias, no solo de esta.
     const yo = ME && ME.persona && ME.persona.id;
-    const puedeResetear = u.id!==yo && u.rol_global!=='super_admin' && u.rol_global!=='obispo';
+    const esCuentaDeSistema = u.rol_global==='super_admin' || u.rol_global==='obispo';
+    const puedeResetear = u.id!==yo && !esCuentaDeSistema;
     return `<div class="item-card" style="margin-top:10px">
       <div class="flex" style="align-items:flex-start">
         <div style="flex:1">
@@ -2665,10 +2696,11 @@ function renderAdmin(){
           <div style="margin-top:6px">${chips}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+          ${esCuentaDeSistema?'<span class="muted small">Cuenta de sistema</span>':`
           <button class="btn ghost small-btn" onclick="adminFormRol(${u.id})">+ Rol</button>
           <button class="link" onclick="adminTogglePastor(${u.id},${u.es_pastor})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
           ${puedeResetear?`<button class="link" onclick="adminResetClave(${u.id})">🔑 Restablecer contraseña</button>`:''}
-          <button class="link" style="color:${u.activo?'var(--red-tx)':'var(--green-tx)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>
+          <button class="link" style="color:${u.activo?'var(--red-tx)':'var(--green-tx)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>`}
         </div>
       </div>
       <div id="adm-rolform-${u.id}"></div>
@@ -2676,7 +2708,7 @@ function renderAdmin(){
   }).join('');
   // --- Grupos ---
   const grupos=d.grupos.map(g=>`<div class="item-card flex" style="margin-top:8px">
-      <span style="width:14px;height:14px;border-radius:4px;background:${g.color||'var(--primary)'};flex-shrink:0;margin-right:8px"></span>
+      <span style="width:14px;height:14px;border-radius:4px;background:${safeColor(g.color)};flex-shrink:0;margin-right:8px"></span>
       <div style="flex:1"><b>${escHtml(g.nombre)}</b></div>
       <button class="link" onclick="adminFormGrupo(${g.id})">✏️ Editar</button></div>`).join('');
   // --- Leyenda de roles ---
