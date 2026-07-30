@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 30 de julio de 2026 (auditoría con 5 agentes en paralelo: la zona horaria del contenedor hacía inertes los arreglos de fecha, un borrado cruzaba iglesias, tres XSS, el himnario tenía 72 alabanzas invisibles y media colección inalcanzable — **366 tests**, 4 commits SIN SUBIR)*
+*Última actualización: 30 de julio de 2026 (auditoría con 5 agentes + cinco tandas de arreglos: la zona horaria del contenedor hacía inertes los arreglos de fecha, un borrado cruzaba iglesias, tres XSS, el himnario tenía 72 alabanzas invisibles y media colección inalcanzable, y la PWA podía quedarse en blanco para siempre — **409 tests**, ⚠️ **11 commits SIN SUBIR**)*
 
 ---
 
@@ -29,6 +29,10 @@ Regenerado desde el PDF nuevo del dueño (*Respaldo Himnario Nuevo*, 224 págs).
 4. El **índice alfabético** del final del PDF se pegaba entero a la última alabanza (12.237 caracteres) y un himno arrastraba folios sueltos.
 Aplicadas las **4 anotaciones a lápiz** del dueño (págs. 1, 14, 49 y 114). Van como **línea de acordes pura**, sin guiones ni prosa: `_esLineaAcordes()` pide que el 60% de las palabras sean acordes, y de otro modo el transpositor las ignoraría y al cambiar de tono la anotación se quedaría en el viejo.
 > ⏳ **Decisión pendiente del dueño:** el PDF descargable (`web/assets/himnario-nuevo.pdf`) sigue siendo el **viejo**, así que va desacompasado con la letra. Reemplazarlo por el nuevo implica que **los trazos a lápiz quedan visibles** para toda la congregación.
+
+### 🔴 La PWA podía quedarse en blanco para siempre
+`web/sw.js` instalaba el shell con `Promise.allSettled` —que nunca rechaza— y activaba igual, y `activate` borraba **todas** las cachés con nombre distinto al actual, sin condiciones. Como `server.js` reescribe el nombre en cada despliegue, **la purga siempre se llevaba la caché buena**. Un despliegue mientras alguien va en 3G irregular: instala `index.html`, falla `/app.js`, borra la caché vieja que sí lo tenía → esa persona abre la app sin cobertura y ve **la página en blanco, sin JS, para siempre**. Ahora el shell crítico va por `addAll()` (todo-o-nada) y `activate` solo purga si los críticos están de verdad cacheados. Además, los dos handlers podían resolver a `undefined` en vez de a un `Response`.
+> ⏳ **Queda por mirar en un móvil de verdad:** cómo se comporta Chrome ante un install rechazado, y cómo se ve la página de "Sin conexión". Los 9 tests corren en un navegador simulado con `node:vm`.
 
 ### 🟠 Cinco fallos que mentían al usuario
 Cambiar **el grupo de un evento** decía "actualizado" y no cambiaba nada (`validar()` descarta en silencio las claves que el esquema no declara) · el **contador de mensajes** no subía nunca fuera de la vista de Mensajes · un fallo de red dejaba **`[]` cacheado para siempre** en la lista de personas y los desplegables salían vacíos el resto de la sesión · **"Altas este mes"** se ponía a 0 las últimas horas de cada mes (**quinta** aparición del desfase UTC; ahora hay `mesLocal()`) · **"Orden del servicio"** se quedaba en `…` para siempre sin eventos.
@@ -435,23 +439,32 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 30 jul 2026 — **366 tests en verde**, ⚠️ **4 commits SIN SUBIR**)
+### 👉 POR DÓNDE RETOMAR (al 30 jul 2026 — **409 tests en verde**, ⚠️ **11 commits SIN SUBIR**)
 
-**Lo primero: subir.** `main` va **4 commits por delante** de GitHub (`git log origin/main..main`). Hasta que Pablo los suba con GitHub Desktop, **nada de esto está en producción** — incluida la zona horaria, que es la que arregla cinco fallos de fecha de golpe. *(El documento anterior decía "nada pendiente de subir" y ya entonces había uno.)*
+**Lo primero: subir.** `main` va **11 commits por delante** de GitHub (`git log origin/main..main`). Hasta que Pablo los suba con GitHub Desktop, **nada de esto está en producción** — incluida la zona horaria, que es la que arregla cinco fallos de fecha de golpe. *(El documento anterior decía "nada pendiente de subir" y ya entonces había uno.)*
+
+**Lo que se hizo el 30 jul, en once commits:** la tanda de seguridad · el himnario regenerado · cinco fallos silenciosos · los mensajes de error en castellano con salida al login · los cargos por su nombre y Tesorería vacía · las salidas, el "Reintentar" y las confirmaciones de borrado · el doble toque · "Quitar" en Mi Grupo · el service worker.
 
 **Acciones del dueño, por orden:**
-1. **Subir los 4 commits** con GitHub Desktop → redeploy automático.
+1. **Subir los 11 commits** con GitHub Desktop → redeploy automático.
 2. **Comprobar en los logs de Render** la línea nueva `[startup] zona horaria: America/Santiago`. Si dijera `UTC`, la variable no llegó.
 3. **Render → Logs**, buscar `restaurando`: si sale una vez por despliegue, no hay bucle de reinicios. Después, la tarjeta **💾 Respaldo** del panel del super-admin.
 4. **`SMTP_USER` / `SMTP_PASS`** (contraseña de aplicación de Gmail) y **`SUPERADMIN_PASSWORD`**.
 5. Decidir si se reemplaza el **PDF descargable del himnario** por el nuevo (los trazos a lápiz quedarían visibles).
 
-**Trabajo abierto, priorizado:**
-- **Pulido de UX (15 hallazgos medidos, sin tocar todavía).** Los tres primeros por impacto ÷ esfuerzo: `api()` muestra **"Failed to fetch"** en crudo cuando no hay señal y no echa al login cuando caduca la sesión (~10 líneas, arregla los 114 sitios que hacen `toast(e.message)`) · **Tesorería** sin datos deja dos regiones literalmente en blanco · el menú lateral llama a los cargos por su nombre de base de datos (**"Lider ed"**, **"Admin"**) cuando `rolLabel()` ya existe.
-- **Bugs menores aún abiertos:** el service worker borra la caché buena si falla el precacheo y deja la PWA sin shell offline · "Quitar" en Mi Grupo falla con miembros de rol distinto de `miembro` · borrar un gasto de Organización **no pregunta**.
-- **Fuente del gasto (Organización ↔ Tesorería):** diseño **a medias**. El dueño ya decidió que el modelo es **mixto de verdad**: conviven adelanto del pastor, reembolso a la persona y aporte que no se devuelve. Falta elegir cómo modelarlo (el informe del agente propone 4 caminos; el de "reciclar `pagado_por IS NULL` = la iglesia" está **descartado**: choca con los gastos históricos, que ya significan "no se sabe quién puso"). Retomar con el skill de *brainstorming*.
-- **Editar el himnario desde la app:** el dueño lo pidió. Hoy `himnario.json` es un archivo fijo del programa. Necesita spec propio.
-- **6 propuestas de módulos nuevos** levantadas por el agente de producto, ordenadas por valor ÷ esfuerzo: peticiones de oración (el hueco más evidente: **nadie puede pedir oración**, `cuidado.js` solo deja abrir casos al pastor) · corregir/anular movimientos de Tesorería · eventos que se repiten · seguimiento de visitas (**los mensajes del portal público ya se están perdiendo**: solo llega un campanazo) · retiro seguro de niños · ficha de membresía. Sin presentar todavía.
+**Trabajo abierto, priorizado. LO PRIMERO al retomar:**
+
+1. **Mensajes de validación en jerga — empezado y CORTADO A MEDIAS.** Un agente estaba en ello cuando se cerró la sesión; **no llegó a escribir nada** (`git status` limpio, verificado). Hay que rehacerlo desde cero. El problema: `seguridad.js` responde `'Datos invalidos: revisa ' + campos` con **las claves de zod**, así que la gente lee *"Datos invalidos: revisa hora_inicio"*, *"revisa persona_id"*, *"revisa grupo_id"*. Falta la tilde en "inválidos" y, sobre todo, **se descartan los mensajes que zod ya trae escritos en castellano** (`'falta el titulo'`, `'hora invalida (usa HH:MM)'`). Caso grave y concreto: `registro.js` usa `z.literal(true, { errorMap: … })` y el proyecto usa **zod 4**, donde el parámetro se llama `error` y `errorMap` **se ignora en silencio** → quien no marca la casilla de consentimiento lee *"Datos invalidos: revisa acepto"* en la puerta legal del registro. *(El agente alcanzó a confirmar que **solo hay un `errorMap` en todo el proyecto**.)* Ojo al arreglarlo: el log `[seguridad] entrada rechazada: …` **debe seguir** diciendo el nombre técnico — cambia lo que ve el usuario, no lo que ve el programador.
+
+2. **Pulido de UX que queda** (de los 15 medidos, cerrados 8): recorridos incompletos —el "← Volver" de la hoja de Organización te deja en la lista y no en el calendario de donde entraste, y tiene otra forma que los cinco "‹" del resto— · dos `prompt()` del navegador (crear una lista en Organización y **eliminar mi cuenta**, que es la acción más grave que existe y se confirma con una ventanita gris) · datos que se ven y no se pueden corregir en ningún sitio (**el nombre de una persona**: quien se registró como "juan perez" queda así para siempre en el directorio, las asistencias y los impresos; **Escuela Dominical no tiene editar ni borrar nada**; **los movimientos de Tesorería no se editan ni se anulan**, y un monto mal tecleado descuadra el saldo para siempre) · tres formas distintas de crear algo y "Predica" sin tilde en el menú y el título.
+
+3. **Fuente del gasto (Organización ↔ Tesorería):** diseño **a medias**. El dueño ya decidió que el modelo es **mixto de verdad**: conviven adelanto del pastor, reembolso a la persona y aporte que no se devuelve. Falta elegir cómo modelarlo (el informe del agente propone 4 caminos; el de "reciclar `pagado_por IS NULL` = la iglesia" está **descartado**: choca con los gastos históricos, que ya significan "no se sabe quién puso"). Retomar con el skill de *brainstorming*.
+
+4. **Editar el himnario desde la app:** el dueño lo pidió explícitamente (junto con "que el transpositor siga funcionando" y "que el archivo siga siendo legible", que ya se cumplen). Hoy `himnario.json` es un archivo fijo del programa: nadie puede corregir un acorde sin tocar el código. Necesita spec propio.
+
+5. **6 propuestas de módulos nuevos** levantadas por el agente de producto, ordenadas por valor ÷ esfuerzo, **sin presentar todavía al dueño**: peticiones de oración (el hueco más evidente: **nadie puede pedir oración**, `cuidado.js` solo deja abrir casos al pastor) · corregir/anular movimientos de Tesorería · eventos que se repiten · seguimiento de visitas (**los mensajes del portal público ya se están perdiendo**: solo llega un campanazo y no hay ninguna pantalla que liste `contacto_publico`) · retiro seguro de niños (`nino.autorizados` y `asistencia_nino.retiro_por` **ya existen en la BD** como texto libre que nadie llena) · ficha de membresía.
+
+**Tablas creadas que no usa nadie** (hallazgo del inventario, no estaba documentado): `recurso` (salas reservables, cero referencias) · `fecha_no_disp` (cuándo alguien NO puede servir: `asignaciones.js` la **lee** para avisar al líder, pero **nada la escribe jamás** — es media función esperando su otra mitad, y la pantalla que falta es media tarde) · `dispositivo_push` (resto legacy, lo sustituyó `push_sub`).
 
 ---
 
