@@ -66,6 +66,44 @@ Cambiar **el grupo de un evento** decía "actualizado" y no cambiaba nada (`vali
 
 ---
 
+## 🆕 FASE 12 (30 jul 2026): "No puedo servir ese día" — la mitad que faltaba
+
+**443 tests.** Rama `feat/no-puedo-servir` (seis commits originales, más ocho de una revisión posterior que cerró un camino sin avisar en música, un permiso de más y cuatro fallos menores de interfaz — y una tercera revisión más, ya cerrada, que no queda contada aquí a mano: el número exacto envejece con cada commit, incluido el que escribe este párrafo). Spec en `docs/superpowers/specs/2026-07-30-no-puedo-servir-design.md`, plan en `docs/superpowers/plans/2026-07-30-no-puedo-servir.md`.
+
+Media función llevaba construida en el proyecto desde hacía meses **y no se había disparado ni una vez**: la tabla `fecha_no_disp` existía, `asignaciones.js` la consultaba al asignar y la pantalla del líder ya pintaba el aviso — pero **no había un solo `INSERT` en todo el proyecto**. Faltaba la pantalla donde alguien dice "del 5 al 12 no puedo".
+
+**Lo que hay ahora:**
+- En **"Mi Servicio"**, sección *"Cuándo no puedo servir"*: la persona marca rangos con motivo opcional y los quita. Solo los suyos; nadie puede marcar por otro.
+- En **"Servicio"**, el desplegable de personas marca `⚠️ no disponible` a quien no puede el día del evento elegido.
+- En **"Musicos"**, agregar a alguien al equipo del evento también avisa si esa persona marcó no disponible ese día (ver más abajo: era el camino que faltaba).
+- Backend nuevo `disponibilidad.js` (4 rutas), **17 tests**.
+
+### 🟠 Una revisión posterior encontró seis fallos más — todos cerrados
+- **Música no avisaba.** Había dos caminos por los que a alguien le asignan servir, y solo uno consultaba `fecha_no_disp`: `POST /api/asignaciones` sí, `POST /api/musica/plan/:eventoId/equipo` nunca. Justo música es donde más rota la gente, y la sección de "Mi Servicio" prometía "tu líder lo verá al asignar" — mentira para música. Cerrado replicando la misma consulta y el mismo texto de aviso; nunca bloquea, el integrante se agrega igual.
+- **El permiso del endpoint del líder era más ancho de lo aprobado.** `GET /api/disponibilidad/no-disponibles` usaba `esLiderOAdmin`, que también deja pasar a `lider_musica` y `lider_ed` — ninguno de los dos ve la pantalla que lo consume, pero podían pedirlo a mano y reconstruir el calendario de ausencias de toda la congregación. Nuevo helper `veServicioGestion` (auth.js): el pastor, o quien tenga una pertenencia con `rol='admin'` (líder de cuerpo) — el mismo criterio que ya usa `modulosVisibles` para el módulo `servicio_gestion`.
+- **La comprobación de "elige las dos fechas" era código muerto.** `fechaSelectHTML('nd1','')` sin `{opcional:true}` arrancaba siempre en la fecha de hoy, así que el guardia nunca saltaba: abrir el panel y pulsar Guardar sin tocar nada creaba en silencio un periodo de un día para hoy.
+- **Los periodos se listaban sin año.** El selector permite hasta tres años adelante y dos agostos distintos se veían idénticos.
+- **El fallo de la comprobación era invisible para el líder.** Un `catch{}` vacío no bloqueaba nada (correcto) pero tampoco distinguía "nadie marcó nada" de "no se pudo comprobar". Ahora hay un aviso pequeño y neutro, sin bloquear.
+- Dos limpiezas menores: un bloque de "no se pudo cargar" reescrito a mano en vez de reusar `errCargar()`, y el arnés de tests (`helpers.js`) sin `fecha_no_disp` en su lista de tablas a reiniciar.
+
+### 🔴 El push fantasma, que es la razón de fondo
+El orden de `POST /api/asignaciones` era: (1) consulta si la persona no está disponible — **ya lo sabe aquí**; (2) crea la asignación; (3) le manda push *"Te asignaron"*; (4) recién le devuelve el aviso al líder. **El servidor sabía en el paso 1 que no podía y le mandaba el push igual**, y el líder se enteraba cuando el otro ya lo tenía en el teléfono; deshacerlo dejaba a alguien con una notificación fantasma. Por eso la marca se pinta **antes**, en el desplegable.
+
+### Decisiones del dueño
+Solo uno mismo marca (nadie por otro) · **el líder ve el motivo, como ya hacía el código, y sin aviso previo de que se verá** · vive dentro de "Mi Servicio", no en el menú · solo rangos de fechas.
+
+> ⚠️ **La columna `repetir` sigue sin usarse, y no es un olvido:** la consulta que dispara el aviso (`asignaciones.js:53`) hace `? BETWEEN desde AND hasta` y **no la mira**. Guardar ahí una regla semanal no haría saltar ningún aviso. Si algún día se quiere "todos los domingos", hay que cambiar también esa consulta y decidir hasta cuándo vale una regla sin fecha de fin.
+> ⚠️ **Riesgo asumido:** el motivo es texto libre y lo lee el líder, sin ningún aviso de que se verá. Si la gente empieza a escribir cosas delicadas, ese aviso es el primer sitio donde mirar.
+
+### Tres cosas que aparecieron por el camino
+1. **Darse de baja no borraba estos periodos.** `cuenta.js` limpiaba `reset_codigo`, cumpleaños, `push_sub` y `dispositivo_push`, pero no `fecha_no_disp` — y el motivo es texto libre que puede ser un dato de salud, enganchado a una persona que la baja **anonimiza** en vez de borrar. Cerrado en la misma transacción.
+2. **Carrera al cambiar de evento**, encontrada en revisión: dos consultas en vuelo y la que llegaba tarde pintaba las marcas de la fecha anterior — una marca mentirosa justo en la decisión que la función existe para informar. Cerrada comparando la fecha capturada contra la seleccionada antes de pintar.
+3. **`validar(schema, 'query')` no se usaba en ningún sitio del proyecto**; esta es la primera ruta que lo estrena. Funciona (Express 4 permite reasignar `req.query`) y hay un test que lo demuestra de verdad: sin el middleware la ruta habría devuelto 200 con `[]`, no 400.
+
+> 🌱 **Dato del seed que estaba mal documentado:** **`pastor` NO tiene asignaciones** con el `seed.js` actual, así que cae en el camino "no tienes nada asignado". Para probar el camino con asignaciones sirve **`abel`**; para el vacío, `lucas`.
+
+---
+
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
 
 ---
@@ -479,7 +517,7 @@ app/
 
 1. **La casilla de la fuente del gasto + corregir un gasto con rastro** (decisiones 1 y 2 de arriba). Ya no necesita brainstorming: está decidido, necesita spec y plan.
 2. **Dos funciones a medio construir que solo necesitan la pantalla** — son lo más barato del proyecto:
-   - **"No puedo servir ese día"** (`fecha_no_disp`): la tabla existe, `asignaciones.js` la lee al asignar y **la pantalla del líder ya pinta el aviso**. Nada la escribe jamás. **Media tarde.**
+   - ✅ ~~**"No puedo servir ese día"** (`fecha_no_disp`)~~ — **HECHO** el 30 jul (rama `feat/no-puedo-servir`). Ver la sección propia más abajo.
    - **Retiro seguro de niños**: la BD y el servidor ya aceptan y guardan `nino.autorizados`; solo falta el campo en el formulario. ⚠️ **Ojo:** la mitad de "quién retiró" se fue con la asistencia (ver arriba), así que hoy esto es solo *quién puede retirarlo*. Y **la autorización que firman los padres ya promete recoger ese dato** (`legal/consentimientos.md:133`): hay una brecha entre el documento legal y lo que hace el sistema.
 3. **Corregir el nombre de una persona** — el documento viejo lo pintaba caro ("queda así para siempre en el directorio, las asistencias y los impresos", que suena a datos duplicados). **Es falso:** el nombre vive solo en `persona.nombre` y todo lo demás llega por `JOIN`. Es añadir una columna a un esquema zod que ya existe.
 4. **Escuela Dominical no tiene editar ni borrar nada** (`ninos.js` no tiene ni un `PATCH` ni un `DELETE`). Bloquea el punto 2: una lista de autorizados que no se puede corregir sirve de poco cuando la abuela cambia.

@@ -95,7 +95,7 @@ líneas y añadirle cuatro rutas lo duplicaría; el repo ya separa por asunto.
 | `GET /api/disponibilidad/mias` | cualquier sesión | mis periodos, ordenados por `desde` |
 | `POST /api/disponibilidad` | cualquier sesión | crea uno **mío** (`persona_id` sale del token, nunca del body) |
 | `DELETE /api/disponibilidad/:id` | cualquier sesión | borra **solo el mío** |
-| `GET /api/disponibilidad/no-disponibles?fecha=` | `esLiderOAdmin` (el mismo guardia que ya protege `POST /api/asignaciones`) | ids de quien no puede ese día |
+| `GET /api/disponibilidad/no-disponibles?fecha=` | `veServicioGestion` (el pastor, o quien tenga una pertenencia con `rol='admin'`; **no** `esLiderOAdmin`, que también deja pasar a `lider_musica` y `lider_ed` y es el guardia que sí usa `POST /api/asignaciones` — corregido en revisión posterior, ver `ESTADO.md`) | ids de quien no puede ese día |
 
 ### Cuatro cosas que hay que clavar
 

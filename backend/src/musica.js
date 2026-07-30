@@ -190,6 +190,12 @@ r.post('/plan/:eventoId/equipo', validar(equipoSchema), (req, res) => {
   const { persona_id, instrumento } = req.body;
   const persona = db.prepare('SELECT id, nombre FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1').get(persona_id, iglesia_id);
   if (!persona) return res.status(404).json({ error: 'Persona no encontrada en tu iglesia' });
+
+  // ¿La persona marcó NO disponible para esa fecha? (avisa, no bloquea — igual que asignaciones.js)
+  const noDisp = db.prepare(
+    'SELECT motivo FROM fecha_no_disp WHERE persona_id = ? AND ? BETWEEN desde AND hasta'
+  ).get(persona.id, ev.fecha);
+
   const inst = String(instrumento || '').trim() || 'Voz';
   try {
     db.prepare('INSERT INTO equipo_musica (iglesia_id, evento_id, persona_id, instrumento) VALUES (?,?,?,?)')
@@ -202,7 +208,10 @@ r.post('/plan/:eventoId/equipo', validar(equipoSchema), (req, res) => {
     .run(persona.id, 'musica', '🎵 Te toca tocar', txtTocar);
   enviarPush([persona.id], { titulo: '🎵 Te toca tocar', texto: txtTocar }).catch(() => {});
   auditar(iglesia_id, actor, 'equipo_musica_add', 'musica', `${persona.nombre} (${inst}) en ${ev.titulo}`);
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    aviso: noDisp ? `Esa persona marcó NO disponible (${noDisp.motivo || 'sin motivo'})` : null
+  });
 });
 
 // --- Quitar un integrante ---

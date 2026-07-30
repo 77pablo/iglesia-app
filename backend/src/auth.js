@@ -244,6 +244,11 @@ const rolOPastor = (rol) => {
 export const esTesoreroOPastor = rolOPastor('tesorero');
 // ¿Es lider de Escuela Dominical? (o pastor)
 export const esLiderEdOPastor = rolOPastor('lider_ed');
+// ¿Ve el modulo "servicio_gestion" (modulosVisibles: el pastor, o quien tenga
+// una pertenencia con rol='admin', o sea lider de cuerpo)? A proposito NO usa
+// esLiderOAdmin: ese tambien deja pasar a lider_musica y lider_ed, y ninguno
+// de los dos ve esta pantalla (solo pueden pedirla a mano).
+export const veServicioGestion = rolOPastor('admin');
 // ¿Es predicador? (el pastor siempre; o quien tenga el rol 'predicador' vigente hoy)
 export function esPredicador(personaId) {
   if (esPastor(personaId)) return true;

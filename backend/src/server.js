@@ -20,6 +20,7 @@ import eventosRouter from './eventos.js';
 import anunciosRouter from './anuncios.js';
 import notificacionesRouter from './notificaciones.js';
 import asignacionesRouter from './asignaciones.js';
+import disponibilidadRouter from './disponibilidad.js';
 import asistenciaRouter from './asistencia.js';
 import panelRouter from './panel.js';
 import reportesRouter from './reportes.js';
@@ -362,6 +363,7 @@ app.use('/api/anuncios', anunciosRouter);
 app.use('/api/notificaciones', notificacionesRouter);
 // --- Modulo C: Servicio + Mi Servicio ---
 app.use('/api/asignaciones', asignacionesRouter);
+app.use('/api/disponibilidad', disponibilidadRouter);
 // --- Modulo D: Asistencia simple ---
 app.use('/api/asistencia', asistenciaRouter);
 // --- Fase 2.2: Panel del pastor ---

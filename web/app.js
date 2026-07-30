@@ -170,10 +170,12 @@ async function conBoton(btn, fn, texto){
   finally{ soltar(); }
 }
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
-function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?{m:p[1],d:p[2]}:null; }
+function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?{a:p[0],m:p[1],d:p[2]}:null; }
 function chipFecha(f){ const x=parseFecha(f); if(!x) return `<div class="mini-date"><b>—</b><span></span></div>`; return `<div class="mini-date"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
 function fechaChip(f){ const x=parseFecha(f); if(!x) return `<div class="fecha-chip"><b>—</b><span></span></div>`; return `<div class="fecha-chip"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
-function fechaTxt(f){ const x=parseFecha(f); if(!x) return String(f||'—'); return x.d+' '+(MESES[(+x.m)-1]||''); }
+// conAnio: cuando el mismo mes-día puede repetirse en años distintos (p.ej.
+// "5 ago" no distingue 2026 de 2027), pasa true para que se vea el año.
+function fechaTxt(f, conAnio){ const x=parseFecha(f); if(!x) return String(f||'—'); return x.d+' '+(MESES[(+x.m)-1]||'')+(conAnio?' '+x.a:''); }
 // Duración legible a partir de SEGUNDOS: "45 s", "16 min", "6 h 5 min", "3 d 2 h".
 // Dos unidades y no una a propósito: para decidir si hay que actuar, 16 minutos
 // y 6 horas de retraso son situaciones muy distintas, y redondear a una sola
@@ -1033,7 +1035,10 @@ async function vistaMiServicio(){
   ]);
   const cont=$('ms');
   const total=(servicios?.length||0)+(musica?.length||0)+(tareas?.length||0)+(misCosas?.length||0);
-  if(!total){ cont.className=''; cont.innerHTML='<div class="placeholder"><div class="big">🙌</div><p>No tienes nada asignado por ahora.</p></div>'; return; }
+  // Ojo: aunque no tengas NADA asignado, la seccion de "cuando no puedo servir"
+  // tiene que salir igual — si no, quien todavia no sirve nunca podria marcar
+  // sus fechas, que es justo cuando mas falta hace avisarlo.
+  const vacio = !total ? '<div class="placeholder"><div class="big">🙌</div><p>No tienes nada asignado por ahora.</p></div>' : '';
   cont.className='';
   let html='';
 
@@ -1079,7 +1084,60 @@ async function vistaMiServicio(){
       </div>`;
     }).join('')+'</div>';
   }
-  cont.innerHTML=html;
+  cont.innerHTML = vacio + html + seccionNoDisp();
+  cargarNoDisp();
+}
+// ============================================================
+//  "Cuando no puedo servir" — cada quien marca SOLO lo suyo.
+//  La tabla existia desde siempre y asignaciones.js ya avisaba al lider; lo que
+//  faltaba era esto. Ver docs/superpowers/specs/2026-07-30-no-puedo-servir-design.md
+// ============================================================
+function seccionNoDisp(){
+  return `<h3 class="section-title">📆 Cuándo no puedo servir</h3>
+    <div class="card">
+      <div class="head-row"><p class="muted small" style="margin:0">Marca los días que no estarás. Tu líder lo verá al asignar.</p>
+        <button class="btn small-btn" onclick="formNoDisp()">+ Marcar fechas</button></div>
+      <div id="form-nodisp"></div>
+      <div id="nodisp-lista" class="muted">…</div>
+    </div>`;
+}
+async function cargarNoDisp(){
+  const c=$('nodisp-lista'); if(!c) return;
+  try{
+    const p=await api('/disponibilidad/mias');
+    c.className=p.length?'list':'muted';
+    c.innerHTML=p.length? p.map(x=>`<div class="item-card flex">
+      <div style="flex:1"><div class="item-titulo">${fechaTxt(x.desde,true)} – ${fechaTxt(x.hasta,true)}</div>
+        ${x.motivo?`<div class="muted small">${escHtml(x.motivo)}</div>`:''}</div>
+      <button class="btn ghost small-btn" aria-label="Quitar este periodo" onclick="borrarNoDisp(${x.id})">✕</button>
+    </div>`).join('') : '<p class="small">No has marcado ningún día.</p>';
+  }catch{
+    c.className='muted';
+    c.innerHTML=errCargar('cargarNoDisp()','tus fechas');
+  }
+}
+function formNoDisp(){ const z=$('form-nodisp'); if(z.innerHTML){z.innerHTML='';return;}
+  z.innerHTML=`<div class="form-panel">
+    <label>Desde</label><div>${fechaSelectHTML('nd1','',{opcional:true})}</div>
+    <label style="margin-top:10px">Hasta</label><div>${fechaSelectHTML('nd2','',{opcional:true})}</div>
+    <label for="nd-motivo" style="margin-top:10px">Motivo (opcional)</label>
+    <input id="nd-motivo" maxlength="200" placeholder="Ej. Viaje"/>
+    <button class="btn small-btn" style="margin-top:12px" onclick="guardarNoDisp()">Guardar</button></div>`; }
+async function guardarNoDisp(){
+  const desde=fechaSelectValor('nd1'), hasta=fechaSelectValor('nd2');
+  if(!desde||!hasta) return toast('Elige las dos fechas');
+  await conBoton(botonActual(), async()=>{
+    try{
+      await api('/disponibilidad',{method:'POST',body:JSON.stringify({desde,hasta,motivo:$('nd-motivo').value.trim()})});
+      $('form-nodisp').innerHTML=''; cargarNoDisp(); toast('📆 Fechas marcadas');
+    }catch(e){ toast(e.message); }
+  }, 'Guardando…');
+}
+function borrarNoDisp(id){
+  modalConfirm('¿Quitar este periodo? Volverás a aparecer como disponible esos días.', async()=>{
+    try{ await api('/disponibilidad/'+id,{method:'DELETE'}); cargarNoDisp(); toast('Quitado'); }
+    catch(e){ toast(e.message); }
+  }, {okLabel:'Quitar', danger:true});
 }
 async function tareaHecha(id){ try{ await api('/grupo/tareas/'+id+'/hecho',{method:'PATCH'}); vistaMiServicio(); toast('✅ Marcada como hecha'); }catch(e){ toast(e.message); } }
 async function responder(id,accion){
@@ -1096,11 +1154,12 @@ async function vistaServicio(){
   const c=$('content'); c.innerHTML=`<div id="sv" class="muted">Cargando…</div>`;
   try{
     const [eventos,personas]=await Promise.all([api('/eventos'),api('/personas')]);
-    const ev=eventos.map(e=>`<option value="${e.id}">${escHtml(e.titulo)} (${fechaTxt(e.fecha)})</option>`).join('');
+    // La fecha de cada evento viaja en el <option> para saber que dia consultar.
+    const ev=eventos.map(e=>`<option value="${e.id}" data-fecha="${escHtml(e.fecha)}">${escHtml(e.titulo)} (${fechaTxt(e.fecha)})</option>`).join('');
     const ps=personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
     $('sv').innerHTML=`<div class="card" style="max-width:480px">
       <h3 style="margin-bottom:4px">Asignar un servicio</h3>
-      <label for="sv-ev">Evento</label><select id="sv-ev">${ev}</select>
+      <label for="sv-ev">Evento</label><select id="sv-ev" onchange="pintarNoDispServicio()">${ev}</select>
       <label for="sv-persona">Persona</label><select id="sv-persona">${ps}</select>
       <label for="sv-tipo">Servicio</label><select id="sv-tipo">
         <option value="predicar">🎤 Predicar</option><option value="ofrenda">💰 Ofrenda</option>
@@ -1108,7 +1167,47 @@ async function vistaServicio(){
         <option value="aseo">🧹 Aseo</option></select>
       <p id="sv-msg" class="small" style="margin-top:10px"></p>
       <button class="btn" style="margin-top:8px" onclick="asignar()">Asignar y avisar</button></div>`;
+    pintarNoDispServicio();   // el select de evento ya viene con uno elegido
   }catch{ $('sv').innerHTML=errCargar('vistaServicio()','los servicios'); }
+}
+// Mensaje de error propio de pintarNoDispServicio(): se compara antes de
+// limpiar #sv-msg para no borrar un aviso de asignar() (ver mas abajo).
+const MSG_NO_DISP_ERROR='No se pudo comprobar quién no está disponible; puedes asignar igual.';
+// Marca en el desplegable a quien dijo que no puede ese dia.
+// Se hace ANTES de asignar a proposito: el aviso de despues llega cuando a la
+// persona ya le salto el push "te asignaron".
+async function pintarNoDispServicio(){
+  const selEv=$('sv-ev'), selP=$('sv-persona'), m=$('sv-msg');
+  if(!selEv||!selP) return;
+  const fecha=selEv.selectedOptions[0]?.dataset.fecha||'';
+  // Limpiar siempre primero: si falla la consulta, mejor sin marcas que con
+  // marcas del evento anterior, que serian mentira.
+  for(const o of selP.options) o.textContent=o.dataset.nombre||o.textContent;
+  for(const o of selP.options) if(!o.dataset.nombre) o.dataset.nombre=o.textContent;
+  if(!fecha) return;
+  try{
+    const ids=await api('/disponibilidad/no-disponibles?fecha='+encodeURIComponent(fecha));
+    // Si mientras esperabamos la respuesta cambio el evento elegido (p.ej. al
+    // recorrer el desplegable con las flechas), esta respuesta ya es vieja:
+    // pintarla marcaria a gente segun una fecha que ya no es la seleccionada.
+    if((selEv.selectedOptions[0]?.dataset.fecha||'')!==fecha) return;
+    const set=new Set(ids.map(String));
+    for(const o of selP.options) if(set.has(o.value)) o.textContent=o.dataset.nombre+' ⚠️ no disponible';
+    // Esta funcion se lanza sin await al cargar la vista: si asignar() ya
+    // escribio su aviso de "marco NO disponible" en #sv-msg antes de que esta
+    // consulta resolviera, no lo pisamos limpiando algo que no es nuestro.
+    if(m && m.textContent===MSG_NO_DISP_ERROR){ m.style.color='var(--muted)'; m.textContent=''; }
+  }catch{
+    // Misma guarda que la rama de exito: si la respuesta (fallida) ya es
+    // vieja porque el evento elegido cambio mientras esperabamos, no hay que
+    // pintar "no se pudo comprobar" encima de una comprobacion posterior que
+    // si funciono.
+    if((selEv.selectedOptions[0]?.dataset.fecha||'')!==fecha) return;
+    // Nunca bloquea ni rompe la pantalla: sin marcas se puede asignar igual.
+    // Pero sin este aviso, "nadie marco nada" y "no se pudo comprobar" se ven
+    // identicos (el desplegable queda igual de limpio en los dos casos).
+    if(m){ m.style.color='var(--muted)'; m.textContent=MSG_NO_DISP_ERROR; }
+  }
 }
 async function asignar(){
   const body={evento_id:$('sv-ev').value,persona_id:$('sv-persona').value,tipo:$('sv-tipo').value};
@@ -1672,7 +1771,7 @@ async function guardarEnsayo(){
 }
 async function agregarIntegrante(){
   const body={persona_id:$('eq-persona').value,instrumento:$('eq-inst').value};
-  try{ await api('/musica/plan/'+window._planEv+'/equipo',{method:'POST',body:JSON.stringify(body)}); toast('🎵 Integrante agregado y avisado'); cargarPlan(window._planEv); }
+  try{ const r=await api('/musica/plan/'+window._planEv+'/equipo',{method:'POST',body:JSON.stringify(body)}); toast('🎵 Integrante agregado y avisado'+(r.aviso?'  ⚠️ '+r.aviso:'')); cargarPlan(window._planEv); }
   catch(e){ toast(e.message); }
 }
 function quitarIntegrante(id){ modalConfirm('¿Quitar a este integrante del equipo?', async()=>{

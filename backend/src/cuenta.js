@@ -198,6 +198,9 @@ r.post('/eliminar', (req, res) => {
     // anonimizada: borra sus suscripciones push (VAPID) y tokens legacy.
     db.prepare('DELETE FROM push_sub WHERE persona_id = ?').run(pid);
     db.prepare('DELETE FROM dispositivo_push WHERE persona_id = ?').run(pid);
+    // El motivo de "no puedo servir" es texto libre y puede ser delicado
+    // ("operacion de mi mama"): no debe sobrevivir a la baja.
+    db.prepare('DELETE FROM fecha_no_disp WHERE persona_id = ?').run(pid);
 
     db.exec('COMMIT');
   } catch (e) {
