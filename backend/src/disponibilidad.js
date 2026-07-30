@@ -10,7 +10,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware } from './auth.js';
+import { authMiddleware, esLiderOAdmin } from './auth.js';
 import { validar } from './seguridad.js';
 
 const r = Router();
@@ -52,6 +52,29 @@ r.delete('/:id', (req, res) => {
     .run(req.params.id, req.user.persona_id);
   if (!info.changes) return res.status(404).json({ error: 'Periodo no encontrado' });
   res.json({ ok: true });
+});
+
+// GET /api/disponibilidad/no-disponibles?fecha=YYYY-MM-DD
+// Para que el lider lo vea ANTES de asignar (hoy el aviso llega despues, cuando
+// a la persona ya le salio el push "te asignaron").
+//
+// Devuelve SOLO ids, nunca motivos: con eso basta para pintar la marca en el
+// desplegable, y no le manda al navegador del lider los motivos de toda la iglesia.
+const fechaQuerySchema = z.object({
+  fecha: z.string().trim().regex(FECHA, 'elige una fecha')
+});
+r.get('/no-disponibles', validar(fechaQuerySchema, 'query'), (req, res) => {
+  if (!esLiderOAdmin(req.user.persona_id))
+    return res.status(403).json({ error: 'Solo quien asigna servicios puede ver esto' });
+  // El JOIN con persona es lo que impide ver a gente de otra iglesia:
+  // fecha_no_disp NO tiene columna de iglesia, cuelga de la persona.
+  const filas = db.prepare(
+    `SELECT DISTINCT f.persona_id
+       FROM fecha_no_disp f
+       JOIN persona p ON p.id = f.persona_id
+      WHERE p.iglesia_id = ? AND ? BETWEEN f.desde AND f.hasta`
+  ).all(req.user.iglesia_id, req.query.fecha);
+  res.json(filas.map(f => f.persona_id));
 });
 
 export default r;

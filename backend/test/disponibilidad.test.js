@@ -88,3 +88,58 @@ test('un motivo larguisimo -> 400', async () => {
 test('una fecha con formato raro -> 400', async () => {
   assert.equal((await crear(SEM.miembro1, { desde: '5/8/2026', hasta: '2026-08-12' })).status, 400);
 });
+
+// ------------------------------------------------------------
+//  El lider ve quien no puede ANTES de asignar.
+// ------------------------------------------------------------
+const noDisp = (persona, fecha, iglesiaId) =>
+  fetch(base + '/api/disponibilidad/no-disponibles?fecha=' + fecha, { headers: H(persona, iglesiaId) });
+
+test('el lider ve el id de quien marco no disponible ese dia', async () => {
+  await crear(SEM.miembro1, { desde: '2026-08-05', hasta: '2026-08-12', motivo: 'Viaje' });
+  const ids = await (await noDisp(SEM.lider, '2026-08-07')).json();
+  assert.deepEqual(ids, [SEM.miembro1.id]);
+});
+
+test('los bordes del periodo cuentan como no disponible', async () => {
+  await crear(SEM.miembro1, { desde: '2026-08-05', hasta: '2026-08-12' });
+  assert.deepEqual(await (await noDisp(SEM.lider, '2026-08-05')).json(), [SEM.miembro1.id]);
+  assert.deepEqual(await (await noDisp(SEM.lider, '2026-08-12')).json(), [SEM.miembro1.id]);
+  assert.deepEqual(await (await noDisp(SEM.lider, '2026-08-13')).json(), []);
+});
+
+test('NO devuelve los motivos: al lider le basta con saber quien', async () => {
+  await crear(SEM.miembro1, { desde: '2026-08-05', hasta: '2026-08-12', motivo: 'Tratamiento medico' });
+  const texto = await (await noDisp(SEM.lider, '2026-08-07')).text();
+  assert.doesNotMatch(texto, /Tratamiento/, 'el motivo no debe viajar en esta respuesta');
+});
+
+test('dos periodos solapados de la misma persona no la duplican', async () => {
+  await crear(SEM.miembro1, { desde: '2026-08-05', hasta: '2026-08-12' });
+  await crear(SEM.miembro1, { desde: '2026-08-07', hasta: '2026-08-20' });
+  assert.deepEqual(await (await noDisp(SEM.lider, '2026-08-08')).json(), [SEM.miembro1.id]);
+});
+
+test('un lider de OTRA iglesia no ve a mi gente', async () => {
+  await crear(SEM.miembro1, { desde: '2026-08-05', hasta: '2026-08-12' });
+
+  const otraIglesia = Number(db.prepare(
+    "INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRA')"
+  ).run().lastInsertRowid);
+  const pastorAjeno = Number(db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, es_pastor, activo) VALUES (?,'pastor2','Pastor Ajeno','x',1,1)"
+  ).run(otraIglesia).lastInsertRowid);
+
+  const ids = await (await noDisp({ id: pastorAjeno }, '2026-08-07', otraIglesia)).json();
+  assert.deepEqual(ids, [], 'no debe ver a nadie de la iglesia de al lado');
+});
+
+test('un feligres cualquiera no puede consultar la lista', async () => {
+  await crear(SEM.miembro1, { desde: '2026-08-05', hasta: '2026-08-12' });
+  assert.equal((await noDisp(SEM.miembro2, '2026-08-07')).status, 403);
+});
+
+test('sin fecha o con fecha invalida -> 400 (esto estrena validar(...,"query"))', async () => {
+  assert.equal((await noDisp(SEM.lider, '')).status, 400);
+  assert.equal((await noDisp(SEM.lider, '7-8-2026')).status, 400);
+});
