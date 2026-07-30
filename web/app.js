@@ -1182,6 +1182,10 @@ async function pintarNoDispServicio(){
   if(!fecha) return;
   try{
     const ids=await api('/disponibilidad/no-disponibles?fecha='+encodeURIComponent(fecha));
+    // Si mientras esperabamos la respuesta cambio el evento elegido (p.ej. al
+    // recorrer el desplegable con las flechas), esta respuesta ya es vieja:
+    // pintarla marcaria a gente segun una fecha que ya no es la seleccionada.
+    if((selEv.selectedOptions[0]?.dataset.fecha||'')!==fecha) return;
     const set=new Set(ids.map(String));
     for(const o of selP.options) if(set.has(o.value)) o.textContent=o.dataset.nombre+' ⚠️ no disponible';
   }catch{ /* sin marcas: nunca bloquea ni rompe la pantalla */ }
