@@ -3628,6 +3628,8 @@ const Org = {
           <button class="btn ghost small-btn" onclick="Org.copiarParaWhatsapp()">📋 Copiar</button>
           <button class="btn ghost small-btn" onclick="Org.imprimir()"
             title="En el diálogo de impresión, elige &quot;Guardar como PDF&quot; en el destino">🖨️ Imprimir / PDF</button>
+          ${(h.gastos&&h.gastos.length)?`<button class="btn ghost small-btn" onclick="Org.imprimirRendicion()"
+            title="El papel de las cuentas, para llevárselo al tesorero">🧾 Rendición</button>`:''}
           <button class="btn ghost small-btn" onclick="vistaOrganizacion()">← Volver</button></div></div>
       <div class="card">
         <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''}</div>
@@ -3648,14 +3650,14 @@ const Org = {
         <div id="org-gastos">${gastos}</div>
         <div class="org-total">Total gastado: <b>${money(h.total_gastado)}</b></div>
         ${aportes}
-        ${ed?`<div class="row" style="gap:6px;margin-top:10px">
+        ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px">
           <input id="org-gasto-concepto" placeholder="Ej. Pan">
           <input id="org-gasto-monto" type="number" min="1" placeholder="Monto" style="max-width:110px">
           <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?">
             <option value="">Lo puse yo</option>
           </select>
           <button class="btn small-btn" onclick="Org.addGasto()">Añadir</button></div>`:''}
-        ${ed?`<div style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red-tx)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
+        ${ed?`<div class="no-print" style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red-tx)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
       </div>`;
     if(ed) Org._llenarQuienPago();
   },
@@ -3724,24 +3726,37 @@ const Org = {
   // navegador lo saca de document.title, que aquí es la cadena fija "Iglesia
   // App" (index.html), y así toda hoja guardada salía como "Iglesia App.pdf" —
   // cinco eventos distintos, cinco archivos homónimos en el teléfono.
-  imprimir(){
+  //
+  // Los dos papeles de la hoja pasan por aquí. `rendicion` decide cuál: la
+  // clase en el <body> es lo único que mira el CSS de impresión.
+  //
+  // Restaurar va en 'afterprint' y NO justo después de print(): en escritorio
+  // print() bloquea hasta que se cierra el diálogo, pero en móvil vuelve
+  // enseguida y se restauraría antes de que el navegador lo lea. El
+  // temporizador es la red de seguridad para el navegador que no dispare el
+  // evento; restaurar dos veces no hace daño, dejarlo mal para siempre sí.
+  _conPapel(rendicion){
     const h=Org._hoja;
+    // El modo se limpia SIEMPRE al empezar, no solo al terminar: sus reglas
+    // viven dentro de @media print, así que una clase pegada no se ve en
+    // pantalla y sacaría los gastos en el siguiente papel normal. Así se cura
+    // sola en el próximo uso en vez de acumularse.
+    document.body.classList.remove('modo-rendicion');
     if(!h){ window.print(); return; }   // sin hoja cargada no hay nada que nombrar
     const titulo=(h.evento&&h.evento.titulo)||h.titulo||'Lista';
     const fecha=(h.evento&&h.evento.fecha)||h.fecha;
     const previo=document.title;
-    document.title=titulo+(fecha?' — '+fechaTxt(fecha):'');
-    // Restaurar en 'afterprint' y NO justo después de print(): en el escritorio
-    // print() bloquea hasta que se cierra el diálogo, pero en móvil vuelve
-    // enseguida y el título se restauraría antes de que el navegador lo lea.
-    // El temporizador es solo la red de seguridad para el navegador que no
-    // dispare el evento (o que el usuario deje el diálogo abierto y se olvide):
-    // restaurar dos veces no hace daño, deja el título mal para siempre sí.
-    const restaurar=()=>{ document.title=previo; };
+    document.title=(rendicion?'Rendición — ':'')+titulo+(fecha?' — '+fechaTxt(fecha):'');
+    if(rendicion) document.body.classList.add('modo-rendicion');
+    const restaurar=()=>{ document.title=previo; document.body.classList.remove('modo-rendicion'); };
     window.addEventListener('afterprint',restaurar,{once:true});
     setTimeout(restaurar,60000);
     window.print();
   },
+  // La hoja que se pega en la puerta de la iglesia: cosas a llevar, sin gastos.
+  imprimir(){ Org._conPapel(false); },
+  // El papel de las cuentas, para el tesorero: gastos, total y quién puso qué.
+  imprimirRendicion(){ Org._conPapel(true); },
   // Texto plano para pegar en el grupo de WhatsApp, que es por donde la iglesia
   // realmente comparte esto. SIN gastos a propósito: se pega en un grupo donde
   // hay feligreses, y las cuentas son cosa de líderes (misma decisión que la

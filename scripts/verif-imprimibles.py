@@ -92,6 +92,68 @@ def main():
         page.screenshot(path=args.capturas + "/papel-cosas.png", full_page=True)
         page.emulate_media(media="screen")
 
+        print("\n[B] La rendicion (el papel que va al tesorero)")
+        boton = page.locator('button:has-text("Rendición")')
+        check(boton.count() == 1, "hay un boton de rendicion", boton.count())
+
+        # Se sustituye print() para capturar el estado EXACTO en que el
+        # navegador leeria el documento: titulo y clase puestos.
+        page.evaluate("""() => {
+            window.__alImprimir = null;
+            window.print = () => { window.__alImprimir = {
+                titulo: document.title,
+                modo: document.body.classList.contains('modo-rendicion')
+            }; };
+        }""")
+        boton.first.click()
+        page.wait_for_timeout(250)
+        estado = page.evaluate("window.__alImprimir")
+        check(estado is not None, "se llamo a print()", estado)
+        check(estado and estado["modo"], "el modo rendicion estaba puesto al imprimir", estado)
+        check(estado and "Rendición" in estado["titulo"],
+              "el archivo se llamaria 'Rendicion - ...'", estado and estado["titulo"])
+
+        # El dialogo seguiria abierto: aqui se mira el papel.
+        page.emulate_media(media="print")
+        page.wait_for_timeout(200)
+        check(page.locator(".card-gastos").first.is_visible(), "AHORA si salen los gastos")
+        check(not page.locator(".card-cosas").first.is_visible(), "no salen las cosas a llevar")
+        check(page.locator(".solo-print").first.is_visible(), "sigue la cabecera de la iglesia")
+        check(not page.locator(".org-hora").first.is_visible(),
+              "la hora de llegada no sale en la rendicion")
+        gcard = page.locator(".card-gastos").first.inner_text()
+        check("Quién puso qué" in gcard, "sale el resumen de quien puso que", gcard[:60])
+        check("Añadir" not in gcard, "NO sale el formulario de anadir gastos")
+        check("Borrar esta lista" not in gcard, "NO sale el enlace de borrar")
+        page.screenshot(path=args.capturas + "/papel-rendicion.png", full_page=True)
+        page.emulate_media(media="screen")
+
+        print("\n[C] El estado no se queda pegado")
+        page.evaluate("window.dispatchEvent(new Event('afterprint'))")
+        page.wait_for_timeout(150)
+        check(not page.evaluate("document.body.classList.contains('modo-rendicion')"),
+              "tras afterprint la clase se quita")
+        check(page.title() == "Iglesia App", "y el titulo vuelve", page.title())
+
+        # Autocurado: aunque la clase quede pegada, el papel normal se arregla solo.
+        page.evaluate("document.body.classList.add('modo-rendicion')")
+        page.evaluate("window.print = () => {};")
+        page.locator('button:has-text("Imprimir / PDF")').first.click()
+        page.wait_for_timeout(250)
+        check(not page.evaluate("document.body.classList.contains('modo-rendicion')"),
+              "imprimir la hoja de cosas cura una clase pegada")
+
+        # Hoja SIN gastos: es otro estado, hace falta una hoja nueva.
+        print("\n[D] Sin gastos no hay boton de rendicion")
+        page.evaluate("navTo('organizacion')")
+        page.wait_for_timeout(900)
+        page.once("dialog", lambda d: d.accept("Hoja sin gastos"))
+        page.click('button:has-text("Nueva lista")')
+        page.wait_for_timeout(1200)
+        check(page.locator('button:has-text("Rendición")').count() == 0,
+              "sin gastos, el boton no se pinta",
+              page.locator('button:has-text("Rendición")').count())
+
         reales = [e for e in errores if "favicon" not in e.lower()]
         check(not reales, "sin errores de consola", reales[:3])
         browser.close()

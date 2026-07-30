@@ -654,6 +654,14 @@ body{transition:background-color .3s ease,color .3s ease;}
      clases. Mismo recurso que usa .no-print cuatro lineas mas arriba. */
   .solo-print{display:block !important;font-size:0.85rem;color:#444;border-bottom:1px solid #ccc;
     padding-bottom:4px;margin-bottom:10px;}
+  /* ---- Modo rendicion: el segundo papel, el que va al tesorero ----
+     Vencer a .no-print (display:none !important) exige !important Y mas
+     especificidad: dos clases contra una. Sin las dos cosas, la card de gastos
+     seguiria oculta y esto no saldria nunca -- y en pantalla todo se veria
+     bien, que es lo que hace estos fallos tan caros de encontrar. */
+  .modo-rendicion .card-gastos{display:block !important;}
+  .modo-rendicion .card-cosas{display:none !important;}
+  .modo-rendicion .org-hora{display:none !important;}
   .org-row{padding:10px 0;border-bottom:1px solid #ddd;}
   /* Se oculta el ✕ y el botón "Asignar", pero NUNCA el nombre: una hoja impresa
      sin nombres no sirve para repartir nada. Lo que falta por asignar deja una
