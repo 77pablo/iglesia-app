@@ -68,7 +68,7 @@ Cambiar **el grupo de un evento** decía "actualizado" y no cambiaba nada (`vali
 
 ## 🆕 FASE 12 (30 jul 2026): "No puedo servir ese día" — la mitad que faltaba
 
-**443 tests.** Rama `feat/no-puedo-servir`, 14 commits (los seis originales, más ocho de una revisión posterior que cerró un camino sin avisar en música, un permiso de más y cuatro fallos menores de interfaz). Spec en `docs/superpowers/specs/2026-07-30-no-puedo-servir-design.md`, plan en `docs/superpowers/plans/2026-07-30-no-puedo-servir.md`.
+**443 tests.** Rama `feat/no-puedo-servir` (seis commits originales, más ocho de una revisión posterior que cerró un camino sin avisar en música, un permiso de más y cuatro fallos menores de interfaz — y una tercera revisión más, ya cerrada, que no queda contada aquí a mano: el número exacto envejece con cada commit, incluido el que escribe este párrafo). Spec en `docs/superpowers/specs/2026-07-30-no-puedo-servir-design.md`, plan en `docs/superpowers/plans/2026-07-30-no-puedo-servir.md`.
 
 Media función llevaba construida en el proyecto desde hacía meses **y no se había disparado ni una vez**: la tabla `fecha_no_disp` existía, `asignaciones.js` la consultaba al asignar y la pantalla del líder ya pintaba el aviso — pero **no había un solo `INSERT` en todo el proyecto**. Faltaba la pantalla donde alguien dice "del 5 al 12 no puedo".
 
