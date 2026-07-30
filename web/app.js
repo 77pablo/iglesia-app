@@ -1033,7 +1033,10 @@ async function vistaMiServicio(){
   ]);
   const cont=$('ms');
   const total=(servicios?.length||0)+(musica?.length||0)+(tareas?.length||0)+(misCosas?.length||0);
-  if(!total){ cont.className=''; cont.innerHTML='<div class="placeholder"><div class="big">🙌</div><p>No tienes nada asignado por ahora.</p></div>'; return; }
+  // Ojo: aunque no tengas NADA asignado, la seccion de "cuando no puedo servir"
+  // tiene que salir igual — si no, quien todavia no sirve nunca podria marcar
+  // sus fechas, que es justo cuando mas falta hace avisarlo.
+  const vacio = !total ? '<div class="placeholder"><div class="big">🙌</div><p>No tienes nada asignado por ahora.</p></div>' : '';
   cont.className='';
   let html='';
 
@@ -1079,7 +1082,60 @@ async function vistaMiServicio(){
       </div>`;
     }).join('')+'</div>';
   }
-  cont.innerHTML=html;
+  cont.innerHTML = vacio + html + seccionNoDisp();
+  cargarNoDisp();
+}
+// ============================================================
+//  "Cuando no puedo servir" — cada quien marca SOLO lo suyo.
+//  La tabla existia desde siempre y asignaciones.js ya avisaba al lider; lo que
+//  faltaba era esto. Ver docs/superpowers/specs/2026-07-30-no-puedo-servir-design.md
+// ============================================================
+function seccionNoDisp(){
+  return `<h3 class="section-title">📆 Cuándo no puedo servir</h3>
+    <div class="card">
+      <div class="head-row"><p class="muted small" style="margin:0">Marca los días que no estarás. Tu líder lo verá al asignar.</p>
+        <button class="btn small-btn" onclick="formNoDisp()">+ Marcar fechas</button></div>
+      <div id="form-nodisp"></div>
+      <div id="nodisp-lista" class="muted">…</div>
+    </div>`;
+}
+async function cargarNoDisp(){
+  const c=$('nodisp-lista'); if(!c) return;
+  try{
+    const p=await api('/disponibilidad/mias');
+    c.className=p.length?'list':'muted';
+    c.innerHTML=p.length? p.map(x=>`<div class="item-card flex">
+      <div style="flex:1"><div class="item-titulo">${fechaTxt(x.desde)} – ${fechaTxt(x.hasta)}</div>
+        ${x.motivo?`<div class="muted small">${escHtml(x.motivo)}</div>`:''}</div>
+      <button class="btn ghost small-btn" aria-label="Quitar este periodo" onclick="borrarNoDisp(${x.id})">✕</button>
+    </div>`).join('') : '<p class="small">No has marcado ningún día.</p>';
+  }catch{
+    c.className='muted';
+    c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarNoDisp()" class="link" style="display:inline;padding:0">Reintentar</a></p>';
+  }
+}
+function formNoDisp(){ const z=$('form-nodisp'); if(z.innerHTML){z.innerHTML='';return;}
+  z.innerHTML=`<div class="form-panel">
+    <label>Desde</label><div>${fechaSelectHTML('nd1','')}</div>
+    <label style="margin-top:10px">Hasta</label><div>${fechaSelectHTML('nd2','')}</div>
+    <label for="nd-motivo" style="margin-top:10px">Motivo (opcional)</label>
+    <input id="nd-motivo" maxlength="200" placeholder="Ej. Viaje"/>
+    <button class="btn small-btn" style="margin-top:12px" onclick="guardarNoDisp()">Guardar</button></div>`; }
+async function guardarNoDisp(){
+  const desde=fechaSelectValor('nd1'), hasta=fechaSelectValor('nd2');
+  if(!desde||!hasta) return toast('Elige las dos fechas');
+  await conBoton(botonActual(), async()=>{
+    try{
+      await api('/disponibilidad',{method:'POST',body:JSON.stringify({desde,hasta,motivo:$('nd-motivo').value.trim()})});
+      $('form-nodisp').innerHTML=''; cargarNoDisp(); toast('📆 Fechas marcadas');
+    }catch(e){ toast(e.message); }
+  }, 'Guardando…');
+}
+function borrarNoDisp(id){
+  modalConfirm('¿Quitar este periodo? Volverás a aparecer como disponible esos días.', async()=>{
+    try{ await api('/disponibilidad/'+id,{method:'DELETE'}); cargarNoDisp(); toast('Quitado'); }
+    catch(e){ toast(e.message); }
+  }, {okLabel:'Quitar', danger:true});
 }
 async function tareaHecha(id){ try{ await api('/grupo/tareas/'+id+'/hecho',{method:'PATCH'}); vistaMiServicio(); toast('✅ Marcada como hecha'); }catch(e){ toast(e.message); } }
 async function responder(id,accion){
