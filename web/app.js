@@ -170,10 +170,12 @@ async function conBoton(btn, fn, texto){
   finally{ soltar(); }
 }
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
-function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?{m:p[1],d:p[2]}:null; }
+function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?{a:p[0],m:p[1],d:p[2]}:null; }
 function chipFecha(f){ const x=parseFecha(f); if(!x) return `<div class="mini-date"><b>—</b><span></span></div>`; return `<div class="mini-date"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
 function fechaChip(f){ const x=parseFecha(f); if(!x) return `<div class="fecha-chip"><b>—</b><span></span></div>`; return `<div class="fecha-chip"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
-function fechaTxt(f){ const x=parseFecha(f); if(!x) return String(f||'—'); return x.d+' '+(MESES[(+x.m)-1]||''); }
+// conAnio: cuando el mismo mes-día puede repetirse en años distintos (p.ej.
+// "5 ago" no distingue 2026 de 2027), pasa true para que se vea el año.
+function fechaTxt(f, conAnio){ const x=parseFecha(f); if(!x) return String(f||'—'); return x.d+' '+(MESES[(+x.m)-1]||'')+(conAnio?' '+x.a:''); }
 // Duración legible a partir de SEGUNDOS: "45 s", "16 min", "6 h 5 min", "3 d 2 h".
 // Dos unidades y no una a propósito: para decidir si hay que actuar, 16 minutos
 // y 6 horas de retraso son situaciones muy distintas, y redondear a una sola
@@ -1105,7 +1107,7 @@ async function cargarNoDisp(){
     const p=await api('/disponibilidad/mias');
     c.className=p.length?'list':'muted';
     c.innerHTML=p.length? p.map(x=>`<div class="item-card flex">
-      <div style="flex:1"><div class="item-titulo">${fechaTxt(x.desde)} – ${fechaTxt(x.hasta)}</div>
+      <div style="flex:1"><div class="item-titulo">${fechaTxt(x.desde,true)} – ${fechaTxt(x.hasta,true)}</div>
         ${x.motivo?`<div class="muted small">${escHtml(x.motivo)}</div>`:''}</div>
       <button class="btn ghost small-btn" aria-label="Quitar este periodo" onclick="borrarNoDisp(${x.id})">✕</button>
     </div>`).join('') : '<p class="small">No has marcado ningún día.</p>';
