@@ -1752,7 +1752,7 @@ async function guardarEnsayo(){
 }
 async function agregarIntegrante(){
   const body={persona_id:$('eq-persona').value,instrumento:$('eq-inst').value};
-  try{ await api('/musica/plan/'+window._planEv+'/equipo',{method:'POST',body:JSON.stringify(body)}); toast('🎵 Integrante agregado y avisado'); cargarPlan(window._planEv); }
+  try{ const r=await api('/musica/plan/'+window._planEv+'/equipo',{method:'POST',body:JSON.stringify(body)}); toast('🎵 Integrante agregado y avisado'+(r.aviso?'  ⚠️ '+r.aviso:'')); cargarPlan(window._planEv); }
   catch(e){ toast(e.message); }
 }
 function quitarIntegrante(id){ modalConfirm('¿Quitar a este integrante del equipo?', async()=>{
