@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 29 de julio de 2026 (el indicador de respaldo estaba ciego: Litestream mezcla su log con la tabla en stdout — ver Fase 11; antes: la rendición imprimible para el tesorero)*
+*Última actualización: 29 de julio de 2026, noche (`/api/health` estaba dentro del limitador y eso reinicia el servicio en bucle; el indicador de respaldo estaba ciego; la rendición imprimible para el tesorero — 325 tests, todo desplegado)*
 
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
 
@@ -401,6 +401,21 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
+### 👉 POR DÓNDE RETOMAR (al 29 jul 2026 · noche — todo desplegado, **325 tests en verde**, nada pendiente de subir)
+
+**Lo único abierto, y es de mirar, no de programar:** entrar al panel de Render → servicio `iglesia-app` → pestaña **Logs** o **Events**, y buscar la línea `[litestream] restaurando /data/iglesia.db desde R2`. Sale **una vez por arranque**.
+
+- Si se repetía **cada uno o dos minutos** → el bucle de reinicios era real y ya está cortado (ver la sección de `/api/health` más arriba).
+- Si solo aparece en los despliegues → era otra cosa, y hay que seguir investigando **con la tarjeta ya arreglada**, que desde este despliegue se refresca sola y, tras 4 minutos atascada en "acaba de arrancar", lo dice en rojo y manda a los registros.
+
+Y después, mirar la tarjeta 💾 Respaldo del panel del super-admin, que ahora sí puede dar un veredicto: **verde** (cerrado el último bloqueante del proyecto) o **rojo** (y entonces cotejar las 4 variables `R2_*`/`LITESTREAM_*`). Recordar que las variables **sí están puestas**: si faltaran, la tarjeta diría "faltan las variables", no "acaba de arrancar".
+
+Después de eso: `SMTP_USER`/`SMTP_PASS` y `SUPERADMIN_PASSWORD`.
+
+**Lo hecho el 29 jul** (4 commits, todos en `main` y desplegados): la **rendición imprimible** para el tesorero (Fase 10) · el **indicador de respaldo estaba ciego** porque Litestream mezcla su log con la tabla en stdout · **`/api/health` estaba limitada** y eso reinicia el servicio en bucle · la **tarjeta se quedaba congelada** en "acaba de arrancar".
+
+---
+
 ### 👉 POR DÓNDE RETOMAR (al 28 jul 2026 · noche, todo desplegado y **307 tests en verde**)
 
 1. **Persistencia: probablemente YA ESTÁ, solo falta confirmarlo.** El bucket **`iglesia-app-db`** existe en Cloudflare R2 desde hace tiempo, se ha trabajado siempre con él, y el 29 jul tenía **285 objetos / 1.51 MB** con ~6.470 operaciones de escritura en el periodo — eso es una réplica de Litestream viva, no un bucket dormido. **No hay que crear bucket ni token.** Lo único pendiente es mirar la tarjeta 💾 Respaldo en el panel del super-admin: si está verde con fecha reciente, este punto está cerrado. *(Las versiones anteriores de este documento decían que las variables "nunca se confirmaron", y eso mandó a crear de cero algo que ya existía. La duda era sobre la confirmación, no sobre la existencia.)*
@@ -450,6 +465,8 @@ app/
 El ciclo se alimenta a sí mismo: se pasa de 100 → 429 → Render declara el servicio enfermo y lo **reinicia** → el contador vive en memoria, así que el reinicio lo pone a cero → vuelve a empezar. Mientras, la app contesta 200 a todo lo demás, así que no se nota por ningún otro sitio. Y en el plan free, donde `/data` es efímero, **cada reinicio se lleva lo que Litestream no haya replicado todavía**. Es también la explicación natural del "acaba de arrancar" perpetuo: si el proceso reinicia cada uno o dos minutos, cada lectura cae de verdad dentro del periodo de gracia de 3 minutos.
 
 **Arreglo:** `SIN_LIMITE_GENERAL = ['/api/mensajes', '/api/health']` en `server.js`. El test comprueba las dos cosas —que 120 comprobaciones seguidas no reciben ni un 429, y que la ruta **no lleva cabeceras `ratelimit-*`**— porque si solo comprobara el 429, subir el tope a 1000 lo dejaría en verde con la bomba armada para más adelante.
+
+**✅ Desplegado y verificado en vivo (29 jul):** `GET https://iglesia-app-r9ay.onrender.com/api/health` responde 200 **sin cabeceras `ratelimit-*`** — prueba directa, desde fuera, de que la ruta ya no pasa por el limitador. El mecanismo del bucle queda cortado.
 
 **⚠️ Lo que NO está confirmado:** que en producción estuviera reiniciándose de verdad. Se intentó medir desde fuera leyendo `ratelimit-remaining` como si fuera un cronómetro de tiempo de vida, y **esa medición no vale**: `claveLimitador` cuenta por IP cuando no hay sesión, así que si la IP de salida del que mide varía, cada petición cae en un contador distinto y el "diente de sierra" no prueba nada. Lo confirma o lo descarta la pestaña **Events/Logs de Render** (una línea `[litestream] restaurando …` repitiéndose cada pocos minutos = un arranque cada vez). **Pendiente de que el dueño lo mire.**
 - **Rama `chore/limpieza-profunda` (23 jul):** completamente fusionada en `main`, cero commits propios. Es un resto, se puede borrar.
