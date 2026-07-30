@@ -1170,6 +1170,9 @@ async function vistaServicio(){
     pintarNoDispServicio();   // el select de evento ya viene con uno elegido
   }catch{ $('sv').innerHTML=errCargar('vistaServicio()','los servicios'); }
 }
+// Mensaje de error propio de pintarNoDispServicio(): se compara antes de
+// limpiar #sv-msg para no borrar un aviso de asignar() (ver mas abajo).
+const MSG_NO_DISP_ERROR='No se pudo comprobar quién no está disponible; puedes asignar igual.';
 // Marca en el desplegable a quien dijo que no puede ese dia.
 // Se hace ANTES de asignar a proposito: el aviso de despues llega cuando a la
 // persona ya le salto el push "te asignaron".
@@ -1190,12 +1193,15 @@ async function pintarNoDispServicio(){
     if((selEv.selectedOptions[0]?.dataset.fecha||'')!==fecha) return;
     const set=new Set(ids.map(String));
     for(const o of selP.options) if(set.has(o.value)) o.textContent=o.dataset.nombre+' ⚠️ no disponible';
-    if(m){ m.style.color='var(--muted)'; m.textContent=''; }
+    // Esta funcion se lanza sin await al cargar la vista: si asignar() ya
+    // escribio su aviso de "marco NO disponible" en #sv-msg antes de que esta
+    // consulta resolviera, no lo pisamos limpiando algo que no es nuestro.
+    if(m && m.textContent===MSG_NO_DISP_ERROR){ m.style.color='var(--muted)'; m.textContent=''; }
   }catch{
     // Nunca bloquea ni rompe la pantalla: sin marcas se puede asignar igual.
     // Pero sin este aviso, "nadie marco nada" y "no se pudo comprobar" se ven
     // identicos (el desplegable queda igual de limpio en los dos casos).
-    if(m){ m.style.color='var(--muted)'; m.textContent='No se pudo comprobar quién no está disponible; puedes asignar igual.'; }
+    if(m){ m.style.color='var(--muted)'; m.textContent=MSG_NO_DISP_ERROR; }
   }
 }
 async function asignar(){
