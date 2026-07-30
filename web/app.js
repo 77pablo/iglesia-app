@@ -1116,8 +1116,8 @@ async function cargarNoDisp(){
 }
 function formNoDisp(){ const z=$('form-nodisp'); if(z.innerHTML){z.innerHTML='';return;}
   z.innerHTML=`<div class="form-panel">
-    <label>Desde</label><div>${fechaSelectHTML('nd1','')}</div>
-    <label style="margin-top:10px">Hasta</label><div>${fechaSelectHTML('nd2','')}</div>
+    <label>Desde</label><div>${fechaSelectHTML('nd1','',{opcional:true})}</div>
+    <label style="margin-top:10px">Hasta</label><div>${fechaSelectHTML('nd2','',{opcional:true})}</div>
     <label for="nd-motivo" style="margin-top:10px">Motivo (opcional)</label>
     <input id="nd-motivo" maxlength="200" placeholder="Ej. Viaje"/>
     <button class="btn small-btn" style="margin-top:12px" onclick="guardarNoDisp()">Guardar</button></div>`; }
