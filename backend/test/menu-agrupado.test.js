@@ -37,26 +37,42 @@ function recortarLista(nombre) {
 }
 
 // Las claves del NAV son el PRIMER elemento de cada terna ['clave','icono','Etiqueta'].
-const CLAVES_NAV = [...recortarLista('NAV').matchAll(/\['([a-z_]+)'/g)].map(m => m[1]);
+//
+// ⚠️ El patron es PERMISIVO ([^']+) a proposito, no [a-z_]+. Si una clave nueva
+// usara digitos, mayusculas o guion ('reportes2', 'panel-x'), con el patron
+// estricto no entraria siquiera en esta lista —la de "lo que deberia estar
+// cubierto"— y entonces podria faltar de todos los grupos sin que nadie la
+// echara en falta: la prueba pasaria en verde con esa entrada desaparecida del
+// menu. La lista de lo esperado nunca debe filtrar por forma.
+const CLAVES_NAV = [...recortarLista('NAV').matchAll(/\['([^']+)'/g)].map(m => m[1]);
 
 // Saca las claves SOLO de los arrays `claves: [...]`, nunca del bloque entero.
 //
 // ⚠️ Esto NO es quisquillosidad. Barriendo todo el bloque, un titulo tambien
-// entraria: hoy no pasa porque los titulos llevan mayusculas, tildes o espacios
-// y no casan con [a-z_]+, pero basta que alguien escriba `titulo: 'admin'` — un
-// copy-paste, un grupo renombrado — para que esa palabra cuente como "asignada"
-// SIN estarlo en ningun `claves: [...]`. Y entonces esta prueba diria que todo
-// esta cubierto justo cuando esa entrada ha desaparecido del menu. O sea: la
-// prueba enmascararia el unico fallo que existe para atrapar.
-function clavesAsignadas() {
-  const bloque = recortarLista('GRUPOS_NAV');
+// entraria: hoy no pasa porque los titulos llevan mayusculas, tildes o espacios,
+// pero basta que alguien escriba `titulo: 'admin'` — un copy-paste, un grupo
+// renombrado — para que esa palabra cuente como "asignada" SIN estarlo en ningun
+// `claves: [...]`. Y entonces esta prueba diria que todo esta cubierto justo
+// cuando esa entrada ha desaparecido del menu: enmascararia el unico fallo que
+// existe para atrapar.
+//
+// Recibe el texto como parametro para que la prueba de mas abajo pueda ejercer
+// ESTA funcion con un caso de colision, en vez de reimplementar sus expresiones
+// regulares — una copia no protege de que se rompa el original.
+function clavesDeGrupos(bloque) {
   const arrays = [...bloque.matchAll(/claves:\s*\[([^\]]*)\]/g)].map(m => m[1]);
-  assert.ok(arrays.length, 'no se encontro ningun `claves: [...]` en GRUPOS_NAV');
-  return arrays.flatMap(a => [...a.matchAll(/'([a-z_]+)'/g)].map(m => m[1]));
+  const cuantosGrupos = [...bloque.matchAll(/titulo\s*:/g)].length;
+  assert.ok(arrays.length, 'no se encontro ningun `claves: [...]`');
+  // Un reformateo que rompiera la coincidencia de UN grupo (p. ej. `claves :`)
+  // lo dejaria fuera en silencio. Esto obliga a que haya tantos arrays como
+  // titulos.
+  assert.equal(arrays.length, cuantosGrupos,
+    'hay grupos cuyo `claves: [...]` no se reconocio: el extractor estaria cubriendo de menos');
+  return arrays.flatMap(a => [...a.matchAll(/'([^']+)'/g)].map(m => m[1]));
 }
 
 test('cada clave del NAV pertenece a exactamente un grupo', () => {
-  const enGrupos = clavesAsignadas();
+  const enGrupos = clavesDeGrupos(recortarLista('GRUPOS_NAV'));
 
   const sinAsignar = CLAVES_NAV.filter(k => !enGrupos.includes(k));
   const inventadas = enGrupos.filter(k => !CLAVES_NAV.includes(k));
@@ -71,13 +87,15 @@ test('cada clave del NAV pertenece a exactamente un grupo', () => {
 });
 
 test('un titulo que coincida con una clave real no puede colar como asignada', () => {
-  // Se comprueba el EXTRACTOR, no el contenido de hoy: es la fisura por la que
-  // la prueba de arriba podria pasar en verde con una entrada desaparecida.
-  const arrays = [...`[
+  // Llama a la funcion REAL con un caso de colision. Si alguien le devuelve el
+  // barrido del bloque entero, esta prueba se pone roja — que es justo lo que no
+  // hacia su primera version, que reimplementaba las regex y por tanto se
+  // limitaba a probar su propia copia.
+  const sacadas = clavesDeGrupos(`[
     { titulo: 'admin', claves: ['inicio'] },
-  ]`.matchAll(/claves:\s*\[([^\]]*)\]/g)].map(m => m[1]);
-  const sacadas = arrays.flatMap(a => [...a.matchAll(/'([a-z_]+)'/g)].map(m => m[1]));
-  assert.deepEqual(sacadas, ['inicio'], 'el titulo no puede contarse como clave asignada');
+  ]`);
+  assert.deepEqual(sacadas, ['inicio'],
+    'el titulo se conto como clave asignada: una entrada que faltase de los grupos pasaria desapercibida');
 });
 
 // --- la funcion de reparto, ejecutada de verdad -------------------------------
