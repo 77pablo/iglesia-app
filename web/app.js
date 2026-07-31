@@ -2299,7 +2299,8 @@ function formNino(id){ const z=$('form-nino'); if(z.innerHTML && !id){z.innerHTM
     <label for="n-autorizados" style="margin-top:10px">Quién puede retirarlo</label>
     <input id="n-autorizados" maxlength="300" placeholder="Ej. Ana Rojas (abuela), Juan Pérez (papá)" value="${escHtml(x.autorizados||'')}"/>
     <p class="muted small" style="margin-top:4px">Nombre y parentesco. No hace falta teléfono ni RUT.</p>
-    <button class="btn small-btn" style="margin-top:10px" onclick="guardarNino(${id||0})">${id?'Guardar cambios':'Guardar'}</button></div>`; }
+    <button class="btn small-btn" style="margin-top:10px" onclick="guardarNino(${id||0})">${id?'Guardar cambios':'Guardar'}</button></div>`;
+  z.scrollIntoView({behavior:'smooth',block:'center'}); }
 async function guardarNino(id){
   const nombre=$('n-nombre').value.trim();
   if(!nombre) return toast('Pon el nombre');
