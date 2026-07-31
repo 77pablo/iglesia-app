@@ -15,7 +15,8 @@
 - **Aislamiento entre iglesias:** `PATCH /api/admin/usuarios/:id` ya resuelve la persona acotada por iglesia en la misma consulta (`personaDeIglesia(id, ig)`, `admin.js:78-80`, usada en la ruta desde `admin.js:89`) — no hay guardia nueva que escribir, solo hay que asegurarse de seguir usando `p.id` (la fila ya resuelta) y nunca `req.params.id` crudo en el `UPDATE`. `PATCH /api/directorio/perfil` solo toca `req.user.persona_id` (la propia sesión), así que no recibe ningún id ajeno.
 - **Mensajes de validación en castellano dentro del esquema zod.** En zod 4 el parámetro es `error`, **nunca `errorMap`** (se ignora en silencio: ya mordió una vez en `registro.js`, ver `ESTADO.md`). Aquí no hace falta ninguno de los dos: `.min()`/`.max()` con el string como segundo argumento (el patrón que ya usa `crearUsuarioSchema` en `admin.js`) basta.
 - **`escHtml` en todo dato de usuario** que vaya a `innerHTML` o a un atributo. El nombre de una persona **es justo el dato del que trata este plan**, y viaja en dos sitios nuevos: el `value` prellenado de un `<input>` y el mensaje de `modalPrompt`. ⚠️ **`modalPrompt` (como `modalConfirm`) mete su primer argumento crudo en `innerHTML`** (`web/app.js:2933-2934`, comentario explícito: *"así que lo que se interpole ahí va con `escHtml()`"*). Un plan reciente metió un XSS ahí por olvidarlo.
-- **La suite está en 456 tests (verificado corriendo `npm test` antes de empezar) y no puede bajar.** Este plan añade 14 tests de backend (5 en la Task 1, 9 en la Task 2): **debe terminar en 470, 0 fail.**
+- **La suite está en 509 tests** (medido sobre `main` el 31-jul-2026, ya con la bandeja del portal, la fuente del gasto y el plegado fusionados) **y no puede bajar.** Este plan añade 14 tests de backend (5 en la Task 1, 9 en la Task 2): **debe terminar en 523, 0 fail.**
+  > ⚠️ Este plan se escribió cuando la suite estaba en 456. **Mídela antes de empezar** en vez de creerte este número: si no coincide, corrige los de abajo por el mismo desfase.
 - Commits en castellano, minúsculas, `tipo(ámbito): efecto para la persona`. Sin coautoría ni menciones a Claude (ver `git log --oneline`: `feat(ninos): poder corregir la ficha de un nino, que antes era para siempre`, etc.).
 
 ---
@@ -38,7 +39,7 @@ Crear `backend/test/corregir-nombre.test.js`:
 // ============================================================
 //  Corregir el nombre de una persona.
 //  "juan perez" quedaba asi para siempre: ni "Mi perfil" (directorio.js) ni
-//  "Cambiar mi cuenta" (cuenta.js) aceptaban 'nombre'. Este archivo cubre los
+//  "Mi cuenta" de Ajustes (cuenta.js) aceptaban 'nombre'. Este archivo cubre los
 //  dos caminos: el propio (autoservicio) y el del pastor sobre otra persona.
 // ============================================================
 import { test, before, beforeEach, after } from 'node:test';
@@ -216,7 +217,7 @@ Expected: PASA — 5 tests.
 - [ ] **Step 6: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **461 tests, 0 fail** (456 + 5).
+Expected: **514 tests, 0 fail** (509 + 5).
 
 - [ ] **Step 7: Commit**
 
@@ -398,7 +399,7 @@ Expected: PASA — 14 tests en total (5 de la Task 1 + 9 de esta).
 - [ ] **Step 5: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **470 tests, 0 fail** (461 + 9).
+Expected: **523 tests, 0 fail** (514 + 9).
 
 - [ ] **Step 6: Commit**
 
@@ -494,7 +495,7 @@ tarjeta → sin errores de consola.
 - [ ] **Step 4: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **470, 0 fail** — esta tarea no toca backend; si el número cambia,
+Expected: **523, 0 fail** — esta tarea no toca backend; si el número cambia,
 algo se salió de alcance.
 
 - [ ] **Step 5: Commit**
@@ -570,7 +571,7 @@ sin errores de consola.
 - [ ] **Step 4: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **470, 0 fail**.
+Expected: **523, 0 fail**.
 
 - [ ] **Step 5: Commit**
 
@@ -591,7 +592,7 @@ git commit -m "feat(admin): que el pastor pueda corregir el nombre de otro desde
 
 En la sección "👉 POR DÓNDE RETOMAR" donde dice *"3. **Corregir el nombre de
 una persona**…"*, marcarlo como hecho (mismo estilo que los puntos ya
-tachados con `✅ ~~…~~`) y anotar el número final de tests (**470**) y que
+tachados con `✅ ~~…~~`) y anotar el número final de tests (**523**) y que
 quedó autoservicio + asistido por el pastor.
 
 - [ ] **Step 2: Corregir la afirmación del spec ARCO**

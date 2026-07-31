@@ -408,13 +408,20 @@ function tieneModulo(k){
 // ============================================================
 //  APP SHELL
 // ============================================================
+// Nombre + iniciales del pie de la barra lateral. Vive aparte de abrirApp()
+// porque ya no basta con pintarlo al entrar: ahora el nombre se puede corregir
+// desde "Mi perfil", y sin repintar aqui la persona ve el toast verde y abajo
+// a la izquierda sigue el nombre viejo — parece que no se guardo.
+function pintarUsuarioLateral(){
+  const nom = ME.persona.nombre || '';
+  $('avatar').textContent = nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  $('u-nombre').textContent = nom;
+}
 function abrirApp(){
   $('login').classList.add('hidden'); $('app').classList.remove('hidden');
   const fp=$('forzar-pass'); if(fp) fp.classList.add('hidden');
   // usuario en el sidebar
-  const ini = ME.persona.nombre.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  $('avatar').textContent = ini;
-  $('u-nombre').textContent = ME.persona.nombre;
+  pintarUsuarioLateral();
   $('u-rol').textContent = ME.persona.rol_global==='obispo' ? 'Obispo'
     : ME.persona.rol_global==='super_admin' ? 'Super-admin'
     : ME.persona.es_pastor ? 'Pastor'
@@ -3067,16 +3074,34 @@ async function vistaPerfilDirectorio(){
   let p;
   try{ p=await api('/directorio/perfil'); }
   catch{ $('dir-perfil').innerHTML='<p class="error">No se pudo cargar tu perfil · <a href="javascript:vistaPerfilDirectorio()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; return; }
+  // Punto de reconciliacion de ME: es la unica pantalla que pide el perfil
+  // entero al servidor. ME solo se carga al abrir la app y no se refresca nunca,
+  // asi que si el PASTOR te corrige el nombre, la barra lateral y el saludo del
+  // panel ("Hola, Juan") seguian con el viejo mientras esta pantalla ya ensenaba
+  // el nuevo: la app mostrando dos nombres tuyos a la vez.
+  if(ME.persona && p.nombre && ME.persona.nombre!==p.nombre){
+    ME.persona.nombre=p.nombre;
+    pintarUsuarioLateral();
+  }
   const z=$('dir-perfil'); z.className='';
+  // Todo el formulario se prellena con `p` —lo que ACABA de responder
+  // /directorio/perfil—, incluido el nombre. Con ME.persona.nombre (una cache
+  // del arranque de la app, que no se refresca nunca) pasaba esto: si el
+  // pastor te corregia el nombre desde Administracion mientras tu tenias la
+  // app abierta, aqui seguia leyendose el viejo, y guardar el telefono lo
+  // devolvia atras — sin error, y con un apunte de auditoria diciendo que lo
+  // habias cambiado tu.
   z.innerHTML=`<div class="card" style="max-width:520px;margin-top:10px">
     <h2 style="font-size:1.2rem;margin-bottom:14px">✏️ Mi perfil</h2>
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
-      <div id="dp-foto-preview">${dirAvatar({nombre:ME.persona.nombre,foto_url:p.foto_url},64)}</div>
+      <div id="dp-foto-preview">${dirAvatar({nombre:p.nombre,foto_url:p.foto_url},64)}</div>
       <div style="flex:1">
         <label for="dp-foto" style="margin:0">Foto de perfil</label>
         <input id="dp-foto" type="file" accept="image/*"/>
       </div>
     </div>
+    <label for="dp-nombre">Nombre</label>
+    <input id="dp-nombre" value="${escHtml(p.nombre||'')}" maxlength="120"/>
     <label for="dp-tel">Teléfono</label>
     <input id="dp-tel" type="tel" value="${p.telefono?String(p.telefono).replace(/"/g,'&quot;'):''}" placeholder="Ej. +56 9 1234 5678"/>
     <label for="dp-email" style="margin-top:10px">Correo</label>
@@ -3091,6 +3116,7 @@ async function vistaPerfilDirectorio(){
 }
 async function guardarPerfilDirectorio(){
   const body={
+    nombre:$('dp-nombre').value.trim(),
     telefono:$('dp-tel').value.trim(),
     email:$('dp-email').value.trim(),
     cumple:fechaSelectValor('dp-cumple'),
@@ -3102,6 +3128,7 @@ async function guardarPerfilDirectorio(){
     try{
       if(file) body.foto_url=await uploadArchivo(file);
       await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
+      if(ME.persona){ ME.persona.nombre=body.nombre; pintarUsuarioLateral(); }
       toast('✅ Perfil actualizado');
       vistaDirectorio();
     }catch(e){ toast(e.message); }
@@ -3262,6 +3289,7 @@ function renderAdmin(){
           ${esCuentaDeSistema?'<span class="muted small">Cuenta de sistema</span>':`
           <button class="btn ghost small-btn" onclick="adminFormRol(${u.id})">+ Rol</button>
           <button class="link" onclick="adminTogglePastor(${u.id},${u.es_pastor})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
+          <button class="link" onclick="adminCorregirNombre(${u.id})">✏️ Corregir nombre</button>
           ${puedeResetear?`<button class="link" onclick="adminResetClave(${u.id})">🔑 Restablecer contraseña</button>`:''}
           <button class="link" style="color:${u.activo?'var(--red-tx)':'var(--green-tx)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>`}
         </div>
@@ -3376,6 +3404,26 @@ function adminResetClave(id){
       });
     }
   );
+}
+// Quien se registró mal ("juan perez") se quedaba así para siempre si no
+// sabía llegar a "Mi perfil" o no podía entrar a la app. Mismo argumento que
+// "Restablecer contraseña": el pastor lo arregla por ella. Sin razón de
+// seguridad para bloquear que se lo haga a sí mismo (ya puede desde su
+// perfil), así que este botón va fuera del if(puedeResetear).
+function adminCorregirNombre(id){
+  // El guardia `d && d.usuarios` es el mismo de adminResetClave: si la lista
+  // aun no cargo, window._admin es undefined y leerle .usuarios reventaria la
+  // pantalla entera en vez de no hacer nada.
+  const d=window._admin; const u=(d&&d.usuarios||[]).find(x=>x.id===id); if(!u) return;
+  modalPrompt(`Nuevo nombre para <b>${escHtml(u.nombre)}</b>.`, async(nombre)=>{
+    try{ await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({nombre})});
+      // Este boton tambien sale sobre la propia fila del pastor: si se corrige
+      // a si mismo, el pie de la barra lateral tiene que repintarse igual que
+      // desde "Mi perfil".
+      if(ME.persona&&ME.persona.id===id){ ME.persona.nombre=nombre; pintarUsuarioLateral(); }
+      toast('✅ Nombre corregido'); vistaAdmin(); }
+    catch(e){ toast(e.message); }
+  }, {titulo:'Corregir nombre', placeholder:'Nombre completo', valor:u.nombre, okLabel:'Guardar'});
 }
 function adminMostrarClaveTemporal(u, pass){
   const root=$('modal-root');

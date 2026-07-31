@@ -13,7 +13,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-import { authMiddleware } from './auth.js';
+import { authMiddleware, auditar } from './auth.js';
 import { enviarPush } from './push.js';
 import { validar, zRutaSubidaOpcional } from './seguridad.js';
 
@@ -95,6 +95,11 @@ r.get('/perfil', (req, res) => {
 
 // --- Editar mi perfil (solo el propio; campos no enviados se ignoran) ---
 const perfilSchema = z.object({
+  // El nombre nace con esta fase: "Mi perfil" ya dejaba corregir telefono,
+  // correo, foto y cumpleanos, pero no el dato que mas se nota cuando esta
+  // mal — quien se registro como "juan perez" quedaba asi para siempre.
+  nombre: z.string().trim().min(1, 'falta el nombre')
+    .max(120, 'el nombre es demasiado largo (máximo 120 caracteres)').optional(),
   telefono: z.string().trim().max(50).optional(),
   email: z.string().trim().max(200).optional(),
   cumple: z.string().trim().refine(v => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v),
@@ -106,7 +111,21 @@ const perfilSchema = z.object({
   mostrar_email: z.coerce.number().int().min(0).max(1).optional()
 });
 r.patch('/perfil', validar(perfilSchema), (req, res) => {
-  const campos = ['telefono', 'email', 'cumple', 'foto_url', 'mostrar_telefono', 'mostrar_email'];
+  // Se necesita el nombre VIEJO antes de sobreescribirlo, por dos razones: para
+  // dejarlo en la auditoria (que dice "de que a que" cambio) y, sobre todo,
+  // para saber si de verdad cambio.
+  const nombreViejo = req.body.nombre !== undefined
+    ? db.prepare('SELECT nombre FROM persona WHERE id = ?').get(req.user.persona_id).nombre
+    : null;
+  // "Mi perfil" es un formulario entero: manda 'nombre' cada vez que alguien
+  // guarda, aunque solo haya tocado el telefono o una casilla de privacidad.
+  // Auditar por "vino el campo" en vez de por "cambio el campo" llenaba el
+  // rastro de lineas `Juan Perez → Juan Perez` — un registro que afirma
+  // cambios que nadie hizo no sirve como red de seguridad. Misma leccion que
+  // ya dejo el `se devuelve a Maria -> se devuelve a Maria` de Organizacion.
+  const cambioNombre = req.body.nombre !== undefined && req.body.nombre !== nombreViejo;
+
+  const campos = ['nombre', 'telefono', 'email', 'cumple', 'foto_url', 'mostrar_telefono', 'mostrar_email'];
   const sets = [];
   const valores = [];
   for (const c of campos) {
@@ -117,6 +136,17 @@ r.patch('/perfil', validar(perfilSchema), (req, res) => {
   if (sets.length) {
     valores.push(req.user.persona_id);
     db.prepare(`UPDATE persona SET ${sets.join(', ')} WHERE id = ?`).run(...valores);
+  }
+
+  // Derecho a rectificacion (ARCO): sincroniza la UNICA copia denormalizada
+  // que hay (aprobacion_log.actor_nombre, ver spec) con el mismo patron de una
+  // linea que ya usa cuenta.js al anonimizar una cuenta eliminada, y deja
+  // rastro de quien se corrigio a si mismo y que decia antes.
+  if (cambioNombre) {
+    db.prepare('UPDATE aprobacion_log SET actor_nombre = ? WHERE actor_id = ?')
+      .run(req.body.nombre, req.user.persona_id);
+    auditar(req.user.iglesia_id, req.user.persona_id, 'corregir_nombre', 'directorio',
+      `${nombreViejo} → ${req.body.nombre}`);
   }
   res.json({ ok: true });
 });

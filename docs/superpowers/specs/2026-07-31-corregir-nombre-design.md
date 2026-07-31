@@ -9,7 +9,7 @@
 Alguien se registra escribiendo su nombre "juan perez", en minúsculas, o con un
 apellido mal tecleado. Hoy **no hay ningún sitio en la app** donde corregirlo:
 ni "Mi perfil" en el Directorio (que edita teléfono, correo, foto y cumpleaños,
-pero no nombre), ni "Cambiar mi cuenta" en Ajustes (que edita correo y
+pero no nombre), ni "Mi cuenta" en Ajustes (que edita correo y
 contraseña, pero no nombre), ni el panel de Administración del pastor (que
 activa/desactiva cuentas y asigna roles, pero no toca el nombre). Verificado
 leyendo los tres módulos completos: `backend/src/directorio.js`,
@@ -116,8 +116,8 @@ una línea de SQL igual a la que ya existe en `cuenta.js`.
 
 La búsqueda se hizo por columnas con patrón `%_nombre`. **Ese patrón no
 encuentra las columnas que se llaman por su papel en vez de por su tipo**, y
-hay dos así: `predica.predicador` y `sermon.predicador` (`db.js:334` y `431`),
-las dos `TEXT`.
+hay tres así: `predica.predicador` y `sermon.predicador` (`db.js:334` y `431`),
+y `nino.autorizados` (`db.js:297`), las tres `TEXT`.
 
 Se comprobaron, y **no son copias de `persona.nombre`**: el formulario las
 rellena con un `<input>` de texto libre (`app.js:2631`, con el marcador de
@@ -132,6 +132,22 @@ perez"** — incluido en el **portal público**, que muestra ese campo
 (`publico.js:96`). No está roto: es texto libre, y se arregla editando esa
 prédica. Si algún día se quiere que el predicador sea una *persona* y no un
 texto, es un cambio de modelo aparte.
+
+**El tercero, `nino.autorizados`** (`db.js:297`) — la lista de quién puede
+retirar a un niño, añadida el mismo día 31 jul. Misma comprobación y mismo
+resultado: es un `<input>` de texto libre de **300 caracteres**
+(`ninos.js:57`/`74`, `app.js:2501`, con el marcador de posición *"Ej. Ana Rojas
+(abuela), Juan Pérez (papá)"*), no un selector de personas — y **tiene que
+serlo**, porque la abuela que va a buscar al niño normalmente no tiene cuenta
+en la app. No es una copia de `persona.nombre`, así que la conclusión no
+cambia: no se sincroniza.
+
+⚠️ **Pero tiene la misma propiedad de "va a parecer un fallo", y aquí duele
+más:** corriges tu nombre a "Juan Pérez" y **la ficha del niño sigue
+autorizando a "juan perez"** — y esa lista es la que se mira **en la puerta de
+la sala**, al entregar a un niño. Se arregla editando la ficha (el módulo ya
+tiene editar, desde ese mismo día). Cualquier futuro "autorizados como
+personas" es el mismo cambio de modelo que el del predicador.
 
 ## Quién puede corregir — lo que la app ya hace en casos parecidos
 
