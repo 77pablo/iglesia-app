@@ -79,10 +79,15 @@ function personaDeIglesia(id, ig) {
   return db.prepare('SELECT * FROM persona WHERE id = ? AND iglesia_id = ?').get(id, ig);
 }
 
-// --- Activar/desactivar o marcar/quitar pastor ---
+// --- Activar/desactivar, marcar/quitar pastor, o corregir el nombre ---
 const editarUsuarioSchema = z.object({
   activo: z.boolean().optional(),
-  es_pastor: z.boolean().optional()
+  es_pastor: z.boolean().optional(),
+  // Nace con esta fase: antes el pastor solo podia activar/desactivar o
+  // marcar pastor, nunca corregir un nombre mal escrito de alguien que no
+  // puede arreglarselo solo (no entra a la app, o no sabe donde mirar).
+  nombre: z.string().trim().min(1, 'falta el nombre')
+    .max(120, 'el nombre es demasiado largo (máximo 120 caracteres)').optional()
 });
 r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   const ig = req.user.iglesia_id;
@@ -98,7 +103,7 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   if (p.rol_global === 'super_admin' || p.rol_global === 'obispo')
     return res.status(403).json({ error: 'Esta cuenta no se administra desde la iglesia' });
 
-  const { activo, es_pastor } = req.body;
+  const { activo, es_pastor, nombre } = req.body;
   if (typeof activo === 'boolean') {
     if (p.id === yo && !activo) return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta' });
     db.prepare('UPDATE persona SET activo = ? WHERE id = ?').run(activo ? 1 : 0, p.id);
@@ -107,7 +112,22 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
     if (p.id === yo && !es_pastor) return res.status(400).json({ error: 'No puedes quitarte a ti mismo el rol de Pastor' });
     db.prepare('UPDATE persona SET es_pastor = ? WHERE id = ?').run(es_pastor ? 1 : 0, p.id);
   }
-  auditar(ig, yo, 'editar_usuario', 'admin', `${p.nombre}`);
+  // Corregir el nombre de otro: mismo patron de sincronizacion de una linea
+  // que ya usa cuenta.js al anonimizar una cuenta eliminada. Se audita aparte
+  // (con el nombre viejo y el nuevo) en vez de sumarse al 'editar_usuario' de
+  // mas abajo, que no dice QUE cambio.
+  if (typeof nombre === 'string') {
+    db.prepare('UPDATE persona SET nombre = ? WHERE id = ?').run(nombre, p.id);
+    db.prepare('UPDATE aprobacion_log SET actor_nombre = ? WHERE actor_id = ?').run(nombre, p.id);
+    auditar(ig, yo, 'corregir_nombre_usuario', 'admin', `${p.nombre} → ${nombre}`);
+  }
+  // El 'editar_usuario' generico solo tiene sentido cuando de verdad se tocó
+  // activo/es_pastor: si el PATCH solo traía nombre, ya quedó auditado arriba
+  // con mas detalle (que decia antes, que dice ahora), y duplicarlo aqui solo
+  // ensuciaria el log.
+  if (typeof activo === 'boolean' || typeof es_pastor === 'boolean') {
+    auditar(ig, yo, 'editar_usuario', 'admin', `${p.nombre}`);
+  }
   res.json({ ok: true });
 });
 

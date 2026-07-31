@@ -91,3 +91,87 @@ test('PATCH /api/directorio/perfil: corregir el nombre queda auditado con el nom
   assert.match(log.detalle, /Miembro Uno/);
   assert.match(log.detalle, /Juan Pérez/);
 });
+
+// ------------------------------------------------------------
+//  El pastor corrige el nombre de OTRA persona.
+//  Mismo argumento que ya justifica "Restablecer contraseña" (admin.js): sin
+//  eso, quien no puede resolverlo sola (no entra a la app, o no sabe donde
+//  mirar) se queda con el nombre mal escrito para siempre.
+// ------------------------------------------------------------
+const corregirOtro = (actor, id, nombre, iglesiaId = SEM.iglesiaId) => fetch(base + '/api/admin/usuarios/' + id, {
+  method: 'PATCH', headers: H(actor, iglesiaId), body: JSON.stringify({ nombre })
+});
+
+test('PATCH /api/admin/usuarios/:id: el pastor corrige el nombre de otro', async () => {
+  const res = await corregirOtro(SEM.pastor, SEM.miembro1.id, 'Juan Pérez');
+  assert.equal(res.status, 200);
+
+  const fila = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(SEM.miembro1.id);
+  assert.equal(fila.nombre, 'Juan Pérez');
+});
+
+test('PATCH /api/admin/usuarios/:id: sincroniza aprobacion_log.actor_nombre de la persona corregida', async () => {
+  logAprobacion(SEM.miembro1.id, 'Miembro Uno');
+
+  await corregirOtro(SEM.pastor, SEM.miembro1.id, 'Juan Pérez');
+
+  const fila = db.prepare('SELECT actor_nombre FROM aprobacion_log WHERE actor_id = ?').get(SEM.miembro1.id);
+  assert.equal(fila.actor_nombre, 'Juan Pérez');
+});
+
+test('PATCH /api/admin/usuarios/:id: corregir el nombre queda auditado, sin duplicar editar_usuario', async () => {
+  await corregirOtro(SEM.pastor, SEM.miembro1.id, 'Juan Pérez');
+
+  const especifico = db.prepare("SELECT * FROM auditoria WHERE accion = 'corregir_nombre_usuario'").get();
+  assert.ok(especifico, 'corregir el nombre de otro tiene que dejar rastro propio');
+  assert.equal(especifico.actor_id, SEM.pastor.id);
+  assert.match(especifico.detalle, /Miembro Uno/);
+  assert.match(especifico.detalle, /Juan Pérez/);
+
+  const generico = db.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE accion = 'editar_usuario'").get();
+  assert.equal(generico.n, 0, 'un PATCH que solo trae nombre no debe generar tambien un editar_usuario vacio');
+});
+
+test('PATCH /api/admin/usuarios/:id: un lider que NO es pastor -> 403 (no cambia nada)', async () => {
+  const res = await corregirOtro(SEM.lider, SEM.miembro1.id, 'Cualquier Cosa');
+  assert.equal(res.status, 403);
+  assert.equal(db.prepare('SELECT nombre FROM persona WHERE id = ?').get(SEM.miembro1.id).nombre, 'Miembro Uno');
+});
+
+test('PATCH /api/admin/usuarios/:id: usuario de OTRA iglesia -> 404 (no cambia nada)', async () => {
+  const ig2 = Number(db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRA3')").run().lastInsertRowid);
+  const ajenoId = Number(db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo) VALUES (?,'x','Feligres De Otra','h',1)"
+  ).run(ig2).lastInsertRowid);
+
+  const res = await corregirOtro(SEM.pastor, ajenoId, 'Nombre Que No Debe Quedar');
+  assert.equal(res.status, 404);
+  assert.equal(db.prepare('SELECT nombre FROM persona WHERE id = ?').get(ajenoId).nombre, 'Feligres De Otra');
+});
+
+test('PATCH /api/admin/usuarios/:id: corregir el nombre del super-admin -> 403', async () => {
+  db.prepare("UPDATE persona SET rol_global = 'super_admin' WHERE id = ?").run(SEM.ajeno.id);
+  const res = await corregirOtro(SEM.pastor, SEM.ajeno.id, 'Cualquier Cosa');
+  assert.equal(res.status, 403);
+});
+
+test('PATCH /api/admin/usuarios/:id: corregir el nombre del obispo -> 403', async () => {
+  db.prepare("UPDATE persona SET rol_global = 'obispo' WHERE id = ?").run(SEM.ajeno.id);
+  const res = await corregirOtro(SEM.pastor, SEM.ajeno.id, 'Cualquier Cosa');
+  assert.equal(res.status, 403);
+  assert.equal(db.prepare('SELECT nombre FROM persona WHERE id = ?').get(SEM.ajeno.id).nombre, 'Feligres Ajeno');
+});
+
+test('PATCH /api/admin/usuarios/:id: nombre vacio -> 400 en castellano', async () => {
+  const res = await corregirOtro(SEM.pastor, SEM.miembro1.id, '');
+  assert.equal(res.status, 400);
+  const { error } = await res.json();
+  assert.match(error, /nombre/i);
+});
+
+test('PATCH /api/admin/usuarios/:id: nombre de 121+ caracteres -> 400 en castellano', async () => {
+  const res = await corregirOtro(SEM.pastor, SEM.miembro1.id, 'x'.repeat(121));
+  assert.equal(res.status, 400);
+  const { error } = await res.json();
+  assert.match(error, /120|largo/i);
+});
