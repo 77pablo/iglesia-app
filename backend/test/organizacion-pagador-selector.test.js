@@ -231,3 +231,11 @@ test('cambiar a mano el selector durante una correccion si cambia el pagador', a
   assert.equal(llamadas[0].cuerpo.fuente, 'caja');
 });
 
+// --- el papel del tesorero ------------------------------------------------
+test('el ✏️ y el ✕ de cada gasto no se imprimen en la rendicion', () => {
+  const i = lineas.findIndex(l => l.includes('Org.editarGasto(${g.id})'));
+  assert.ok(i > 0, 'no se encontro el boton de corregir el gasto');
+  const contenedor = lineas.slice(Math.max(0, i - 3), i).find(l => l.includes('<div class="row'));
+  assert.ok(contenedor && contenedor.includes('no-print'),
+    'la card de gastos es la que el modo rendicion vuelve visible: estos botones tienen que llevar no-print');
+});

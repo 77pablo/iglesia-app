@@ -4200,7 +4200,10 @@ const Org = {
         : '';
       return `<div class="org-row">
         <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b>${fuenteTxt?` <span class="muted small">· ${fuenteTxt}</span>`:''}</span>
-        ${ed?`<div class="row" style="width:auto;gap:4px">
+        <!-- no-print: la card de gastos es la que el modo rendicion vuelve a
+             mostrar, y en el papel que se le lleva al tesorero el ✏️ y el ✕ son
+             ruido (ademas de dos botones que en un papel no se pueden tocar). -->
+        ${ed?`<div class="row no-print" style="width:auto;gap:4px">
           <button class="link icon-only" aria-label="Corregir el gasto ${escHtml(g.concepto)}" onclick="Org.editarGasto(${g.id})">✏️</button>
           <button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar el gasto ${escHtml(g.concepto)}" onclick="Org.borrarGasto(${g.id})">✕</button>
         </div>`:''}
