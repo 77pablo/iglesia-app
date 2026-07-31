@@ -29,6 +29,39 @@ const NAV = [
   ['ajustes','🎨','Ajustes'],
   ['admin','⚙️','Administración'],
 ];
+// Los cinco temas del menu. Cada clave del NAV pertenece a EXACTAMENTE uno; hay
+// una prueba que lo fija, porque una clave sin grupo desapareceria del menu
+// agrupado sin dar ningun error.
+//
+// Dos asignaciones que no son obvias y son deliberadas:
+//  - 'predica' va en "Dia a dia", no en "Ministerios": la ve TODO el mundo
+//    (tieneModulo la deja pasar siempre), no es el ministerio de nadie.
+//  - 'ajustes' va en "Lo mio", no en "Administracion": es el tema y el color de
+//    quien mira, no administracion de la iglesia.
+const GRUPOS_NAV = [
+  { titulo: 'Día a día',      claves: ['inicio','calendario','anuncios','mensajes','directorio','predica'] },
+  { titulo: 'Lo mío',         claves: ['mi_servicio','mi_grupo','ajustes'] },
+  { titulo: 'Pastoreo',       claves: ['panel_pastor','cuidado_pastoral','mensajes_portal','asistencia','reportes','panel_obispo'] },
+  { titulo: 'Ministerios',    claves: ['servicio_gestion','musicos','ninos','organizacion'] },
+  { titulo: 'Administración', claves: ['tesoreria','admin','superadmin'] },
+];
+
+// A partir de cuantas entradas VISIBLES se agrupa. Es un numero elegido, no una
+// verdad: los encabezados existen para resolver un problema de LARGO, asi que
+// solo aparecen donde hay largo. Por debajo cuestan mas de lo que ahorran — a un
+// feligres (9 entradas) le convertirian 9 lineas en 13.
+const NAV_UMBRAL_GRUPOS = 12;
+
+// Reparte las claves YA filtradas por tieneModulo(). Devuelve secciones:
+// titulo === null significa "sin encabezado" (modo plano, como siempre).
+// Funcion pura a proposito: buildNav toca el DOM y no se puede probar sin
+// navegador; esto si.
+function agruparNav(claves){
+  if(claves.length < NAV_UMBRAL_GRUPOS) return [{titulo:null, claves}];
+  return GRUPOS_NAV
+    .map(g=>({titulo:g.titulo, claves:g.claves.filter(k=>claves.includes(k))}))
+    .filter(g=>g.claves.length);   // un encabezado sin nada debajo es ruido
+}
 // Render minimalista de un auditorio/iglesia moderno (líneas rectas, luz difusa) para Anuncios.
 const IMG_AUDITORIO=`<svg viewBox="0 0 400 180" preserveAspectRatio="xMidYMid slice" style="width:100%;height:150px;display:block">
   <defs>
