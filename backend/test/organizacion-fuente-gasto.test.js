@@ -334,3 +334,44 @@ test('pero si el PATCH SI toca la fuente, entonces si exige pagador', async () =
   assert.equal(pres.status, 200);
   assert.equal(db.prepare('SELECT pagado_por FROM evento_org_gasto WHERE id = ?').get(id).pagado_por, S.feligresId);
 });
+
+// ---------- La referencia: a que se refiere cada apunte de auditoria ----------
+
+test('auditoria gana ref_tabla/ref_id, y nacen vacias en todo lo historico', () => {
+  const cols = db.prepare('PRAGMA table_info(auditoria)').all().map(c => c.name);
+  assert.ok(cols.includes('ref_tabla'), 'falta ref_tabla');
+  assert.ok(cols.includes('ref_id'), 'falta ref_id');
+});
+
+test('auditar() SIN el parametro nuevo sigue escribiendo igual (los ~40 sitios que ya la usan)', async () => {
+  const { auditar } = await import('../src/auth.js');
+  const S = sembrar('AUDCOMP');
+  auditar(S.iglesiaId, S.liderId, 'accion_de_siempre', 'un_modulo', 'detalle');
+
+  const fila = db.prepare("SELECT * FROM auditoria WHERE accion = 'accion_de_siempre'").get();
+  assert.ok(fila, 'la llamada de 5 argumentos no puede dejar de funcionar');
+  assert.equal(fila.detalle, 'detalle');
+  assert.equal(fila.ref_tabla, null);
+  assert.equal(fila.ref_id, null);
+});
+
+test('corregir un gasto deja la referencia apuntando a la HOJA, no al gasto', async () => {
+  const b = await servidor();
+  const S = sembrar('REF1');
+  const { hojaId, auth } = await hoja(b, S);
+  const res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Pan', monto: 1000 }) });
+  const { id } = await res.json();
+
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 1200 }) });
+
+  // Acotado por iglesia_id: este archivo comparte un solo db entre tests, y
+  // para cuando llega aqui ya hubo otros PATCH /gastos exitosos que dejaron su
+  // propio rastro de 'editar_gasto'. Sin este filtro, .get() puede devolver la
+  // fila de OTRA prueba anterior.
+  const log = db.prepare(
+    "SELECT ref_tabla, ref_id FROM auditoria WHERE accion = 'editar_gasto' AND iglesia_id = ?"
+  ).get(S.iglesiaId);
+  assert.equal(log.ref_tabla, 'evento_org');
+  assert.equal(log.ref_id, hojaId, 'apunta a la hoja: si se borra el gasto, su correccion no queda huerfana');
+  assert.notEqual(log.ref_id, id, 'NO al gasto');
+});
