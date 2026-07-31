@@ -2128,14 +2128,22 @@ async function atenderCaso(id){
 // ============================================================
 let _mpOffset=0, _mpPreviosOffset=0;
 
+// Un solo lugar para el chip de estado: lo usan filaMensajePortal (al listar)
+// y atenderMensajePortal (al marcar, sin recargar la tarjeta) — si vivieran
+// duplicados, la tarjeta recien marcada podria verse distinta de las demas
+// hasta la proxima recarga.
+function chipMensajePortal(estado){
+  return estado==='atendido'
+    ? '<span class="estado-chip estado-aceptado">✅ Atendido</span>'
+    : estado==='previo'
+    ? '<span class="estado-chip estado-pendiente">📥 Anterior</span>'
+    : '<span class="estado-chip estado-pendiente">🆕 Nuevo</span>';
+}
+
 // El texto de aquí lo escribe un desconocido de internet, sin cuenta y sin
 // moderación: es el dato menos confiable de la app. escHtml SIEMPRE.
 function filaMensajePortal(m){
-  const chip = m.estado==='atendido'
-    ? '<span class="estado-chip estado-aceptado">✅ Atendido</span>'
-    : m.estado==='previo'
-    ? '<span class="estado-chip estado-pendiente">📥 Anterior</span>'
-    : '<span class="estado-chip estado-pendiente">🆕 Nuevo</span>';
+  const chip = chipMensajePortal(m.estado);
   const boton = m.estado==='atendido' ? ''
     : `<button class="btn ghost small-btn" onclick="atenderMensajePortal(${m.id})">Marcar atendido</button>`;
   // id en la tarjeta y en el bloque de accion: asi atenderMensajePortal puede
@@ -2206,7 +2214,7 @@ async function atenderMensajePortal(id){
     // recarga completa reseteaba los offsets de paginacion y volvia a plegar
     // la seccion de "mensajes anteriores" aunque el pastor la hubiera abierto.
     const acciones=$('mp-accion-'+id);
-    if(acciones) acciones.innerHTML='<span class="estado-chip estado-aceptado">✅ Atendido</span>';
+    if(acciones) acciones.innerHTML=chipMensajePortal('atendido');
   }catch(e){ toast(e.message); }
 }
 
@@ -2460,11 +2468,14 @@ function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/
 function fechaDeUTC(s){
   if(!s) return '';
   const d=new Date(String(s).replace(' ','T')+'Z');   // sin la Z se leeria como hora local
-  // Mismo formato que fechaTxt ("28 Jul") en vez de toLocaleDateString
-  // ("28-07-2026"): la conversion de UTC a hora local es la razon de ser de
-  // esta funcion, el formato de salida no tiene por que ser distinto del
-  // resto de la app.
-  return isNaN(d.getTime()) ? String(s).slice(0,10) : d.getDate()+' '+(MESES[d.getMonth()]||'');
+  // Mismo formato que fechaTxt(f, true) ("28 Jul 2026") en vez de
+  // toLocaleDateString ("28-07-2026"): la conversion de UTC a hora local es
+  // la razon de ser de esta funcion, el formato de salida no tiene por que
+  // ser distinto del resto de la app. Con año SIEMPRE (a diferencia de
+  // fechaTxt, que lo deja opcional): esta lista no borra nada (ver Política
+  // de Privacidad 4.9), asi que van a convivir mensajes de años distintos y
+  // "28 Jul" no los distingue.
+  return isNaN(d.getTime()) ? String(s).slice(0,10) : d.getDate()+' '+(MESES[d.getMonth()]||'')+' '+d.getFullYear();
 }
 // Neutraliza URLs peligrosas (javascript:, data:, vbscript:) antes de ponerlas en un href.
 // Deja pasar http/https, rutas relativas y enlaces sin esquema (no rompe links legítimos).

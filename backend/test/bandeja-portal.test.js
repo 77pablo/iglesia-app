@@ -110,21 +110,25 @@ test('🔴 la migracion, la PRIMERA vez, manda a "previo" lo que ya estaba', asy
     'INSERT INTO contacto_publico (iglesia_id, nombre, mensaje) VALUES (?,?,?)'
   ).run(igId, nombre, 'hola').lastInsertRowid);
 
-  const antes1 = insertar('Antes 1');
-  const antes2 = insertar('Antes 2');
+  try {
+    const antes1 = insertar('Antes 1');
+    const antes2 = insertar('Antes 2');
 
-  migrarEstadoContactoPublico(conexion);
+    migrarEstadoContactoPublico(conexion);
 
-  assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(antes1).estado,
-    'previo', 'lo que ya estaba guardado tiene que nacer "previo", no "nuevo" ni "atendido"');
-  assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(antes2).estado,
-    'previo');
+    assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(antes1).estado,
+      'previo', 'lo que ya estaba guardado tiene que nacer "previo", no "nuevo" ni "atendido"');
+    assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(antes2).estado,
+      'previo');
 
-  const despues = insertar('Llega despues de migrar');
-  assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(despues).estado,
-    'nuevo', 'una fila insertada DESPUES de migrar nace "nuevo" por el DEFAULT de la columna, no "previo"');
-
-  conexion.close();
+    const despues = insertar('Llega despues de migrar');
+    assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(despues).estado,
+      'nuevo', 'una fila insertada DESPUES de migrar nace "nuevo" por el DEFAULT de la columna, no "previo"');
+  } finally {
+    // Fuera de un try/finally, una aserción que falla deja la conexión (y su
+    // carpeta en tmpdir()) sin cerrar: solo basura de test, pero evitable.
+    conexion.close();
+  }
 });
 
 // ---------- La bandeja ----------
