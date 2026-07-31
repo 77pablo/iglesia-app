@@ -1211,7 +1211,7 @@ Comprobar, entrando como líder:
 - [ ] **Step 9: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **488, 0 fail** — esta tarea no toca backend; si el número cambia,
+Expected: **489, 0 fail** — esta tarea no toca backend; si el número cambia,
 algo se salió de alcance.
 
 - [ ] **Step 10: Commit**
@@ -1337,11 +1337,12 @@ export function auditar(iglesiaId, actorId, accion, modulo, detalle = '', ref = 
 - [ ] **Step 5: Que el `PATCH` mande la referencia**
 
 En `backend/src/organizacion.js`, en el `r.patch('/gastos/:gastoId', ...)` de la
-Task 4, reemplazar:
+Task 4, reemplazar **solo la llamada a `auditar`** (las líneas de `cambioOrigen`
+y `origen` que hay justo encima **no se tocan**):
 
 ```js
   auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`);
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`);
 ```
 
 por:
@@ -1352,19 +1353,25 @@ por:
   // Apuntando al gasto, el rastro quedaria huerfano justo en el caso en que mas
   // importa (alguien corrige un monto y despues borra la linea entera).
   auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`,
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`,
     { tabla: 'evento_org', id: gasto.org_id });
 ```
+
+⚠️ El `${origen}` del final lo añadió un arreglo posterior a la Task 4: es la
+parte del detalle que dice **si cambió quién puso el dinero** (p. ej.
+`· se devuelve a Carolina -> pagó la caja`), y sin ella una corrección que borra
+una deuda dejaba un rastro que aparentaba que no había cambiado nada. **No lo
+quites al aplicar este reemplazo.**
 
 - [ ] **Step 6: Correr el test y verlo pasar**
 
 Run: `cd backend && node --test test/organizacion-fuente-gasto.test.js`
-Expected: PASA — 20 tests (el total del archivo).
+Expected: PASA — 21 tests (el total del archivo).
 
 - [ ] **Step 7: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **491 tests, 0 fail** (488 + 3).
+Expected: **492 tests, 0 fail** (489 + 3).
 
 - [ ] **Step 8: Commit**
 
@@ -1473,7 +1480,7 @@ desaparecer del historial.
 - [ ] **Step 4: Correr el test y verlo pasar**
 
 Run: `cd backend && node --test test/organizacion-fuente-gasto.test.js`
-Expected: PASA — 23 tests (el total del archivo).
+Expected: PASA — 24 tests (el total del archivo).
 
 - [ ] **Step 5: El bloque en la pantalla**
 
@@ -1570,7 +1577,7 @@ Comprobar, entrando como líder:
 - [ ] **Step 8: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **494 tests, 0 fail** (491 + 3).
+Expected: **495 tests, 0 fail** (492 + 3).
 
 - [ ] **Step 9: Commit**
 
@@ -1592,7 +1599,7 @@ Añadir una sección con qué se construyó — la casilla `fuente` en
 `evento_org_gasto`, el `PATCH` para corregir gastos, el resumen partido en tres
 bloques, y **el historial de correcciones visible en la hoja y en la rendición
 impresa** (con `auditoria.ref_tabla`/`ref_id`) —, el número nuevo de tests
-(**494**), y **lo que sigue sin resolver**:
+(**495**), y **lo que sigue sin resolver**:
 
 1. Los gastos de la hoja de Organización siguen sin aparecer en **Tesorería**:
    sigue siendo el Camino C, no decidido.

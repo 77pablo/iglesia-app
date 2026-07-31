@@ -75,6 +75,21 @@ function montoTxt(n) {
   return '$' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+// Describe en castellano llano quien puso la plata de un gasto, para el
+// detalle de auditoria (Task 4, punto 1 de la revision). Nada de "fuente" ni
+// "pagado_por": esto lo lee una persona, no un programador.
+//
+// fuente NULL + persona: es el estado de TRANSICION que ya entendia armarHoja
+// antes de esta casilla (ver 'gasto antiguo CON persona pero sin fuente sigue
+// contando como "por devolver"') — se describe igual que 'devuelve'.
+function descOrigenGasto(fuente, pagadoPorId) {
+  if (fuente === 'caja') return 'pagó la caja';
+  if (pagadoPorId == null) return 'sin registrar quién puso';
+  const persona = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(pagadoPorId);
+  const nombre = persona ? persona.nombre : 'alguien que ya no esta';
+  return fuente === 'aporte' ? `aporte de ${nombre}` : `se devuelve a ${nombre}`;
+}
+
 // Arma la hoja completa (cosas + gastos + total + evento) a partir de su row.
 // total_gastado NUNCA se persiste: se recalcula al leer, asi no queda descuadrado.
 function armarHoja(org) {
@@ -442,8 +457,20 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
 
   // El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo
   // (actor_id y fecha son columnas propias de la tabla auditoria).
+  //
+  // El cambio de ORIGEN solo se anota si cambio de verdad. Importa porque pasar
+  // un gasto de "se devuelve a Carolina" a "pago la caja" BORRA una deuda con
+  // una persona, y sin esta parte el rastro decia literalmente
+  //   "Carne" $20.000 -> "Carne" $20.000
+  // o sea, aparentaba que no habia cambiado nada justo en el unico cambio que
+  // hace desaparecer plata que se le debia a alguien. Si solo se corrigio el
+  // concepto o el monto no se anade: seria ruido en el historial de la hoja.
+  const cambioOrigen = fuente !== gasto.fuente || pagadoPor !== gasto.pagado_por;
+  const origen = cambioOrigen
+    ? ` · ${descOrigenGasto(gasto.fuente, gasto.pagado_por)} -> ${descOrigenGasto(fuente, pagadoPor)}`
+    : '';
   auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`);
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`);
   res.json({ ok: true });
 });
 

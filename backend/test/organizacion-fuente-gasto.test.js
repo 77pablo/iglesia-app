@@ -163,9 +163,13 @@ test('el creador corrige concepto y monto de un gasto', async () => {
 
   const pres = await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ concepto: 'Pan integral', monto: 1500 }) });
   assert.equal(pres.status, 200);
-  const fila = db.prepare('SELECT concepto, monto FROM evento_org_gasto WHERE id = ?').get(id);
+  const fila = db.prepare('SELECT concepto, monto, pagado_por FROM evento_org_gasto WHERE id = ?').get(id);
   assert.equal(fila.concepto, 'Pan integral');
   assert.equal(fila.monto, 1500);
+  // Sin esta asercion, regresar la linea de pagadoPor a "... : null" borraria
+  // al pagador en CADA correccion de ortografia —o sea, borraria la deuda de
+  // quien puso el dinero— y la suite entera seguiria en verde.
+  assert.equal(fila.pagado_por, S.liderId, 'corregir el texto no puede borrar a quien puso el dinero');
 });
 
 test('cambiar la fuente de una persona a "la caja" limpia el pagado_por', async () => {
@@ -236,18 +240,45 @@ test('corregir un gasto queda auditado con quien y que cambio', async () => {
 
   await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 1200 }) });
 
-  // ORDER BY id DESC: este archivo comparte un solo db entre tests (un solo
-  // before()), y para cuando llega aqui ya hubo otros PATCH /gastos exitosos
-  // (EDIT, CAM1, CAM2) que tambien dejaron su propio rastro de 'editar_gasto'.
-  // Sin esto, .get() agarra el PRIMERO que exista en la tabla, no el de esta
-  // prueba (mismo patron que usa eliminar-iglesia.test.js).
-  const log = db.prepare("SELECT actor_id, detalle FROM auditoria WHERE accion = 'editar_gasto' ORDER BY id DESC LIMIT 1").get();
+  // Acotado por iglesia_id, no solo por accion: este archivo comparte un solo
+  // db entre tests (un solo before()), y para cuando llega aqui ya hubo otros
+  // PATCH /gastos exitosos que dejaron su propio rastro de 'editar_gasto'.
+  // Filtrar por la iglesia de ESTA siembra lo hace independiente del orden de
+  // ejecucion, y de paso comprueba que el rastro cae en la iglesia correcta —
+  // que si no, no lo comprobaba nadie.
+  const log = db.prepare(
+    "SELECT actor_id, detalle FROM auditoria WHERE accion = 'editar_gasto' AND iglesia_id = ?"
+  ).get(S.iglesiaId);
   assert.ok(log, 'corregir un gasto tiene que dejar rastro');
   assert.equal(log.actor_id, S.liderId);
   // Con separador de miles: este texto se le muestra a la gente en la hoja
-  // (Task 6), asi que se guarda ya formateado.
+  // (Task 7), asi que se guarda ya formateado.
   assert.match(log.detalle, /\$1\.000/);
   assert.match(log.detalle, /\$1\.200/);
+  // Este PATCH solo tocó el monto: no debe ensuciar el rastro con el origen.
+  assert.doesNotMatch(log.detalle, /->.*(pagó la caja|se devuelve|aporte de|sin registrar)/,
+    'si el origen no cambió, no se anota');
+});
+
+test('corregir el ORIGEN deja constancia de que cambió, no solo del monto', async () => {
+  const b = await servidor();
+  const S = sembrar('AUDORI');
+  const { hojaId, auth } = await hoja(b, S);
+  // Un gasto que la lider puso de su bolsillo y se le devuelve.
+  const res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Carne', monto: 20000, pagado_por: S.liderId, fuente: 'devuelve' }) });
+  const { id } = await res.json();
+
+  // Pasa a "lo pagó la caja": esto BORRA la deuda que la iglesia tenia con ella.
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ fuente: 'caja' }) });
+
+  const log = db.prepare(
+    "SELECT detalle FROM auditoria WHERE accion = 'editar_gasto' AND iglesia_id = ?"
+  ).get(S.iglesiaId);
+  assert.ok(log);
+  // Sin esto el rastro decia `"Carne" $20.000 -> "Carne" $20.000`: aparentaba
+  // que no habia cambiado nada, justo en el cambio que borra una deuda.
+  assert.match(log.detalle, /se devuelve a Lider/, 'tiene que decir a quien se le debia');
+  assert.match(log.detalle, /pagó la caja/, 'y en que se convirtio');
 });
 
 test('monto invalido al corregir -> 400', async () => {
