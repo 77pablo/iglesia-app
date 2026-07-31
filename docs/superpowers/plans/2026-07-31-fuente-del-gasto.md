@@ -669,8 +669,10 @@ test('corregir un gasto queda auditado con quien y que cambio', async () => {
   const log = db.prepare("SELECT actor_id, detalle FROM auditoria WHERE accion = 'editar_gasto'").get();
   assert.ok(log, 'corregir un gasto tiene que dejar rastro');
   assert.equal(log.actor_id, S.liderId);
-  assert.match(log.detalle, /1000/);
-  assert.match(log.detalle, /1200/);
+  // Con separador de miles: este texto se le muestra a la gente en la hoja
+  // (Task 6), asi que se guarda ya formateado.
+  assert.match(log.detalle, /\$1\.000/);
+  assert.match(log.detalle, /\$1\.200/);
 });
 
 test('monto invalido al corregir -> 400', async () => {
@@ -796,9 +798,25 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo
   // (actor_id y fecha son columnas propias de la tabla auditoria).
   auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-    `"${gasto.concepto}" $${gasto.monto} -> "${concepto}" $${monto}`);
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`);
   res.json({ ok: true });
 });
+```
+
+Y arriba del todo del archivo, junto al resto de ayudantes de módulo (antes de
+`armarHoja`), añadir:
+
+```js
+// Los montos del detalle de auditoria se guardan ya formateados, porque ese
+// texto se le va a MOSTRAR a la gente en la hoja (ver la Task 6): "$12.000" y
+// no "$12000", igual que money() en el frontend.
+//
+// A mano y no con toLocaleString('es-CL'): no se usa en ningun sitio del
+// backend hoy (cero coincidencias en backend/src/), y haria que el texto ya
+// guardado dependiera de la configuracion regional del servidor.
+function montoTxt(n) {
+  return '$' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
 ```
 
 - [ ] **Step 4: Correr el test y verlo pasar**
@@ -1192,25 +1210,395 @@ git commit -m "feat(organizacion): mostrar la fuente de cada gasto y poder corre
 
 ---
 
-### Task 6: Dejarlo escrito
+### Task 6: Que la auditoría sepa a qué hoja se refiere
+
+**Files:**
+- Modify: `backend/src/db.js` (junto al resto de `agregarColumna`, y la lista de índices)
+- Modify: `backend/src/auth.js:186-190` (`auditar`)
+- Modify: `backend/src/organizacion.js` (la llamada a `auditar` del `PATCH` de la Task 4)
+- Test: `backend/test/organizacion-fuente-gasto.test.js` (añadir)
+
+**Interfaces:**
+- Consumes: el `PATCH /organizacion/gastos/:gastoId` de la Task 4.
+- Produces: `auditoria` gana `ref_tabla TEXT` y `ref_id INTEGER`; `auditar()`
+  gana un **sexto parámetro opcional** `ref` con forma `{tabla, id}`. La Task 7
+  los consulta.
+
+> **El problema que resuelve.** `auditoria` (`db.js:220-228`) guarda **qué**
+> pasó, **quién** y **cuándo**, pero **no a qué registro se refiere** — solo un
+> `detalle` de texto libre. No hay forma limpia de pedir "las correcciones de la
+> hoja 7", y por eso el rastro solo se leía abriendo la base de datos por fuera.
+
+- [ ] **Step 1: Escribir el test que falla**
+
+Añadir a `backend/test/organizacion-fuente-gasto.test.js`:
+
+```js
+// ---------- La referencia: a que se refiere cada apunte de auditoria ----------
+
+test('auditoria gana ref_tabla/ref_id, y nacen vacias en todo lo historico', () => {
+  const cols = db.prepare('PRAGMA table_info(auditoria)').all().map(c => c.name);
+  assert.ok(cols.includes('ref_tabla'), 'falta ref_tabla');
+  assert.ok(cols.includes('ref_id'), 'falta ref_id');
+});
+
+test('auditar() SIN el parametro nuevo sigue escribiendo igual (los ~40 sitios que ya la usan)', async () => {
+  const { auditar } = await import('../src/auth.js');
+  const S = sembrar('AUDCOMP');
+  auditar(S.iglesiaId, S.liderId, 'accion_de_siempre', 'un_modulo', 'detalle');
+
+  const fila = db.prepare("SELECT * FROM auditoria WHERE accion = 'accion_de_siempre'").get();
+  assert.ok(fila, 'la llamada de 5 argumentos no puede dejar de funcionar');
+  assert.equal(fila.detalle, 'detalle');
+  assert.equal(fila.ref_tabla, null);
+  assert.equal(fila.ref_id, null);
+});
+
+test('corregir un gasto deja la referencia apuntando a la HOJA, no al gasto', async () => {
+  const b = await servidor();
+  const S = sembrar('REF1');
+  const { hojaId, auth } = await hoja(b, S);
+  const res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Pan', monto: 1000 }) });
+  const { id } = await res.json();
+
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 1200 }) });
+
+  const log = db.prepare("SELECT ref_tabla, ref_id FROM auditoria WHERE accion = 'editar_gasto'").get();
+  assert.equal(log.ref_tabla, 'evento_org');
+  assert.equal(log.ref_id, hojaId, 'apunta a la hoja: si se borra el gasto, su correccion no queda huerfana');
+  assert.notEqual(log.ref_id, id, 'NO al gasto');
+});
+```
+
+- [ ] **Step 2: Correr el test y verlo fallar**
+
+Run: `cd backend && node --test test/organizacion-fuente-gasto.test.js`
+Expected: FALLA — `cols.includes('ref_tabla')` es `false`.
+
+- [ ] **Step 3: Las dos columnas y su índice**
+
+En `backend/src/db.js`, junto al resto de llamadas a `agregarColumna`:
+
+```js
+// AUDITORIA: a que registro se refiere el apunte. Sin esto la tabla guarda QUE
+// paso, QUIEN y CUANDO, pero no SOBRE QUE — y no hay forma limpia de pedir "las
+// correcciones de la hoja 7". NULL en todo lo historico y en los ~40 sitios que
+// llaman a auditar() sin la referencia; hoy solo la rellena Organizacion.
+agregarColumna('auditoria', 'ref_tabla', 'TEXT');
+agregarColumna('auditoria', 'ref_id', 'INTEGER');
+```
+
+Y en la lista de índices (junto a `idx_auditoria_iglesia`, `db.js:622`):
+
+```js
+  CREATE INDEX IF NOT EXISTS idx_auditoria_ref ON auditoria(ref_tabla, ref_id);
+```
+
+- [ ] **Step 4: El sexto parámetro de `auditar()`**
+
+En `backend/src/auth.js`, reemplazar:
+
+```js
+export function auditar(iglesiaId, actorId, accion, modulo, detalle = '') {
+  db.prepare(
+    'INSERT INTO auditoria (iglesia_id, actor_id, accion, modulo, detalle) VALUES (?,?,?,?,?)'
+  ).run(iglesiaId, actorId, accion, modulo, detalle);
+}
+```
+
+por:
+
+```js
+// `ref` es OPCIONAL y va al final a proposito: los ~40 sitios que ya llaman a
+// esta funcion con 5 argumentos no se tocan y siguen escribiendo NULL en las
+// dos columnas nuevas. Con {tabla, id} el apunte queda consultable ("dame las
+// correcciones de la hoja 7"), que es lo que permite ENSENAR el rastro en vez
+// de solo guardarlo.
+export function auditar(iglesiaId, actorId, accion, modulo, detalle = '', ref = null) {
+  db.prepare(
+    'INSERT INTO auditoria (iglesia_id, actor_id, accion, modulo, detalle, ref_tabla, ref_id) VALUES (?,?,?,?,?,?,?)'
+  ).run(iglesiaId, actorId, accion, modulo, detalle, ref ? ref.tabla : null, ref ? ref.id : null);
+}
+```
+
+- [ ] **Step 5: Que el `PATCH` mande la referencia**
+
+En `backend/src/organizacion.js`, en el `r.patch('/gastos/:gastoId', ...)` de la
+Task 4, reemplazar:
+
+```js
+  auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`);
+```
+
+por:
+
+```js
+  // La referencia apunta a la HOJA (gasto.org_id), no al gasto: si manana se
+  // borra el gasto, su correccion sigue apareciendo en el historial de la hoja.
+  // Apuntando al gasto, el rastro quedaria huerfano justo en el caso en que mas
+  // importa (alguien corrige un monto y despues borra la linea entera).
+  auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`,
+    { tabla: 'evento_org', id: gasto.org_id });
+```
+
+- [ ] **Step 6: Correr el test y verlo pasar**
+
+Run: `cd backend && node --test test/organizacion-fuente-gasto.test.js`
+Expected: PASA — 20 tests (el total del archivo).
+
+- [ ] **Step 7: Correr la suite completa**
+
+Run: `cd backend && npm test`
+Expected: **476 tests, 0 fail** (473 + 3).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add backend/src/db.js backend/src/auth.js backend/src/organizacion.js backend/test/organizacion-fuente-gasto.test.js
+git commit -m "feat(auditoria): que un apunte sepa a que registro se refiere"
+```
+
+---
+
+### Task 7: El historial de correcciones, visible en la hoja y en el papel
+
+**Files:**
+- Modify: `backend/src/organizacion.js` (`armarHoja`, el que quedó tras la Task 3)
+- Modify: `web/app.js` — `Org._render()`, dentro de la tarjeta de gastos
+- Test: `backend/test/organizacion-fuente-gasto.test.js` (añadir)
+
+**Interfaces:**
+- Consumes: `ref_tabla`/`ref_id` (Task 6).
+- Produces: `GET /organizacion/:id` y `GET /organizacion/evento/:eventoId`
+  devuelven además `correcciones`: `[{ id, detalle, fecha, actor_nombre }]`,
+  de la más reciente a la más antigua.
+
+- [ ] **Step 1: Escribir el test que falla**
+
+Añadir a `backend/test/organizacion-fuente-gasto.test.js`:
+
+```js
+// ---------- El historial, en la hoja ----------
+
+test('la hoja devuelve sus correcciones, con el nombre de quien corrigio', async () => {
+  const b = await servidor();
+  const S = sembrar('HIST');
+  const { hojaId, auth } = await hoja(b, S);
+  const res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Pan', monto: 12000 }) });
+  const { id } = await res.json();
+
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 8000 }) });
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hojaRes.correcciones.length, 1);
+  assert.equal(hojaRes.correcciones[0].actor_nombre, 'Lider');
+  assert.match(hojaRes.correcciones[0].detalle, /\$12\.000/);
+  assert.match(hojaRes.correcciones[0].detalle, /\$8\.000/);
+});
+
+test('una hoja sin correcciones devuelve la lista vacia, no undefined', async () => {
+  const b = await servidor();
+  const S = sembrar('SINC');
+  const { hojaId, auth } = await hoja(b, S);
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.deepEqual(hojaRes.correcciones, []);
+});
+
+test('borrar el gasto NO borra su correccion del historial de la hoja', async () => {
+  const b = await servidor();
+  const S = sembrar('BORR');
+  const { hojaId, auth } = await hoja(b, S);
+  const res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Pan', monto: 12000 }) });
+  const { id } = await res.json();
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 8000 }) });
+
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'DELETE', headers: auth });
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hojaRes.correcciones.length, 1, 'es justo el caso en que mas importa que el rastro siga ahi');
+});
+```
+
+- [ ] **Step 2: Correr el test y verlo fallar**
+
+Run: `cd backend && node --test test/organizacion-fuente-gasto.test.js`
+Expected: FALLA — `hojaRes.correcciones` es `undefined`.
+
+- [ ] **Step 3: Que `armarHoja` traiga el historial**
+
+En `backend/src/organizacion.js`, dentro de `armarHoja`, justo antes del
+`const evento = org.evento_id`, añadir:
+
+```js
+  // El historial de correcciones de ESTA hoja. Viaja con la hoja (que ya es una
+  // sola respuesta) en vez de por una ruta aparte: son cero filas en el caso
+  // normal. Acotado tambien por iglesia_id, no solo por la referencia.
+  const correcciones = db.prepare(
+    `SELECT a.id, a.detalle, a.fecha, p.nombre AS actor_nombre
+       FROM auditoria a LEFT JOIN persona p ON p.id = a.actor_id
+      WHERE a.ref_tabla = 'evento_org' AND a.ref_id = ? AND a.iglesia_id = ?
+        AND a.accion = 'editar_gasto'
+      ORDER BY a.id DESC`
+  ).all(org.id, org.iglesia_id);
+```
+
+Y añadir `correcciones` al objeto que devuelve:
+
+```js
+  return { ...org, evento, cosas, gastos, total_gastado: total,
+    total_caja: totalCaja, por_devolver: porDevolver, aportes_donados: aportesDonados,
+    correcciones };
+```
+
+⚠️ `LEFT JOIN` y no `JOIN` en `persona`: si la cuenta de quien corrigió se
+elimina, la corrección debe seguir apareciendo (con el nombre vacío), no
+desaparecer del historial.
+
+- [ ] **Step 4: Correr el test y verlo pasar**
+
+Run: `cd backend && node --test test/organizacion-fuente-gasto.test.js`
+Expected: PASA — 23 tests (el total del archivo).
+
+- [ ] **Step 5: El bloque en la pantalla**
+
+En `web/app.js`, dentro de `Org._render()`, justo **antes** de la línea
+`const aportes=hayResumen` (el resumen que dejó la Task 5), añadir:
+
+```js
+    // Historial de correcciones de la hoja. Solo aparece si hubo alguna.
+    // escHtml en las dos cosas: el detalle lleva DENTRO el concepto que tecleó
+    // una persona (y con comillas dobles: `"Pan" $12.000 -> "Pan" $8.000`), y
+    // el nombre sale de la base de datos.
+    const correcciones=(h.correcciones||[]).length
+      ? `<div class="org-aportes" style="margin-top:14px"><b class="muted small">Correcciones</b>
+          ${h.correcciones.map(c=>`<div class="org-row"><span class="muted small">
+            ${escHtml(c.actor_nombre||'Alguien')} · ${escHtml(c.detalle||'')}</span>
+            <span class="muted small">${escHtml(fechaDeUTC(c.fecha))}</span></div>`).join('')}</div>`
+      : '';
+```
+
+Y en el HTML de la tarjeta de gastos, interpolarlo **después de `${aportes}` y
+antes del bloque `.solo-rendicion`**:
+
+```js
+        ${aportes}
+        ${correcciones}
+        <!-- Solo en el papel de rendicion: el tesorero firma que recibio las
+             cuentas. En pantalla no pinta nada, y en la hoja de la puerta
+             tampoco (alli no hay cuentas que recibir). -->
+        <div class="solo-rendicion">Recibí conforme: ______________________
+```
+
+> 🔴 **Dónde va no es un detalle de estilo, y hay dos formas de equivocarse.**
+> De esta hoja salen **dos papeles** y lo único que los separa es una clase en
+> el `<body>` (`Org._conPapel`, `app.js:4210-4226`):
+>
+> | Papel | Va a | Lleva |
+> |---|---|---|
+> | 🖨️ Imprimir | **la puerta de la iglesia** | Cosas a llevar. Sin gastos: `.card-gastos` es `no-print` (`app.js:4098`) |
+> | 🧾 Rendición | **el tesorero** | Gastos y cuentas (`.modo-rendicion .card-gastos{display:block!important}`, `styles.css:681`) |
+>
+> - **Fuera de `.card-gastos`**, el bloque sale en la hoja de la puerta: *"Abel
+>   cambió el monto de $12.000 a $8.000"* colgado donde lo lee toda la
+>   congregación. Va **dentro**, que ya hereda ocultarse en un papel y verse en
+>   el otro.
+> - **Envuelto en `no-print`** "porque es de pantalla", no saldría **nunca** en
+>   la rendición: esa clase gana con `!important`. El propio CSS lleva escrito
+>   el aviso de lo caro que es este fallo (`styles.css:676-680`).
+> - Y va **antes** de `.solo-rendicion`, para que la firma quede al final del
+>   papel.
+
+- [ ] **Step 6: El ayudante de fecha `fechaDeUTC`**
+
+`auditoria.fecha` es `datetime('now')`: **UTC**, aunque el proceso corra en hora
+de Chile. Sin convertir, una corrección hecha a las 21:00 se vería fechada al
+día siguiente.
+
+Run: `grep -n "function fechaDeUTC" web/app.js`
+
+- **Si aparece**, no hagas nada: ya lo añadió el plan de la bandeja del portal
+  (`2026-07-31-bandeja-portal-publico.md`, Task 4). **No lo dupliques.**
+- **Si no aparece**, añádelo justo después de `escHtml` (~línea 2334):
+
+```js
+// SQLite guarda datetime('now') en UTC SIEMPRE, aunque el proceso corra en hora
+// de Chile. Cortar el texto con .slice(0,10) muestra el dia equivocado: algo
+// hecho un lunes a las 21:00 se veria fechado el martes. Se arregla al MOSTRAR,
+// nunca cambiando lo guardado (eso volveria inconsistentes las filas viejas con
+// las nuevas, y esta app ya se llevo cinco fallos por tocar zonas horarias).
+function fechaDeUTC(s){
+  if(!s) return '';
+  const d=new Date(String(s).replace(' ','T')+'Z');   // sin la Z se leeria como hora local
+  return isNaN(d.getTime()) ? String(s).slice(0,10) : d.toLocaleDateString('es-CL');
+}
+```
+
+- [ ] **Step 7: Probarlo en el navegador**
+
+Mismo montaje que la Task 5 (servidor propio, `DISABLE_RATE_LIMIT=1`,
+`JWT_SECRET=local`, BD de usar y tirar, `node src/seed.js`, iglesia
+`MONTESION`, clave `1234`). **NO uses `scripts/with_server.py`.**
+
+Comprobar, entrando como líder:
+- Abrir una hoja sin correcciones → **no** aparece ningún bloque "Correcciones".
+- Corregir el monto de un gasto de $12.000 a $8.000 → aparece el bloque con
+  *"Lider · "Pan" $12.000 -> "Pan" $8.000"* y la fecha de hoy (no la de mañana).
+- Corregir otro gasto → la corrección más reciente sale **arriba**.
+- Borrar ese gasto → **la corrección sigue en el historial**.
+- 🖨️ **Imprimir** (vista previa) → el papel de la puerta lleva las cosas a
+  llevar y **NO** lleva ni gastos ni correcciones.
+- 🧾 **Rendición** (vista previa) → el papel **sí** lleva el historial, entre el
+  resumen y la línea de "Recibí conforme".
+- Sin errores de consola.
+
+- [ ] **Step 8: Correr la suite completa**
+
+Run: `cd backend && npm test`
+Expected: **479 tests, 0 fail** (476 + 3).
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add backend/src/organizacion.js web/app.js backend/test/organizacion-fuente-gasto.test.js
+git commit -m "feat(organizacion): ver en la hoja quien corrigio un gasto y que cambio"
+```
+
+---
+
+### Task 8: Dejarlo escrito
 
 **Files:**
 - Modify: `ESTADO.md`
 
 - [ ] **Step 1: Actualizar `ESTADO.md`**
 
-Añadir una sección con: qué se construyó (la casilla `fuente` en
-`evento_org_gasto`, el `PATCH` para corregir gastos, el resumen partido en
-tres bloques), el número nuevo de tests, y **lo que sigue sin resolver**: (a)
-los gastos de la hoja de Organización siguen sin aparecer en Tesorería —
-sigue siendo el Camino C, no decidido; (b) no se registra si ya se devolvió
-el dinero (Camino B); (c) el rastro de quién corrigió un gasto vive en
-`auditoria`, pero **no hay ninguna pantalla que la muestre** — solo se
-consulta con acceso directo a la base de datos.
+Añadir una sección con qué se construyó — la casilla `fuente` en
+`evento_org_gasto`, el `PATCH` para corregir gastos, el resumen partido en tres
+bloques, y **el historial de correcciones visible en la hoja y en la rendición
+impresa** (con `auditoria.ref_tabla`/`ref_id`) —, el número nuevo de tests
+(**479**), y **lo que sigue sin resolver**:
+
+1. Los gastos de la hoja de Organización siguen sin aparecer en **Tesorería**:
+   sigue siendo el Camino C, no decidido.
+2. **No se registra si ya se devolvió el dinero** (Camino B). El bloque "Por
+   devolver" dice cuánto se debe hoy, para siempre.
+3. **Borrar un gasto sigue sin dejar rastro**, a propósito: en este módulo
+   ningún ítem lo deja al crearse o borrarse, y auditar solo el borrado del
+   gasto sería un parche asimétrico. Consecuencia asumida: quien quiera esquivar
+   el historial puede borrar y volver a crear.
+4. **No hay pantalla de auditoría general.** Lo que se ve es el historial de
+   correcciones **de una hoja**; `crear_org`, `editar_org`, `borrar_org` y
+   `duplicar_org` siguen sin mostrarse en ningún sitio.
+5. **No se comprueba que la persona esté activa** al anotar o corregir un gasto
+   (sí se comprueba en las cosas a llevar, `organizacion.js:282-284`). Bug
+   preexistente, fuera de alcance.
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add ESTADO.md
-git commit -m "docs(estado): la fuente del gasto, cerrado"
+git commit -m "docs(estado): la fuente del gasto y el historial de correcciones, cerrado"
 ```
