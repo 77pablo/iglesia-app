@@ -19,6 +19,7 @@ const NAV = [
   ['reportes','📈','Reportes'],
   ['musicos','🎵','Grupo de Alabanza'],
   ['cuidado_pastoral','❤️','Cuidado pastoral'],
+  ['mensajes_portal','📬','Mensajes del portal'],
   ['ninos','👶','Niños / Esc. Dominical'],
   ['tesoreria','💰','Tesorería'],
   ['organizacion','🗒️','Organización'],
@@ -609,6 +610,7 @@ function navTo(key){
   if(key==='reportes') return vistaReportes();
   if(key==='musicos') return vistaMusica();
   if(key==='cuidado_pastoral') return vistaCuidado();
+  if(key==='mensajes_portal') return vistaMensajesPortal();
   if(key==='tesoreria') return vistaTesoreria();
   if(key==='organizacion') return vistaOrganizacion();
   if(key==='ninos') return vistaNinos();
@@ -2095,6 +2097,90 @@ async function atenderCaso(id){
 }
 
 // ============================================================
+//  MENSAJES DEL PORTAL PÚBLICO (solo el pastor)
+//  Los manda gente sin cuenta desde "Planifica tu visita". Antes se guardaban
+//  y no los leía nadie: no había ninguna pantalla que los mostrara.
+// ============================================================
+let _mpOffset=0, _mpPreviosOffset=0;
+
+// TODO el texto de aquí lo escribe un desconocido de internet, sin cuenta y sin
+// moderación: es el dato menos confiable de la app. escHtml SIEMPRE.
+function filaMensajePortal(m){
+  const chip = m.estado==='atendido'
+    ? '<span class="estado-chip estado-aceptado">✅ Atendido</span>'
+    : m.estado==='previo'
+    ? '<span class="estado-chip estado-pendiente">📥 Anterior</span>'
+    : '<span class="estado-chip estado-rechazado">🆕 Nuevo</span>';
+  const boton = m.estado==='atendido' ? ''
+    : `<button class="btn ghost small-btn" onclick="atenderMensajePortal(${m.id})">Marcar atendido</button>`;
+  return `<div class="item-card" style="margin-top:10px">
+    <div class="flex" style="align-items:flex-start">
+      <div style="flex:1"><b>${escHtml(m.nombre)}</b>
+        <div class="muted small" style="white-space:pre-wrap;margin-top:4px">${escHtml(m.mensaje)}</div>
+        <div class="muted small" style="margin-top:6px">${escHtml(fechaDeUTC(m.creado_en))}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
+        ${chip}${boton}
+      </div>
+    </div></div>`;
+}
+
+async function vistaMensajesPortal(){
+  _mpOffset=0; _mpPreviosOffset=0;
+  $('content').innerHTML='<div id="mp" class="muted">Cargando…</div>';
+  try{
+    const d=await api('/publico/mensajes');
+    const z=$('mp'); z.className='';
+    const lista = d.items.length
+      ? d.items.map(filaMensajePortal).join('')
+      : '<div class="placeholder"><div class="big">📬</div><p>No hay mensajes del portal.</p></div>';
+    // La sección de los anteriores nace PLEGADA: es lo que evita que la primera
+    // apertura sea un muro de meses acumulados. El número va a la vista para
+    // que no se ignoren sin querer.
+    const previos = d.previos>0
+      ? `<button class="link" id="mp-ver-previos" style="margin-top:18px" onclick="verPreviosPortal()">
+           ▸ 📥 Mensajes anteriores a esta bandeja (${d.previos})</button>
+         <div id="mp-previos"></div>`
+      : '';
+    z.innerHTML=`<div id="mp-lista">${lista}</div>
+      ${d.hayMas?'<button class="btn ghost small-btn" id="mp-mas" style="margin-top:10px" onclick="cargarMasMensajesPortal()">Ver más</button>':''}
+      ${previos}`;
+  }catch(e){ $('mp').innerHTML='<p class="error">'+escHtml(e.message||'No se pudieron cargar')+'</p>'; }
+}
+
+async function cargarMasMensajesPortal(){
+  await conBoton($('mp-mas'), async()=>{
+    const siguiente=_mpOffset+50;
+    try{
+      const d=await api('/publico/mensajes?offset='+siguiente);
+      _mpOffset=siguiente;
+      $('mp-lista').insertAdjacentHTML('beforeend', d.items.map(filaMensajePortal).join(''));
+      if(!d.hayMas){ const b=$('mp-mas'); if(b) b.remove(); }
+    }catch(e){ toast(e.message); }
+  });
+}
+
+async function verPreviosPortal(){
+  await conBoton($('mp-ver-previos'), async()=>{
+    try{
+      const d=await api('/publico/mensajes?previos=1&offset='+_mpPreviosOffset);
+      $('mp-previos').insertAdjacentHTML('beforeend', d.items.map(filaMensajePortal).join(''));
+      const btn=$('mp-ver-previos');
+      if(d.hayMas){ _mpPreviosOffset+=50; if(btn) btn.textContent='Ver más anteriores'; }
+      else if(btn) btn.remove();
+    }catch(e){ toast(e.message); }
+  });
+}
+
+async function atenderMensajePortal(id){
+  try{
+    await api('/publico/mensajes/'+id+'/atender',{method:'PATCH'});
+    toast('✅ Marcado como atendido');
+    vistaMensajesPortal();
+  }catch(e){ toast(e.message); }
+}
+
+// ============================================================
 //  FASE 3: TESORERÍA (contabilidad + transparencia)
 // ============================================================
 // Formato unico de dinero para toda la app (CLP: miles con punto, sin decimales).
@@ -2332,6 +2418,20 @@ function borrarNino(id){
 //  Helper de escape para innerHTML (seguro)
 // ============================================================
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// SQLite guarda datetime('now') en UTC SIEMPRE, aunque el proceso corra en hora
+// de Chile. Cortar el texto con .slice(0,10) muestra el dia equivocado: un
+// mensaje enviado un lunes a las 21:00 se veria fechado el martes. Se arregla
+// al MOSTRAR, nunca cambiando lo guardado (eso volveria inconsistentes las
+// filas viejas con las nuevas, y esta app ya se llevo cinco fallos por tocar
+// zonas horarias sin necesidad).
+//
+// La fecha sale en la zona de quien mira, que es lo correcto: para la iglesia
+// es Chile, y para el pastor de viaje es donde este.
+function fechaDeUTC(s){
+  if(!s) return '';
+  const d=new Date(String(s).replace(' ','T')+'Z');   // sin la Z se leeria como hora local
+  return isNaN(d.getTime()) ? String(s).slice(0,10) : d.toLocaleDateString('es-CL');
+}
 // Neutraliza URLs peligrosas (javascript:, data:, vbscript:) antes de ponerlas en un href.
 // Deja pasar http/https, rutas relativas y enlaces sin esquema (no rompe links legítimos).
 function safeUrl(u){ const s=String(u==null?'':u).trim(); return /^\s*(javascript|data|vbscript):/i.test(s) ? '#' : s; }

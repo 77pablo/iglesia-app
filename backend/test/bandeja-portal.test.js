@@ -7,6 +7,7 @@
 // ============================================================
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { cargarDb, reiniciar, sembrarMinimo } from './helpers.js';
 
 let db, srv, base, signToken, SEM;
@@ -177,4 +178,18 @@ test('un lider que no es pastor recibe 403 al marcar atendido', async () => {
   const res = await atender(SEM.lider, id);
   assert.equal(res.status, 403);
   assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(id).estado, 'nuevo');
+});
+
+// ---------- Escapado en la pantalla ----------
+
+test('la bandeja escapa el nombre y el mensaje del visitante', () => {
+  const src = readFileSync(new URL('../../web/app.js', import.meta.url), 'utf8');
+  const i = src.indexOf('function filaMensajePortal');
+  assert.ok(i > 0, 'falta filaMensajePortal en web/app.js');
+  // Se mira solo el cuerpo de esa funcion, no el archivo entero.
+  const cuerpo = src.slice(i, src.indexOf('\n}', i));
+  assert.match(cuerpo, /escHtml\(m\.nombre\)/, 'el nombre lo escribe un desconocido de internet');
+  assert.match(cuerpo, /escHtml\(m\.mensaje\)/, 'el mensaje tambien');
+  assert.doesNotMatch(cuerpo, /\$\{m\.nombre\}/, 'nunca el nombre crudo');
+  assert.doesNotMatch(cuerpo, /\$\{m\.mensaje\}/, 'nunca el mensaje crudo');
 });

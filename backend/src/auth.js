@@ -125,7 +125,7 @@ export function modulosVisibles(personaId) {
   // Pastor: todo lo de su iglesia
   if (r.es_pastor) {
     ['calendario_completo','asistencia','panel_pastor','musicos','servicio_gestion',
-     'cuidado_pastoral','ninos','tesoreria','admin','reportes'].forEach(m => mods.add(m));
+     'cuidado_pastoral','ninos','tesoreria','admin','reportes','mensajes_portal'].forEach(m => mods.add(m));
     return [...mods];
   }
   // Por pertenencias (roles de grupo)
