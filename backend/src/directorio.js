@@ -111,11 +111,19 @@ const perfilSchema = z.object({
   mostrar_email: z.coerce.number().int().min(0).max(1).optional()
 });
 r.patch('/perfil', validar(perfilSchema), (req, res) => {
-  // Se necesita el nombre VIEJO antes de sobreescribirlo, solo para dejarlo
-  // en la auditoria (que dice "de que a que" cambio).
+  // Se necesita el nombre VIEJO antes de sobreescribirlo, por dos razones: para
+  // dejarlo en la auditoria (que dice "de que a que" cambio) y, sobre todo,
+  // para saber si de verdad cambio.
   const nombreViejo = req.body.nombre !== undefined
     ? db.prepare('SELECT nombre FROM persona WHERE id = ?').get(req.user.persona_id).nombre
     : null;
+  // "Mi perfil" es un formulario entero: manda 'nombre' cada vez que alguien
+  // guarda, aunque solo haya tocado el telefono o una casilla de privacidad.
+  // Auditar por "vino el campo" en vez de por "cambio el campo" llenaba el
+  // rastro de lineas `Juan Perez → Juan Perez` — un registro que afirma
+  // cambios que nadie hizo no sirve como red de seguridad. Misma leccion que
+  // ya dejo el `se devuelve a Maria -> se devuelve a Maria` de Organizacion.
+  const cambioNombre = req.body.nombre !== undefined && req.body.nombre !== nombreViejo;
 
   const campos = ['nombre', 'telefono', 'email', 'cumple', 'foto_url', 'mostrar_telefono', 'mostrar_email'];
   const sets = [];
@@ -134,7 +142,7 @@ r.patch('/perfil', validar(perfilSchema), (req, res) => {
   // que hay (aprobacion_log.actor_nombre, ver spec) con el mismo patron de una
   // linea que ya usa cuenta.js al anonimizar una cuenta eliminada, y deja
   // rastro de quien se corrigio a si mismo y que decia antes.
-  if (req.body.nombre !== undefined) {
+  if (cambioNombre) {
     db.prepare('UPDATE aprobacion_log SET actor_nombre = ? WHERE actor_id = ?')
       .run(req.body.nombre, req.user.persona_id);
     auditar(req.user.iglesia_id, req.user.persona_id, 'corregir_nombre', 'directorio',

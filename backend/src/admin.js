@@ -116,7 +116,10 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   // que ya usa cuenta.js al anonimizar una cuenta eliminada. Se audita aparte
   // (con el nombre viejo y el nuevo) en vez de sumarse al 'editar_usuario' de
   // mas abajo, que no dice QUE cambio.
-  if (typeof nombre === 'string') {
+  // Se compara contra el nombre que ya habia (`p` se leyo ANTES del UPDATE):
+  // reenviar el mismo nombre no es una correccion, y anotarlo dejaria en el
+  // rastro un `Juan Perez → Juan Perez` que afirma un cambio que nadie hizo.
+  if (typeof nombre === 'string' && nombre !== p.nombre) {
     db.prepare('UPDATE persona SET nombre = ? WHERE id = ?').run(nombre, p.id);
     db.prepare('UPDATE aprobacion_log SET actor_nombre = ? WHERE actor_id = ?').run(nombre, p.id);
     auditar(ig, yo, 'corregir_nombre_usuario', 'admin', `${p.nombre} → ${nombre}`);

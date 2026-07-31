@@ -67,6 +67,36 @@ test('PATCH /api/directorio/perfil: nombre de 121+ caracteres -> 400 en castella
   assert.equal(res.status, 400);
   const { error } = await res.json();
   assert.match(error, /120|largo/i);
+
+  // Igual que su gemela de "nombre vacio": sin esta linea, mover la validacion
+  // detras del UPDATE dejaria el nombre roto en la BD y la prueba seguiria en verde.
+  const fila = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(SEM.miembro1.id);
+  assert.equal(fila.nombre, 'Miembro Uno', 'no debe haber cambiado nada');
+});
+
+// ------------------------------------------------------------
+//  Reenviar el MISMO nombre no es una correccion.
+//  "Mi perfil" es un formulario entero: manda 'nombre' cada vez que alguien
+//  guarda, aunque solo haya tocado el telefono. Si se audita por "vino el
+//  campo" en vez de por "cambio el campo", cada guardado deja una linea
+//  `Miembro Uno → Miembro Uno`, y un rastro que afirma cambios que nadie hizo
+//  no sirve como red de seguridad — que es justo lo que promete el documento ARCO.
+// ------------------------------------------------------------
+test('PATCH /api/directorio/perfil: guardar el perfil sin tocar el nombre no deja rastro de correccion', async () => {
+  logAprobacion(SEM.miembro1.id, 'Miembro Uno');
+
+  const res = await fetch(base + '/api/directorio/perfil', {
+    method: 'PATCH', headers: H(SEM.miembro1),
+    body: JSON.stringify({ nombre: 'Miembro Uno', telefono: '+56 9 1111 1111', mostrar_telefono: 1 })
+  });
+  assert.equal(res.status, 200);
+
+  const fila = db.prepare('SELECT nombre, telefono FROM persona WHERE id = ?').get(SEM.miembro1.id);
+  assert.equal(fila.telefono, '+56 9 1111 1111', 'lo que si se toco tiene que guardarse igual');
+  assert.equal(fila.nombre, 'Miembro Uno');
+
+  const n = db.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE accion = 'corregir_nombre'").get().n;
+  assert.equal(n, 0, 'cambiar el telefono no puede quedar auditado como "Miembro Uno → Miembro Uno"');
 });
 
 test('PATCH /api/directorio/perfil: sincroniza aprobacion_log.actor_nombre, y no toca las de otro actor', async () => {
@@ -181,4 +211,46 @@ test('PATCH /api/admin/usuarios/:id: nombre de 121+ caracteres -> 400 en castell
   assert.equal(res.status, 400);
   const { error } = await res.json();
   assert.match(error, /120|largo/i);
+});
+
+// El modal del pastor viene prellenado con el nombre actual, asi que pulsar
+// "Guardar" sin tocar nada manda el mismo nombre. Mismo criterio que en el
+// perfil propio: eso no es una correccion y no puede ensuciar el rastro.
+test('PATCH /api/admin/usuarios/:id: reenviar el MISMO nombre no deja rastro de correccion', async () => {
+  const res = await corregirOtro(SEM.pastor, SEM.miembro1.id, 'Miembro Uno');
+  assert.equal(res.status, 200);
+
+  const n = db.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE accion = 'corregir_nombre_usuario'").get().n;
+  assert.equal(n, 0, 'el rastro no puede decir "Miembro Uno → Miembro Uno"');
+});
+
+// ------------------------------------------------------------
+//  Los dos caminos juntos: el escenario que esta rama existe para servir.
+//  El pastor corrige a alguien que tiene la app abierta desde antes, y esa
+//  persona guarda su perfil despues. "Mi perfil" se prellena con lo que
+//  responde GET /perfil, asi que la correccion NO puede volver atras.
+// ------------------------------------------------------------
+test('corregir por admin y luego guardar el perfil no revierte el nombre', async () => {
+  await corregirOtro(SEM.pastor, SEM.miembro1.id, 'Juan Pérez');
+
+  // Lo que hace "Mi perfil" al abrirse: pedir el perfil fresco. De aqui sale
+  // el valor con el que se prellena el campo (no de la cache del arranque).
+  const perfil = await (await fetch(base + '/api/directorio/perfil', { headers: H(SEM.miembro1) })).json();
+  assert.equal(perfil.nombre, 'Juan Pérez', 'GET /perfil tiene que devolver ya el nombre corregido');
+
+  // Y ahora la persona guarda cambiando SOLO el telefono.
+  const res = await fetch(base + '/api/directorio/perfil', {
+    method: 'PATCH', headers: H(SEM.miembro1),
+    body: JSON.stringify({ nombre: perfil.nombre, telefono: '+56 9 2222 2222' })
+  });
+  assert.equal(res.status, 200);
+
+  const fila = db.prepare('SELECT nombre, telefono FROM persona WHERE id = ?').get(SEM.miembro1.id);
+  assert.equal(fila.nombre, 'Juan Pérez', 'guardar el telefono no puede deshacer la correccion del pastor');
+  assert.equal(fila.telefono, '+56 9 2222 2222');
+
+  const propia = db.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE accion = 'corregir_nombre'").get().n;
+  assert.equal(propia, 0, 'y el rastro no puede decir que el nombre lo cambio la persona');
+  const delPastor = db.prepare("SELECT * FROM auditoria WHERE accion = 'corregir_nombre_usuario'").get();
+  assert.equal(delPastor.actor_id, SEM.pastor.id, 'la unica correccion registrada es la del pastor');
 });
