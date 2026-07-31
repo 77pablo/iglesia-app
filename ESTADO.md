@@ -538,7 +538,9 @@ app/
 
 ### 👉 POR DÓNDE RETOMAR (estado de `main` al 31 jul 2026 — compruébalo con los comandos de abajo antes de creerlo, incluida esta cabecera)
 
-**Ya no hay nada pendiente de subir.** Verificado el 31 jul: `git log origin/main..main --oneline` no devuelve nada, y el `app.js` que sirve Render trae `autorizados`, `modalPrompt`, `escJsAttr` y `Prédica`. (Esta línea decía "14 commits SIN SUBIR"; era falsa. Compruébalo igual con esos dos comandos antes de creerte cualquier versión de esta frase: ha estado equivocada en los dos sentidos.)
+**⚠️ Hay trabajo sin subir.** La bandeja del portal público quedó **fusionada a `main` el 31 jul** (merge `fef2742`) pero **NO empujada a GitHub**. Mientras no se haga el push, producción sirve la versión anterior y **el pastor sigue sin poder leer los mensajes de las visitas**. El push lo hace Pablo con GitHub Desktop, y es lo que dispara el redespliegue en Render.
+
+Esta frase ha estado equivocada **en los dos sentidos** más de una vez: llegó a decir "14 commits SIN SUBIR" cuando no quedaba ninguno, y también lo contrario. **No te creas ninguna versión de ella sin comprobarlo** — `git log origin/main..main --oneline` para saber si queda algo por subir, y un `curl` al `/app.js` de producción buscando `filaMensajePortal` para saber si el despliegue llegó de verdad.
 
 **Lo hecho el 31 jul:** la Fase 13 (quién puede retirar a cada niño) fusionada y verificada, la corrección del texto legal, y **cuatro documentos de diseño nuevos**.
 
