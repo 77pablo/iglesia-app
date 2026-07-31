@@ -4,9 +4,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-// Sin `auditar`: lo unico que se auditaba en este modulo era la asistencia, que
-// ya no existe. Crear clase / inscribir nino / subir leccion nunca se auditaron.
-import { authMiddleware, esLiderEdOPastor, esLiderEdEstricto, esObispo } from './auth.js';
+import { authMiddleware, esLiderEdOPastor, esLiderEdEstricto, esObispo, auditar } from './auth.js';
 import { validar, zRutaSubidaOpcional } from './seguridad.js';
 
 const r = Router();
@@ -63,6 +61,34 @@ r.post('/ninos', soloEncargado, validar(ninoSchema), (req, res) => {
   if (!claseDeIglesia(clase_id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
   db.prepare('INSERT INTO nino (iglesia_id, clase_id, nombre, edad, familia, alergias, autorizados) VALUES (?,?,?,?,?,?,?)')
     .run(req.user.iglesia_id, clase_id, nombre, edad || null, familia || null, alergias || null, autorizados || null);
+  res.json({ ok: true });
+});
+
+// Corregir la ficha. Nace con esta fase: el modulo solo sabia crear, asi que la
+// lista de autorizados no se podia cambiar nunca — y es justo el dato que cambia.
+const editarNinoSchema = z.object({
+  nombre: z.string().trim().min(1, 'falta el nombre').optional(),
+  edad: z.string().trim().optional(),
+  familia: z.string().trim().optional(),
+  alergias: z.string().trim().optional(),
+  autorizados: z.string().trim().max(300, 'la lista de quién puede retirarlo es muy larga (máximo 300 caracteres)').optional()
+});
+r.patch('/ninos/:id', soloEncargado, validar(editarNinoSchema), (req, res) => {
+  // Acotado por iglesia en la MISMA consulta. Resolver primero y comprobar
+  // despues es como se colo el borrado que cruzaba iglesias en musica.js.
+  const nino = db.prepare('SELECT id, nombre FROM nino WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, req.user.iglesia_id);
+  if (!nino) return res.status(404).json({ error: 'Niño no encontrado' });
+
+  // Solo se tocan los campos que vinieron: un PATCH no debe borrar lo que no menciona.
+  const PERMITIDOS = ['nombre', 'edad', 'familia', 'alergias', 'autorizados'];
+  const campos = PERMITIDOS.filter(c => c in req.body);
+  if (!campos.length) return res.status(400).json({ error: 'Datos inválidos: no mandaste nada que cambiar' });
+  const sets = campos.map(c => `${c} = ?`).join(', ');
+  const vals = campos.map(c => (req.body[c] === '' ? null : req.body[c]));
+  db.prepare(`UPDATE nino SET ${sets} WHERE id = ?`).run(...vals, nino.id);
+
+  auditar(req.user.iglesia_id, req.user.persona_id, 'editar_nino', 'ninos', nino.nombre);
   res.json({ ok: true });
 });
 
