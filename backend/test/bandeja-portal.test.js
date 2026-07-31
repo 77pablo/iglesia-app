@@ -75,3 +75,56 @@ test('🔴 la migracion es de UNA sola vez: llamarla otra vez no toca nada', asy
   assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(atendidoId).estado,
     'atendido', 'ni deshacer lo que el pastor ya atendio');
 });
+
+// ---------- La bandeja ----------
+
+test('el pastor ve los mensajes de SU iglesia y no los de otra', async () => {
+  const otraIg = Number(db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRABAND')").run().lastInsertRowid);
+  mensaje('De mi iglesia');
+  mensaje('De la otra', otraIg);
+
+  const res = await fetch(base + '/api/publico/mensajes', { headers: H(SEM.pastor) });
+  assert.equal(res.status, 200);
+  const d = await res.json();
+  assert.equal(d.items.length, 1);
+  assert.equal(d.items[0].mensaje, 'De mi iglesia');
+});
+
+test('un lider que no es pastor recibe 403', async () => {
+  mensaje('Algo');
+  const res = await fetch(base + '/api/publico/mensajes', { headers: H(SEM.lider) });
+  assert.equal(res.status, 403);
+});
+
+test('la bandeja NO trae los "previo", pero si dice cuantos hay', async () => {
+  mensaje('Reciente');
+  mensaje('Viejo 1', SEM.iglesiaId, 'previo');
+  mensaje('Viejo 2', SEM.iglesiaId, 'previo');
+
+  const d = await (await fetch(base + '/api/publico/mensajes', { headers: H(SEM.pastor) })).json();
+  assert.equal(d.items.length, 1, 'los previo no pueden aparecer en la bandeja de trabajo');
+  assert.equal(d.items[0].mensaje, 'Reciente');
+  assert.equal(d.previos, 2, 'pero el pastor tiene que saber cuantos hay esperando');
+});
+
+test('?previos=1 trae los "previo" y nada mas', async () => {
+  mensaje('Reciente');
+  mensaje('Viejo', SEM.iglesiaId, 'previo');
+
+  const d = await (await fetch(base + '/api/publico/mensajes?previos=1', { headers: H(SEM.pastor) })).json();
+  assert.equal(d.items.length, 1);
+  assert.equal(d.items[0].mensaje, 'Viejo');
+  assert.equal(d.previos, 0, 'ya se estan mostrando: no hay un contador aparte que pintar');
+});
+
+test('la bandeja pagina de 50 en 50 y avisa que hay mas', async () => {
+  for (let i = 0; i < 51; i++) mensaje('Mensaje ' + i);
+
+  const p1 = await (await fetch(base + '/api/publico/mensajes', { headers: H(SEM.pastor) })).json();
+  assert.equal(p1.items.length, 50);
+  assert.equal(p1.hayMas, true);
+
+  const p2 = await (await fetch(base + '/api/publico/mensajes?offset=50', { headers: H(SEM.pastor) })).json();
+  assert.equal(p2.items.length, 1);
+  assert.equal(p2.hayMas, false);
+});

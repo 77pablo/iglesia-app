@@ -68,6 +68,56 @@ r.patch('/info', authMiddleware, validar(infoSchema), (req, res) => {
   res.json({ ok: true });
 });
 
+// ============================================================
+//  LA BANDEJA (solo pastor): los mensajes que la gente manda desde el
+//  formulario "Planifica tu visita" del portal publico.
+//
+//  Registrada AQUI, antes de r.get('/:codigoIglesia'), por lo mismo que
+//  /info: esa ruta parametrica se traga cualquier cosa y leeria "mensajes"
+//  como el codigo unico de una iglesia.
+// ============================================================
+const MENSAJES_POR_PAGINA = 50;
+
+function soloPastorBandeja(req, res, next) {
+  if (!esPastor(req.user.persona_id))
+    return res.status(403).json({ error: 'Solo el pastor puede ver los mensajes del portal' });
+  next();
+}
+
+r.get('/mensajes', authMiddleware, soloPastorBandeja, (req, res) => {
+  // ?previos=1 es la seccion plegada: los mensajes que ya estaban guardados
+  // antes de que existiera esta bandeja. Se piden aparte para que la primera
+  // apertura no sea un muro de meses acumulados.
+  const verPrevios = String(req.query.previos || '') === '1';
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+  // Se piden LIMIT+1 filas para saber si quedan mas sin un COUNT extra (mismo
+  // patron que notificaciones.js:82-87).
+  const filas = verPrevios
+    ? db.prepare(
+        `SELECT id, nombre, mensaje, creado_en, estado FROM contacto_publico
+          WHERE iglesia_id = ? AND estado = 'previo'
+          ORDER BY creado_en DESC, id DESC LIMIT ? OFFSET ?`
+      ).all(req.user.iglesia_id, MENSAJES_POR_PAGINA + 1, offset)
+    : db.prepare(
+        // (estado = 'atendido') ordena primero lo que falta por atender, igual
+        // que cuidado.js:26. El id DESC desempata dos del mismo segundo.
+        `SELECT id, nombre, mensaje, creado_en, estado FROM contacto_publico
+          WHERE iglesia_id = ? AND estado <> 'previo'
+          ORDER BY (estado = 'atendido'), creado_en DESC, id DESC LIMIT ? OFFSET ?`
+      ).all(req.user.iglesia_id, MENSAJES_POR_PAGINA + 1, offset);
+
+  const hayMas = filas.length > MENSAJES_POR_PAGINA;
+  const items = hayMas ? filas.slice(0, MENSAJES_POR_PAGINA) : filas;
+
+  // Cuando ya se estan mostrando los previos no hay contador que pintar.
+  const previos = verPrevios ? 0 : db.prepare(
+    "SELECT COUNT(*) AS n FROM contacto_publico WHERE iglesia_id = ? AND estado = 'previo'"
+  ).get(req.user.iglesia_id).n;
+
+  res.json({ items, hayMas, offset, previos });
+});
+
 // La fecha local vive ahora en ./fechas.js, porque la comparte con
 // persistencia.js (la clave diaria del aviso del respaldo). Se re-exporta desde
 // aqui porque este era su sitio original y hay tests que la piden por esta
