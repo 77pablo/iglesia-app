@@ -4169,6 +4169,7 @@ const Org = {
   _render(h, origen){
     Org._hoja=h;
     Org._gastoEditando=null;   // una hoja recien abierta nunca esta "editando" un gasto
+    Org._pagador='';           // ...ni arrastra el pagador de la correccion anterior
     if(origen && ORG_ORIGEN[origen]) Org._origen=origen;
     const volver=ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion;
     const ed=!!h.puede_editar;
@@ -4273,7 +4274,7 @@ const Org = {
         ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px;flex-wrap:wrap">
           <input id="org-gasto-concepto" placeholder="Ej. Pan">
           <input id="org-gasto-monto" type="number" min="1" placeholder="Monto" style="max-width:110px">
-          <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?" onchange="Org.cambioQuienPago(this.value)">
+          <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?" onchange="Org.cambioQuienPago(this.value, true)">
             <option value="">Lo puse yo</option>
           </select>
           <select id="org-gasto-fuente" style="max-width:130px" title="¿Se le devuelve?">
@@ -4288,21 +4289,96 @@ const Org = {
   },
   // El selector de "¿quién puso el dinero?" se llena aparte para no cargar cada
   // lectura de la hoja con la lista entera de la iglesia. Se cachea por sesión.
+  //
+  // Las dos opciones fijas se pintan ANTES de pedir el directorio, y la gente se
+  // AÑADE después (appendChild, no innerHTML). Los dos detalles importan:
+  //  - si /directorio falla, "La caja de la iglesia" ya está puesta. Antes se
+  //    creaba dentro de la misma asignación que se saltaba al lanzar la
+  //    excepción, así que el selector se quedaba SOLO con "Lo puse yo" y
+  //    corregir un gasto de la caja lo convertía en una deuda con quien corregía.
+  //  - la petición tarda y los ✏️ ya son clicables mientras viaja: añadiendo
+  //    opciones no se pisa ni la selección ni la opción que haya puesto entre
+  //    medio una corrección en curso (con innerHTML se las llevaba por delante).
   async _llenarQuienPago(){
     const sel=$('org-gasto-quien'); if(!sel) return;
+    sel.innerHTML='<option value="">Lo puse yo</option><option value="caja">La caja de la iglesia</option>';
     try{
       if(!Org._personas) Org._personas=await api('/directorio');
-      sel.innerHTML='<option value="">Lo puse yo</option><option value="caja">La caja de la iglesia</option>'+
-        Org._personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
-    }catch{ /* si falla, quedan "Lo puse yo" y "La caja", que cubren el caso normal */ }
-    Org.cambioQuienPago(sel.value);
+      for(const p of Org._personas){
+        const o=document.createElement('option');
+        o.value=String(p.id);
+        o.textContent=p.nombre;   // textContent, no innerHTML: el nombre lo escribe una persona
+        sel.appendChild(o);
+      }
+    }catch{ /* sin directorio quedan "Lo puse yo" y "La caja de la iglesia", ya pintadas arriba */ }
+    // Y si aun así hay una corrección en curso cuyo pagador el selector ya no
+    // representa, se repone. Dejarlo en blanco es exactamente lo que le
+    // adjudicaba la deuda a quien solo venía a corregir una falta de ortografía.
+    const g=Org._gastoEditando ? (Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===Org._gastoEditando) : null;
+    if(g){ if(sel.value!==Org._pagador) Org._ponerPagador(g); }
+    else Org.cambioQuienPago(sel.value);
   },
   // El segundo selector (se devuelve / es un aporte) solo tiene sentido si hay
   // una persona: si pago la caja no hay a quien devolverle nada, y si el gasto
   // es de los antiguos "sin registrar" no se esta afirmando nada de nadie.
-  cambioQuienPago(valor){
+  //
+  // loEligioAlguien: SOLO lo pasa el onchange del <select>, que es el unico
+  // momento en que el valor lo eligio una persona. Ahi —y solo ahi— se guarda en
+  // Org._pagador, que es lo que guardarGasto manda al backend. Las llamadas de
+  // dentro del codigo no deben fijar ese estado: quien lo fija al corregir es
+  // _ponerPagador, despues de COMPROBAR que el selector pudo representarlo.
+  cambioQuienPago(valor, loEligioAlguien){
+    if(loEligioAlguien) Org._pagador=valor;
     const f=$('org-gasto-fuente');
     if(f) f.style.display = (valor==='caja'||valor==='sin') ? 'none' : '';
+  },
+  // Deja el selector apuntando a quien puso el dinero DE VERDAD en ese gasto y
+  // devuelve el valor que quedo puesto (null si no se pudo).
+  //
+  // Por que hace falta: las opciones salen de /directorio, que filtra activo=1,
+  // y el PATCH del backend NO exige que el pagador siga activo — la app modela
+  // ese caso a proposito en otras pantallas ("cuenta inactiva - reasignar"). Si
+  // Maria se dio de baja, su <option> no existe, y asignarle a un <select> un
+  // valor que no tiene deja selectedIndex=-1 y .value===''. Ese '' significa
+  // "lo puse yo": corregir la ortografia de "Pan - $5.000 - puso Maria" pasaba
+  // los $5.000 a "Por devolver: quien editaba", sin mas aviso que un desplegable
+  // en blanco. Por eso se le inyecta su propia opcion, con su nombre, en vez de
+  // dejar el hueco: asi ademas la persona VE de quien se trata.
+  _ponerPagador(g){
+    const sel=$('org-gasto-quien'); if(!sel) return null;
+    // "No se puede decir quien puso": el gasto historico (sin fuente y sin
+    // pagador) y cualquier fila con fuente de persona pero sin persona. En los
+    // dos, la correccion va sin tocar el pagador.
+    const sinPagador = g.fuente!=='caja' && g.pagado_por==null;
+    Org._opcionSinRegistrar(sinPagador);
+    Org._opcionAusente(null);
+    const quien = sinPagador ? 'sin' : (g.fuente==='caja' ? 'caja' : String(g.pagado_por));
+    if(!Array.prototype.some.call(sel.options, o=>o.value===quien)){
+      Org._opcionAusente(quien, g.fuente==='caja' ? 'La caja de la iglesia'
+        : g.pagado_por_nombre ? g.pagado_por_nombre+' (cuenta inactiva)'
+        : 'Quien puso el dinero (ya no está en la lista)');
+    }
+    sel.value=quien;
+    // Comprobado, no supuesto. Si ni aun asi el selector puede representarlo, la
+    // correccion se guardara SIN tocar el pagador (Org._pagador=null: mandar
+    // solo concepto y monto, que el backend lee como "dejalo como estaba").
+    // Antes de adjudicarle la plata a quien esta editando, mejor no tocarla.
+    if(sel.value!==quien){ Org._pagador=null; Org.cambioQuienPago(''); return null; }
+    Org._pagador=quien;
+    Org.cambioQuienPago(quien);
+    return quien;
+  },
+  // La opcion del pagador que ya no sale en el directorio. Se pinta con
+  // textContent (nunca innerHTML): el nombre lo escribe una persona.
+  // _opcionAusente(null) la quita.
+  _opcionAusente(valor, etiqueta){
+    const sel=$('org-gasto-quien'); if(!sel) return;
+    const ya=sel.querySelector('option[data-ausente]');
+    if(ya) ya.remove();
+    if(valor==null) return;
+    const o=document.createElement('option');
+    o.value=valor; o.textContent=etiqueta; o.dataset.ausente='1';
+    sel.appendChild(o);
   },
   // "Sin registrar quien puso" NO es una opcion al crear un gasto: ese conjunto
   // esta cerrado y solo puede achicarse (ver el spec). Solo aparece mientras se
@@ -4343,6 +4419,10 @@ const Org = {
     }, {danger:true});
   },
   _gastoEditando:null,
+  // Quien puso el dinero, segun el formulario: '' = yo · 'caja' = la caja ·
+  // 'sin' = no se sabe (no tocarlo) · null = no se pudo determinar (no tocarlo)
+  // · un id = esa persona. Es lo que manda guardarGasto: NO se relee del DOM.
+  _pagador:'',
   // Abre el formulario ya lleno con los datos del gasto, para corregirlo. Los
   // inputs son los mismos del alta: no hace falta un panel aparte.
   editarGasto(id){
@@ -4353,12 +4433,9 @@ const Org = {
     // Un gasto de los antiguos (sin fuente y sin pagador) NO se puede pintar
     // como "Lo puse yo": esa opcion afirma que paga quien esta editando, y
     // guardar una correccion de ortografia le adjudicaria una deuda que nadie
-    // contrajo. Para ese caso se anade la opcion "Sin registrar quien puso".
-    const sinRegistrar = g.fuente==null && g.pagado_por==null;
-    Org._opcionSinRegistrar(sinRegistrar);
-    const quien = sinRegistrar ? 'sin' : (g.fuente==='caja' ? 'caja' : String(g.pagado_por||''));
-    $('org-gasto-quien').value=quien;
-    Org.cambioQuienPago(quien);
+    // contrajo. De eso —y de que el selector pueda representar a un pagador
+    // que ya no sale en el directorio— se ocupa _ponerPagador.
+    if(Org._ponerPagador(g)==null) toast('No se puede mostrar quién puso el dinero: se corregirá sin cambiarlo');
     $('org-gasto-fuente').value = g.fuente==='aporte' ? 'aporte' : 'devuelve';
     $('org-gasto-guardar').textContent='Guardar cambios';
     $('org-gasto-cancelar').style.display='inline-flex';
@@ -4366,7 +4443,9 @@ const Org = {
   },
   cancelarEdicionGasto(){
     Org._gastoEditando=null;
+    Org._pagador='';                  // un gasto NUEVO lo pone quien lo registra
     Org._opcionSinRegistrar(false);   // no debe quedar disponible para un gasto NUEVO
+    Org._opcionAusente(null);         // ni la persona ausente del gasto que se corregia
     $('org-gasto-concepto').value=''; $('org-gasto-monto').value='';
     $('org-gasto-quien').value=''; Org.cambioQuienPago('');
     $('org-gasto-fuente').value='devuelve';
@@ -4380,11 +4459,17 @@ const Org = {
     const monto=Number($('org-gasto-monto').value);
     if(!concepto) return toast('Escribe el concepto');
     if(!(monto>0)) return toast('El monto debe ser mayor a 0');
-    const quien=($('org-gasto-quien')||{}).value||'';   // '' = yo · 'caja' = caja · 'sin' = no tocar · id = otra persona
-    // 'sin' manda SOLO concepto y monto: sin fuente ni pagado_por, el PATCH
-    // deja los dos como estaban (ver la regla del backend en la Task 4). Es lo
-    // que permite corregir un gasto antiguo sin cambiar de quien es el dinero.
-    const cuerpo = quien==='sin'
+    // El pagador NO se relee del DOM: se lleva en Org._pagador, que fija
+    // _ponerPagador (comprobando que el selector pueda representarlo) y
+    // actualiza el onchange cuando lo elige una persona. Releerlo era la tercera
+    // puerta del fallo: bastaba con que la <option> del pagador no existiera
+    // —cuenta desactivada, o /directorio caido— para que el '' de un <select>
+    // sin seleccion se leyera como "lo puse yo" y la deuda cambiara de dueño.
+    const quien=Org._pagador;   // '' = yo · 'caja' = caja · 'sin'/null = no tocar · id = otra persona
+    // 'sin' (y null) mandan SOLO concepto y monto: sin fuente ni pagado_por, el
+    // PATCH deja los dos como estaban (ver la regla del backend en la Task 4).
+    // Es lo que permite corregir un gasto sin cambiar de quien es el dinero.
+    const cuerpo = (quien==null||quien==='sin')
       ? {concepto,monto}
       : quien==='caja'
       ? {concepto,monto,fuente:'caja'}
