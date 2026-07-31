@@ -40,11 +40,22 @@ const lineas = fuente.split('\n');
 //
 // ⚠️ Cuenta llaves caracter a caracter, SIN distinguir cadenas ni comentarios.
 // Hoy funciona porque ninguno de estos metodos lleva una llave suelta dentro de
-// un comentario, de una plantilla o de un string. Si alguien mete una (por
-// ejemplo `// ojo con el }` ), el metodo se recorta a medias y el fallo aparece
-// como un SyntaxError dentro del new Function() de mas abajo — NO como "esta
-// prueba dejo de cubrir lo que cubria". Si ves un error de sintaxis raro al
-// tocar web/app.js, mira aqui antes que en ningun otro sitio.
+// un comentario, de una plantilla o de un string. Falla de dos maneras, y la
+// segunda es la peligrosa:
+//
+//  - Se QUEDA CORTO (una `}` de mas): el metodo sale a medias y revienta como
+//    SyntaxError dentro del new Function() de mas abajo. Ruidoso, se ve.
+//  - Se DESBORDA (una `{` de mas, p. ej. dentro del HTML de una plantilla): el
+//    recorte se traga cientos de lineas hasta el final del fichero. Nada
+//    revienta, pero las pruebas que buscan una cadena DENTRO del metodo pasan a
+//    buscarla en medio archivo y **dejan de detectar** lo que cubrian. Le pasa
+//    en concreto a la invariante de `_render` del final: desbordado, encuentra
+//    los `Org._origenTocado=` de editarGasto/cancelarEdicionGasto y ya no se
+//    entera de que _render dejo de reponerlo.
+//
+// Si ves un error de sintaxis raro al tocar web/app.js, mira aqui antes que en
+// ningun otro sitio. Y si tocas el HTML de _render, comprueba que esta prueba
+// sigue fallando al quitarle a _render una de sus lineas de reseteo.
 function recortarMetodo(nombre) {
   const i = lineas.findIndex(l => new RegExp(`^  (?:async )?${nombre}\\(`).test(l));
   assert.ok(i >= 0, `no se encontro el metodo ${nombre} en web/app.js`);
@@ -390,13 +401,34 @@ test('el contenedor del ✏️ y el ✕ de cada gasto lleva la clase no-print en
 //
 // Se comprueba sobre el codigo fuente y no ejecutando `_render` a proposito:
 // esa funcion pinta la pantalla entera y montarla aqui seria un simulacro tan
-// grande que ya no probaria gran cosa. Lo que se fija es la INVARIANTE: todo
-// campo de formulario espejado fuera del DOM se repone donde el DOM se recrea.
-// Si manana se anade otro campo espejado, hay que anadirlo a esta lista.
-test('_render repone TODO el estado de formulario que vive fuera del DOM', () => {
+// grande que ya no probaria gran cosa.
+//
+// ⚠️ SE HUMILLA IGUAL QUE EL TEST DE ABAJO: esto comprueba que _render CONTIENE
+// una asignacion a cada campo espejado. NO comprueba que le asigne el valor
+// correcto, ni que la asignacion se ejecute (pasaria con `Org._fuente='aporte'`
+// o con la asignacion detras de un return temprano). Fija la invariante
+// estructural —"todo campo espejado se repone donde el DOM se recrea"—, que es
+// la forma que tuvo este fallo; no la correccion del valor.
+//
+// La lista NO esta escrita a mano: se DERIVA de lo que lee `guardarGasto`, que
+// es quien define que es "estado espejado". Asi un sexto campo futuro queda
+// cubierto sin que nadie se acuerde de venir a apuntarlo aqui — que es
+// exactamente el descuido que dejo pasar la quinta puerta. Se excluyen las
+// referencias con parentesis (`Org._recargar()`): son metodos, no estado.
+test('_render repone cada campo espejado que lee guardarGasto (no el valor, solo que lo repone)', () => {
   const cuerpoRender = recortarMetodo('_render');
-  for (const campo of ['_gastoEditando', '_pagador', '_fuente', '_origenTocado']) {
-    assert.match(cuerpoRender, new RegExp(`Org\.${campo}\s*=`),
+  const espejados = [...recortarMetodo('guardarGasto').matchAll(/Org\.(_[a-zA-Z]+)(\s*\()?/g)]
+    .filter(m => !m[2])            // sin parentesis = propiedad, no llamada
+    .map(m => m[1]);
+  const unicos = [...new Set(espejados)];
+
+  assert.ok(unicos.length >= 4, `se esperaban al menos 4 campos espejados, se derivaron ${unicos.length}`);
+  for (const campo of unicos) {
+    // RegExp desde string normal, NO desde plantilla: dentro de una plantilla
+    // `\.` se resuelve a `.` y `\s` a `s`, y la expresion acaba siendo
+    // /Org._fuentes*=/ — que pasa de casualidad y falla en falso en cuanto
+    // alguien escriba `Org._fuente = 'devuelve'` con espacios.
+    assert.match(cuerpoRender, new RegExp('Org\\.' + campo + '\\s*='),
       `_render no repone Org.${campo}: la pantalla dira una cosa y se guardara otra`);
   }
 });
