@@ -50,9 +50,14 @@ vanilla JS (template strings en `innerHTML`) · tests `node:test`.
 - **Puramente aditivo:** ningún gasto ya guardado cambia de valor. La columna
   `fuente` nace `NULL` para todo lo existente y se lee como "no especificado",
   igual que ya se leía el `pagado_por` histórico.
-- La suite completa (`cd backend && npm test`) está en **456 tests en verde**
-  (medido el 31-jul-2026; este plan se escribió cuando eran 455, y **todos los
-  números de más abajo ya están corregidos a partir de 456**) y no debe bajar.
+- La suite completa (`cd backend && npm test`) está en **471 tests en verde**
+  (medido sobre `main` el 31-jul-2026, ya con la bandeja del portal público
+  fusionada; **todos los números de más abajo parten de 471** y el plan termina
+  en **494**) y no debe bajar.
+  > ⚠️ Este plan ya ha tenido que reajustar sus cifras **dos veces** porque otro
+  > trabajo se fusionó entretanto. **Mídelo antes de empezar** en vez de creerte
+  > este número: si no coincide, corrige los de abajo por el mismo desfase antes
+  > de escribir una sola línea.
 - Commits en castellano, minúsculas, `tipo(ámbito): efecto para la persona`.
   Sin coautoría ni menciones a Claude.
 
@@ -163,7 +168,7 @@ Expected: PASA — 1 test.
 - [ ] **Step 5: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **457 tests, 0 fail** (456 + 1).
+Expected: **472 tests, 0 fail** (471 + 1).
 
 - [ ] **Step 6: Commit**
 
@@ -302,7 +307,12 @@ const gastoSchema = z.object({
   // Opcional para no romper llamadas viejas: sin ella, el gasto queda "no
   // especificado" (fuente NULL), igual que antes de que esta casilla
   // existiera. El frontend (Task 5) la manda siempre.
-  fuente: z.enum(FUENTES_GASTO, { error: 'la fuente del gasto no es valida' }).optional()
+  // ⚠️ El mensaje NO puede contener la palabra "fuente": es el nombre tecnico
+  // del campo, y validar() compone "Datos invalidos: " + este texto y se lo
+  // suelta tal cual a la persona. La prueba de mas arriba lo exige
+  // (assert.doesNotMatch(error, /fuente/)). El plan traia aqui "la fuente del
+  // gasto no es valida", que se contradecia con su propia prueba.
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
 });
 r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
   const org = hojaEditable(req, res, Number(req.params.id));
@@ -336,7 +346,7 @@ Expected: PASA — 5 tests.
 - [ ] **Step 5: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **461 tests, 0 fail** (457 + 4).
+Expected: **476 tests, 0 fail** (472 + 4).
 
 - [ ] **Step 6: Commit**
 
@@ -551,7 +561,7 @@ en verde.
 - [ ] **Step 6: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **464 tests, 0 fail** (461 + 3).
+Expected: **479 tests, 0 fail** (476 + 3).
 
 - [ ] **Step 7: Commit**
 
@@ -748,7 +758,10 @@ const editarGastoSchema = z.object({
   concepto: z.string().trim().min(1, 'falta el concepto').optional(),
   monto: z.coerce.number().positive('el monto debe ser mayor a 0').optional(),
   pagado_por: z.coerce.number().int().positive().nullable().optional(),
-  fuente: z.enum(FUENTES_GASTO, { error: 'la fuente del gasto no es valida' }).optional()
+  // MISMO mensaje que gastoSchema (Task 2): no puede contener la palabra
+  // "fuente", que es el nombre tecnico del campo. validar() compone
+  // "Datos invalidos: " + este texto y se lo suelta tal cual a la persona.
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
 });
 r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // Acotado por iglesia en la MISMA consulta: es el fallo que ya se colo una
@@ -827,7 +840,7 @@ Expected: PASA — 17 tests (el total del archivo).
 - [ ] **Step 5: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **473 tests, 0 fail** (464 + 9).
+Expected: **488 tests, 0 fail** (479 + 9).
 
 - [ ] **Step 6: Commit**
 
@@ -1198,7 +1211,7 @@ Comprobar, entrando como líder:
 - [ ] **Step 9: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **473, 0 fail** — esta tarea no toca backend; si el número cambia,
+Expected: **489, 0 fail** — esta tarea no toca backend; si el número cambia,
 algo se salió de alcance.
 
 - [ ] **Step 10: Commit**
@@ -1324,11 +1337,12 @@ export function auditar(iglesiaId, actorId, accion, modulo, detalle = '', ref = 
 - [ ] **Step 5: Que el `PATCH` mande la referencia**
 
 En `backend/src/organizacion.js`, en el `r.patch('/gastos/:gastoId', ...)` de la
-Task 4, reemplazar:
+Task 4, reemplazar **solo la llamada a `auditar`** (las líneas de `cambioOrigen`
+y `origen` que hay justo encima **no se tocan**):
 
 ```js
   auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`);
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`);
 ```
 
 por:
@@ -1339,19 +1353,25 @@ por:
   // Apuntando al gasto, el rastro quedaria huerfano justo en el caso en que mas
   // importa (alguien corrige un monto y despues borra la linea entera).
   auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`,
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`,
     { tabla: 'evento_org', id: gasto.org_id });
 ```
+
+⚠️ El `${origen}` del final lo añadió un arreglo posterior a la Task 4: es la
+parte del detalle que dice **si cambió quién puso el dinero** (p. ej.
+`· se devuelve a Carolina -> pagó la caja`), y sin ella una corrección que borra
+una deuda dejaba un rastro que aparentaba que no había cambiado nada. **No lo
+quites al aplicar este reemplazo.**
 
 - [ ] **Step 6: Correr el test y verlo pasar**
 
 Run: `cd backend && node --test test/organizacion-fuente-gasto.test.js`
-Expected: PASA — 20 tests (el total del archivo).
+Expected: PASA — 21 tests (el total del archivo).
 
 - [ ] **Step 7: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **476 tests, 0 fail** (473 + 3).
+Expected: **492 tests, 0 fail** (489 + 3).
 
 - [ ] **Step 8: Commit**
 
@@ -1460,7 +1480,7 @@ desaparecer del historial.
 - [ ] **Step 4: Correr el test y verlo pasar**
 
 Run: `cd backend && node --test test/organizacion-fuente-gasto.test.js`
-Expected: PASA — 23 tests (el total del archivo).
+Expected: PASA — 24 tests (el total del archivo).
 
 - [ ] **Step 5: El bloque en la pantalla**
 
@@ -1557,7 +1577,7 @@ Comprobar, entrando como líder:
 - [ ] **Step 8: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **479 tests, 0 fail** (476 + 3).
+Expected: **495 tests, 0 fail** (492 + 3).
 
 - [ ] **Step 9: Commit**
 
@@ -1579,7 +1599,7 @@ Añadir una sección con qué se construyó — la casilla `fuente` en
 `evento_org_gasto`, el `PATCH` para corregir gastos, el resumen partido en tres
 bloques, y **el historial de correcciones visible en la hoja y en la rendición
 impresa** (con `auditoria.ref_tabla`/`ref_id`) —, el número nuevo de tests
-(**479**), y **lo que sigue sin resolver**:
+(**495**), y **lo que sigue sin resolver**:
 
 1. Los gastos de la hoja de Organización siguen sin aparecer en **Tesorería**:
    sigue siendo el Camino C, no decidido.

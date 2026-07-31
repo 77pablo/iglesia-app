@@ -258,10 +258,11 @@ test('gastos: se registra quien puso el dinero y la hoja resume cuanto puso cada
   assert.equal(carne.pagado_por_nombre, 'Lider');
   assert.equal(hoja.gastos.find(g => g.concepto === 'Bebidas').pagado_por_nombre, 'Feligres Juan');
 
-  // Resumen "quien puso que": una fila por persona, de mayor a menor.
-  assert.equal(hoja.aportes.length, 2);
-  assert.deepEqual({ ...hoja.aportes[0] }, { persona_id: S.liderId, nombre: 'Lider', total: 20000 });
-  assert.deepEqual({ ...hoja.aportes[1] }, { persona_id: S.feligresId, nombre: 'Feligres Juan', total: 10500 });
+  // Resumen "por devolver": una fila por persona, de mayor a menor (ninguno
+  // de estos gastos tiene fuente, asi que caen todos en "por devolver").
+  assert.equal(hoja.por_devolver.length, 2);
+  assert.deepEqual({ ...hoja.por_devolver[0] }, { persona_id: S.liderId, nombre: 'Lider', total: 20000 });
+  assert.deepEqual({ ...hoja.por_devolver[1] }, { persona_id: S.feligresId, nombre: 'Feligres Juan', total: 10500 });
 });
 
 test('gastos: no se puede atribuir el pago a alguien de otra iglesia', async () => {
@@ -279,7 +280,7 @@ test('gastos: no se puede atribuir el pago a alguien de otra iglesia', async () 
   // No se registro ningun gasto.
   const hoja = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
   assert.equal(hoja.gastos.length, 0);
-  assert.deepEqual(hoja.aportes, []);
+  assert.deepEqual(hoja.por_devolver, []);
 });
 
 test('gastos antiguos sin pagador: cuentan en el total pero no en el resumen', async () => {
@@ -299,8 +300,8 @@ test('gastos antiguos sin pagador: cuentan en el total pero no en el resumen', a
   assert.equal(hoja.total_gastado, 8000, 'el gasto antiguo sigue sumando');
   assert.equal(hoja.gastos.length, 2);
   assert.equal(hoja.gastos.find(g => g.concepto === 'Gasto antiguo').pagado_por, null);
-  assert.equal(hoja.aportes.length, 1, 'solo el gasto con pagador aparece en el resumen');
-  assert.equal(hoja.aportes[0].total, 3000);
+  assert.equal(hoja.por_devolver.length, 1, 'solo el gasto con pagador aparece en el resumen');
+  assert.equal(hoja.por_devolver[0].total, 3000);
 });
 
 test('duplicar: copia las cosas en limpio, nunca los gastos, y queda a nombre de quien duplica', async () => {
@@ -340,7 +341,7 @@ test('duplicar: copia las cosas en limpio, nunca los gastos, y queda a nombre de
   // Los gastos pertenecen al evento pasado: no se copian NUNCA.
   assert.deepEqual(copia.gastos, []);
   assert.equal(copia.total_gastado, 0);
-  assert.deepEqual(copia.aportes, []);
+  assert.deepEqual(copia.por_devolver, []);
 
   // Y el original queda intacto.
   const revisada = await (await fetch(b + '/api/organizacion/' + original.id, { headers: auth })).json();

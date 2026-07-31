@@ -4168,6 +4168,21 @@ const Org = {
   _hoja:null,
   _render(h, origen){
     Org._hoja=h;
+    // INVARIANTE: todo estado de formulario que vive FUERA del DOM se
+    // reinicializa aqui, porque esta funcion recrea el formulario entero. Si un
+    // campo espejado se queda sin reponer, la pantalla dice una cosa y se guarda
+    // otra — y guardarGasto ya NO relee el DOM, a proposito.
+    //
+    // Paso de verdad con _fuente: quedaba en 'aporte' de un gasto anterior, el
+    // <select> recreado nacia en 'devuelve', y anadir una cosa a llevar (que
+    // llama a _recargar -> _render) bastaba para que el gasto siguiente se
+    // guardara como donado mientras la pantalla decia que habia que devolverlo.
+    // Eso BORRA una deuda: quien puso el dinero de su bolsillo se queda sin que
+    // se lo devuelvan, sin ningun aviso.
+    Org._gastoEditando=null;   // una hoja recien abierta nunca esta "editando" un gasto
+    Org._pagador='';           // ...ni arrastra el pagador de la correccion anterior
+    Org._fuente='devuelve';    // ...ni la fuente elegida antes de repintar
+    Org._origenTocado=false;   // ...ni la marca de "esto lo eligio una persona"
     if(origen && ORG_ORIGEN[origen]) Org._origen=origen;
     const volver=ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion;
     const ed=!!h.puede_editar;
@@ -4188,20 +4203,53 @@ const Org = {
         ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar ${escHtml(x.nombre)}" onclick="Org.borrarCosa(${x.id})">✕</button>`:''}
       </div>`;
     }).join('') || '<p class="muted small">Sin cosas todavía.</p>';
-    const gastos=h.gastos.map(g=>`<div class="org-row">
-        <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b>${g.pagado_por_nombre?` <span class="muted small">· puso ${escHtml(g.pagado_por_nombre)}</span>`:''}</span>
-        ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar el gasto ${escHtml(g.concepto)}" onclick="Org.borrarGasto(${g.id})">✕</button>`:''}
-      </div>`).join('') || '<p class="muted small">Sin gastos todavía.</p>';
-    // "Quién puso qué": lo que se mira al final para saber a quién devolverle cuánto.
-    // Los gastos anteriores a esta función no tienen a nadie registrado, así que
-    // la suma de los aportes puede quedar por debajo del total: se dice en vez de
+    const gastos=h.gastos.map(g=>{
+      // Como se lee la fuente en la fila: 'caja' no tiene persona (le pone su
+      // propio texto); con persona, el matiz (se devuelve / es aporte) solo
+      // se agrega si YA se especifico — un gasto de antes de esta casilla
+      // (fuente NULL con persona) se ve igual que siempre, sin inventar nada.
+      const fuenteTxt = g.fuente==='caja' ? 'pagó la caja de la iglesia'
+        : g.pagado_por_nombre ? `puso ${escHtml(g.pagado_por_nombre)}${g.fuente==='aporte'?' (aporte, no se devuelve)':g.fuente==='devuelve'?' (se le devuelve)':''}`
+        : '';
+      return `<div class="org-row">
+        <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b>${fuenteTxt?` <span class="muted small">· ${fuenteTxt}</span>`:''}</span>
+        <!-- no-print: la card de gastos es la que el modo rendicion vuelve a
+             mostrar, y en el papel que se le lleva al tesorero el ✏️ y el ✕ son
+             ruido (ademas de dos botones que en un papel no se pueden tocar). -->
+        ${ed?`<div class="row no-print" style="width:auto;gap:4px">
+          <button class="link icon-only" aria-label="Corregir el gasto ${escHtml(g.concepto)}" onclick="Org.editarGasto(${g.id})">✏️</button>
+          <button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar el gasto ${escHtml(g.concepto)}" onclick="Org.borrarGasto(${g.id})">✕</button>
+        </div>`:''}
+      </div>`;
+    }).join('') || '<p class="muted small">Sin gastos todavía.</p>';
+    // "Quién puso qué", en tres bloques (ya no es una sola lista): lo que
+    // pagó la caja, a quién hay que devolverle, y los aportes donados. Lo que
+    // no cae en ninguno de los tres es de antes de que existiera pagado_por
+    // (ni siquiera hay a quién atribuirlo): se dice aparte en vez de
     // callarlo, si no el resumen parece una cuenta mal hecha.
-    const listaAportes=h.aportes||[];
-    const sumaAportes=listaAportes.reduce((s,a)=>s+Number(a.total||0),0);
-    const sinRegistrar=Number(h.total_gastado||0)-sumaAportes;
-    const aportes=listaAportes.length
-      ? `<div class="org-aportes"><b class="muted small">Quién puso qué</b>${listaAportes.map(a=>
-          `<div class="org-row"><span>${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')}
+    const totalCaja=Number(h.total_caja||0);
+    const porDevolver=h.por_devolver||[];
+    const aportesDonados=h.aportes_donados||[];
+    const sumaConocida=totalCaja
+      +porDevolver.reduce((s,a)=>s+Number(a.total||0),0)
+      +aportesDonados.reduce((s,a)=>s+Number(a.total||0),0);
+    const sinRegistrar=Number(h.total_gastado||0)-sumaConocida;
+    const hayResumen=totalCaja>0||porDevolver.length||aportesDonados.length||sinRegistrar>0;
+    // Historial de correcciones de la hoja. Solo aparece si hubo alguna.
+    // escHtml en las dos cosas: el detalle lleva DENTRO el concepto que tecleó
+    // una persona (y con comillas dobles: `"Pan" $12.000 -> "Pan" $8.000`), y
+    // el nombre sale de la base de datos.
+    const correcciones=(h.correcciones||[]).length
+      ? `<div class="org-aportes" style="margin-top:14px"><b class="muted small">Correcciones</b>
+          ${h.correcciones.map(c=>`<div class="org-row"><span class="muted small">
+            ${escHtml(c.actor_nombre||'Alguien')} · ${escHtml(c.detalle||'')}</span>
+            <span class="muted small">${escHtml(fechaDeUTC(c.fecha))}</span></div>`).join('')}</div>`
+      : '';
+    const aportes=hayResumen
+      ? `<div class="org-aportes"><b class="muted small">Quién puso qué</b>
+          ${totalCaja>0?`<div class="org-row"><span>Pagó la caja de la iglesia</span><b>${money(totalCaja)}</b></div>`:''}
+          ${porDevolver.map(a=>`<div class="org-row"><span>Por devolver: ${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')}
+          ${aportesDonados.map(a=>`<div class="org-row"><span>Aporte donado: ${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')}
           ${sinRegistrar>0?`<div class="org-row muted small"><span>Sin registrar quién puso</span><b>${money(sinRegistrar)}</b></div>`:''}</div>`
       : '';
 
@@ -4244,31 +4292,159 @@ const Org = {
         <div id="org-gastos">${gastos}</div>
         <div class="org-total">Total gastado: <b>${money(h.total_gastado)}</b></div>
         ${aportes}
+        ${correcciones}
         <!-- Solo en el papel de rendicion: el tesorero firma que recibio las
              cuentas. En pantalla no pinta nada, y en la hoja de la puerta
              tampoco (alli no hay cuentas que recibir). -->
         <div class="solo-rendicion">Recibí conforme: ______________________
           &nbsp;&nbsp;&nbsp; Fecha: ________________</div>
-        ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px">
+        ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px;flex-wrap:wrap">
           <input id="org-gasto-concepto" placeholder="Ej. Pan">
           <input id="org-gasto-monto" type="number" min="1" placeholder="Monto" style="max-width:110px">
-          <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?">
+          <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?" onchange="Org.cambioQuienPago(this.value, true)">
             <option value="">Lo puse yo</option>
           </select>
-          <button class="btn small-btn" onclick="Org.addGasto()">Añadir</button></div>`:''}
+          <select id="org-gasto-fuente" style="max-width:130px" title="¿Se le devuelve?" onchange="Org.cambioFuente(this.value, true)">
+            <option value="devuelve">Se devuelve</option>
+            <option value="aporte">Es un aporte</option>
+          </select>
+          <button class="btn small-btn" id="org-gasto-guardar" onclick="Org.guardarGasto()">Añadir</button>
+          <button class="link" id="org-gasto-cancelar" style="display:none" onclick="Org.cancelarEdicionGasto()">Cancelar</button></div>`:''}
         ${ed?`<div class="no-print" style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red-tx)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
       </div>`;
     if(ed) Org._llenarQuienPago();
   },
   // El selector de "¿quién puso el dinero?" se llena aparte para no cargar cada
   // lectura de la hoja con la lista entera de la iglesia. Se cachea por sesión.
+  //
+  // Las dos opciones fijas se pintan ANTES de pedir el directorio, y la gente se
+  // AÑADE después (appendChild, no innerHTML). Los dos detalles importan:
+  //  - si /directorio falla, "La caja de la iglesia" ya está puesta. Antes se
+  //    creaba dentro de la misma asignación que se saltaba al lanzar la
+  //    excepción, así que el selector se quedaba SOLO con "Lo puse yo" y
+  //    corregir un gasto de la caja lo convertía en una deuda con quien corregía.
+  //  - la petición tarda y los ✏️ ya son clicables mientras viaja: añadiendo
+  //    opciones no se pisa ni la selección ni la opción que haya puesto entre
+  //    medio una corrección en curso (con innerHTML se las llevaba por delante).
   async _llenarQuienPago(){
     const sel=$('org-gasto-quien'); if(!sel) return;
+    sel.innerHTML='<option value="">Lo puse yo</option><option value="caja">La caja de la iglesia</option>';
     try{
       if(!Org._personas) Org._personas=await api('/directorio');
-      sel.innerHTML='<option value="">Lo puse yo</option>'+
-        Org._personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
-    }catch{ /* si falla, queda "Lo puse yo", que es el caso normal */ }
+      for(const p of Org._personas){
+        const o=document.createElement('option');
+        o.value=String(p.id);
+        o.textContent=p.nombre;   // textContent, no innerHTML: el nombre lo escribe una persona
+        sel.appendChild(o);
+      }
+    }catch{ /* sin directorio quedan "Lo puse yo" y "La caja de la iglesia", ya pintadas arriba */ }
+    // Y si aun así hay una corrección en curso cuyo pagador el selector ya no
+    // representa, se repone. Dejarlo en blanco es exactamente lo que le
+    // adjudicaba la deuda a quien solo venía a corregir una falta de ortografía.
+    //
+    // Y se reconcilia TAMBIÉN cuando la opción puesta es la inyectada: si la
+    // persona sí estaba activa y su <option> real acaba de llegar con el
+    // directorio, sin esto se queda para siempre el rótulo falso "(cuenta
+    // inactiva)" sobre alguien activo, y su nombre dos veces en la lista.
+    // _ponerPagador es idempotente: quita la inyectada y solo la repone si de
+    // verdad sigue sin estar.
+    //
+    // Se exige que la inyectada sea la SELECCIONADA para no pisar a quien haya
+    // cambiado el selector a mano mientras el directorio viajaba: en ese caso su
+    // elección ya es la buena y reponer al pagador original se la borraría.
+    const g=Org._gastoEditando ? (Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===Org._gastoEditando) : null;
+    if(g){
+      const ausente=sel.querySelector('option[data-ausente]');
+      if(sel.value!==Org._pagador || (ausente && ausente.value===sel.value)) Org._ponerPagador(g);
+    }
+    else Org.cambioQuienPago(sel.value);
+  },
+  // El segundo selector (se devuelve / es un aporte) solo tiene sentido si hay
+  // una persona: si pago la caja no hay a quien devolverle nada, y si el gasto
+  // es de los antiguos "sin registrar" no se esta afirmando nada de nadie.
+  //
+  // loEligioAlguien: SOLO lo pasa el onchange del <select>, que es el unico
+  // momento en que el valor lo eligio una persona. Ahi —y solo ahi— se guarda en
+  // Org._pagador, que es lo que guardarGasto manda al backend. Las llamadas de
+  // dentro del codigo no deben fijar ese estado: quien lo fija al corregir es
+  // _ponerPagador, despues de COMPROBAR que el selector pudo representarlo.
+  cambioQuienPago(valor, loEligioAlguien){
+    if(loEligioAlguien){ Org._pagador=valor; Org._origenTocado=true; }
+    const f=$('org-gasto-fuente');
+    if(f) f.style.display = (valor==='caja'||valor==='sin') ? 'none' : '';
+  },
+  // El segundo selector, igual que el primero: su valor se lleva en Org._fuente
+  // y NO se relee del DOM al guardar. Era la ultima relectura del DOM que
+  // quedaba en el camino del dinero.
+  //
+  // loEligioAlguien: SOLO lo pasa el onchange del <select>. Es lo unico que
+  // convierte una correccion en "esta persona quiso cambiar de donde salio el
+  // dinero"; las llamadas internas (pintar el formulario, cancelarlo) ponen el
+  // valor pero no lo marcan como tocado.
+  cambioFuente(valor, loEligioAlguien){
+    Org._fuente = valor==='aporte' ? 'aporte' : 'devuelve';
+    if(loEligioAlguien) Org._origenTocado=true;
+  },
+  // Deja el selector apuntando a quien puso el dinero DE VERDAD en ese gasto y
+  // devuelve el valor que quedo puesto (null si no se pudo).
+  //
+  // Por que hace falta: las opciones salen de /directorio, que filtra activo=1,
+  // y el PATCH del backend NO exige que el pagador siga activo — la app modela
+  // ese caso a proposito en otras pantallas ("cuenta inactiva - reasignar"). Si
+  // Maria se dio de baja, su <option> no existe, y asignarle a un <select> un
+  // valor que no tiene deja selectedIndex=-1 y .value===''. Ese '' significa
+  // "lo puse yo": corregir la ortografia de "Pan - $5.000 - puso Maria" pasaba
+  // los $5.000 a "Por devolver: quien editaba", sin mas aviso que un desplegable
+  // en blanco. Por eso se le inyecta su propia opcion, con su nombre, en vez de
+  // dejar el hueco: asi ademas la persona VE de quien se trata.
+  _ponerPagador(g){
+    const sel=$('org-gasto-quien'); if(!sel) return null;
+    // "No se puede decir quien puso": el gasto historico (sin fuente y sin
+    // pagador) y cualquier fila con fuente de persona pero sin persona. En los
+    // dos, la correccion va sin tocar el pagador.
+    const sinPagador = g.fuente!=='caja' && g.pagado_por==null;
+    Org._opcionSinRegistrar(sinPagador);
+    Org._opcionAusente(null);
+    const quien = sinPagador ? 'sin' : (g.fuente==='caja' ? 'caja' : String(g.pagado_por));
+    if(!Array.prototype.some.call(sel.options, o=>o.value===quien)){
+      Org._opcionAusente(quien, g.fuente==='caja' ? 'La caja de la iglesia'
+        : g.pagado_por_nombre ? g.pagado_por_nombre+' (cuenta inactiva)'
+        : 'Quien puso el dinero (ya no está en la lista)');
+    }
+    sel.value=quien;
+    // Comprobado, no supuesto. Si ni aun asi el selector puede representarlo, la
+    // correccion se guardara SIN tocar el pagador (Org._pagador=null: mandar
+    // solo concepto y monto, que el backend lee como "dejalo como estaba").
+    // Antes de adjudicarle la plata a quien esta editando, mejor no tocarla.
+    if(sel.value!==quien){ Org._pagador=null; Org.cambioQuienPago(''); return null; }
+    Org._pagador=quien;
+    Org.cambioQuienPago(quien);
+    return quien;
+  },
+  // La opcion del pagador que ya no sale en el directorio. Se pinta con
+  // textContent (nunca innerHTML): el nombre lo escribe una persona.
+  // _opcionAusente(null) la quita.
+  _opcionAusente(valor, etiqueta){
+    const sel=$('org-gasto-quien'); if(!sel) return;
+    const ya=sel.querySelector('option[data-ausente]');
+    if(ya) ya.remove();
+    if(valor==null) return;
+    const o=document.createElement('option');
+    o.value=valor; o.textContent=etiqueta; o.dataset.ausente='1';
+    sel.appendChild(o);
+  },
+  // "Sin registrar quien puso" NO es una opcion al crear un gasto: ese conjunto
+  // esta cerrado y solo puede achicarse (ver el spec). Solo aparece mientras se
+  // corrige un gasto que YA estaba asi, para poder arreglarle el concepto o el
+  // monto sin verse obligado a inventarle un pagador.
+  _opcionSinRegistrar(mostrar){
+    const sel=$('org-gasto-quien'); if(!sel) return;
+    const ya=sel.querySelector('option[value="sin"]');
+    if(mostrar && !ya){
+      const o=document.createElement('option');
+      o.value='sin'; o.textContent='Sin registrar quién puso';
+      sel.appendChild(o);
+    }else if(!mostrar && ya){ ya.remove(); }
   },
   _personas:null,
   _recargar(){ if(Org._hoja) Org.abrir(Org._hoja.id); },
@@ -4295,15 +4471,106 @@ const Org = {
       catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
     }, {danger:true});
   },
-  async addGasto(){
-    const concepto=$('org-gasto-concepto').value.trim(); const monto=Number($('org-gasto-monto').value);
+  _gastoEditando:null,
+  // Quien puso el dinero, segun el formulario: '' = yo · 'caja' = la caja ·
+  // 'sin' = no se sabe (no tocarlo) · null = no se pudo determinar (no tocarlo)
+  // · un id = esa persona. Es lo que manda guardarGasto: NO se relee del DOM.
+  _pagador:'',
+  // 'devuelve' | 'aporte', segun el segundo selector. Tampoco se relee del DOM.
+  _fuente:'devuelve',
+  // ¿Tocó la persona alguno de los dos selectores del origen en esta corrección?
+  // Solo lo ponen los dos onchange. Mientras siga en false, una corrección manda
+  // SOLO concepto y monto, y el PATCH (parcial por diseño) deja el origen tal
+  // como estaba. Sin esto, el formulario reenviaba siempre los cuatro campos
+  // reconstruidos desde Org._hoja —la instantánea de cuando se abrió la
+  // pantalla— con dos consecuencias: (1) todo gasto histórico (fuente NULL)
+  // pasaba a 'devuelve' con solo tocar el ✏️, y el historial estampaba un
+  // "se devuelve a María -> se devuelve a María" afirmando un cambio que nadie
+  // hizo; (2) con dos personas editando la misma hoja, corregir una falta de
+  // ortografía con la pantalla vieja RESUCITABA una deuda que la otra acababa
+  // de borrar. En un ALTA no aplica: ahí el origen se manda siempre.
+  _origenTocado:false,
+  // Abre el formulario ya lleno con los datos del gasto, para corregirlo. Los
+  // inputs son los mismos del alta: no hace falta un panel aparte.
+  editarGasto(id){
+    const g=(Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===id); if(!g) return;
+    Org._gastoEditando=id;
+    Org._origenTocado=false;   // empieza limpia: nadie ha tocado el origen todavia
+    $('org-gasto-concepto').value=g.concepto;
+    $('org-gasto-monto').value=g.monto;
+    // Un gasto de los antiguos (sin fuente y sin pagador) NO se puede pintar
+    // como "Lo puse yo": esa opcion afirma que paga quien esta editando, y
+    // guardar una correccion de ortografia le adjudicaria una deuda que nadie
+    // contrajo. De eso —y de que el selector pueda representar a un pagador
+    // que ya no sale en el directorio— se ocupa _ponerPagador.
+    if(Org._ponerPagador(g)==null) toast('No se puede mostrar quién puso el dinero: se corregirá sin cambiarlo');
+    // El gasto historico (fuente NULL) se PINTA como "Se devuelve" porque el
+    // desplegable no tiene un tercer estado que dibujar — pero eso es lo que se
+    // ve, no lo que se manda: mientras nadie lo toque, la correccion viaja sin
+    // fuente y el backend conserva el NULL ("no se sabe").
+    $('org-gasto-fuente').value = g.fuente==='aporte' ? 'aporte' : 'devuelve';
+    Org.cambioFuente($('org-gasto-fuente').value);
+    $('org-gasto-guardar').textContent='Guardar cambios';
+    $('org-gasto-cancelar').style.display='inline-flex';
+    $('org-gasto-concepto').scrollIntoView({behavior:'smooth', block:'center'});
+  },
+  cancelarEdicionGasto(){
+    Org._gastoEditando=null;
+    Org._pagador='';                  // un gasto NUEVO lo pone quien lo registra
+    Org._origenTocado=false;
+    Org._opcionSinRegistrar(false);   // no debe quedar disponible para un gasto NUEVO
+    Org._opcionAusente(null);         // ni la persona ausente del gasto que se corregia
+    $('org-gasto-concepto').value=''; $('org-gasto-monto').value='';
+    $('org-gasto-quien').value=''; Org.cambioQuienPago('');
+    $('org-gasto-fuente').value='devuelve'; Org.cambioFuente('devuelve');
+    $('org-gasto-guardar').textContent='Añadir';
+    $('org-gasto-cancelar').style.display='none';
+  },
+  // Sirve para añadir (Org._gastoEditando vacío) y para corregir (con id):
+  // mismo patrón que formNino/guardarNino en el módulo de Escuela Dominical.
+  async guardarGasto(){
+    const concepto=$('org-gasto-concepto').value.trim();
+    const monto=Number($('org-gasto-monto').value);
     if(!concepto) return toast('Escribe el concepto');
     if(!(monto>0)) return toast('El monto debe ser mayor a 0');
-    const quien=Number(($('org-gasto-quien')||{}).value)||null;   // vacío = lo puse yo
+    // El pagador NO se relee del DOM: se lleva en Org._pagador, que fija
+    // _ponerPagador (comprobando que el selector pueda representarlo) y
+    // actualiza el onchange cuando lo elige una persona. Releerlo era la tercera
+    // puerta del fallo: bastaba con que la <option> del pagador no existiera
+    // —cuenta desactivada, o /directorio caido— para que el '' de un <select>
+    // sin seleccion se leyera como "lo puse yo" y la deuda cambiara de dueño.
+    const quien=Org._pagador;   // '' = yo · 'caja' = caja · 'sin'/null = no tocar · id = otra persona
+    const id=Org._gastoEditando;
+    // El PATCH del backend es PARCIAL POR DISEÑO: lo que no viene, no se toca.
+    // Asi que una CORRECCION solo manda el origen si la persona toco alguno de
+    // los dos selectores. Reenviarlo siempre —reconstruido desde Org._hoja, la
+    // instantanea de cuando se abrio la pantalla— anulaba esa garantia: le
+    // inventaba un 'devuelve' a todo gasto historico con solo pulsar el ✏️ (y el
+    // historial anotaba un cambio de origen que nadie hizo), y con dos personas
+    // editando reponia una deuda que la otra acababa de borrar.
+    //
+    // En un ALTA se manda siempre: el gasto nace ahora y hay que decir de donde
+    // salio el dinero.
+    //
+    // 'sin' (y null) tampoco lo mandan nunca: sin fuente ni pagado_por, el PATCH
+    // deja los dos como estaban (ver la regla del backend en la Task 4). Es lo
+    // que permite corregir un gasto sin cambiar de quien es el dinero.
+    const cuerpo={concepto,monto};
+    if((!id || Org._origenTocado) && quien!=null && quien!=='sin'){
+      if(quien==='caja') cuerpo.fuente='caja';
+      else {
+        cuerpo.fuente=Org._fuente||'devuelve';
+        cuerpo.pagado_por = quien?Number(quien):ME.persona.id;
+      }
+    }
     await conBoton(botonActual(), async()=>{
-      const cuerpo = quien ? {concepto,monto,pagado_por:quien} : {concepto,monto};
-      try{ await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)}); Org._recargar(); }
-      catch(e){ toast((e&&e.message)||'No se pudo añadir'); }
+      try{
+        if(id) await api('/organizacion/gastos/'+id,{method:'PATCH',body:JSON.stringify(cuerpo)});
+        else   await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)});
+        Org.cancelarEdicionGasto();
+        Org._recargar();
+        toast(id?'Gasto corregido':'Gasto añadido');
+      }catch(e){ toast((e&&e.message)||'No se pudo guardar'); }
     });
   },
   // Un gasto lleva el monto y quién puso el dinero: es el registro con el que se

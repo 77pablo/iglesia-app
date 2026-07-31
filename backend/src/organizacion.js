@@ -64,6 +64,39 @@ function puedeEditarOrg(personaId, org) {
   return org.creado_por === personaId || esPastor(personaId);
 }
 
+// Los montos del detalle de auditoria se guardan ya formateados, porque ese
+// texto se le va a MOSTRAR a la gente en la hoja (ver la Task 7): "$12.000" y
+// no "$12000", igual que money() en el frontend.
+//
+// A mano y no con toLocaleString('es-CL'): no se usa en ningun sitio del
+// backend hoy (cero coincidencias en backend/src/), y haria que el texto ya
+// guardado dependiera de la configuracion regional del servidor.
+function montoTxt(n) {
+  return '$' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+// Describe en castellano llano quien puso la plata de un gasto, para el
+// detalle de auditoria (Task 4, punto 1 de la revision). Nada de "fuente" ni
+// "pagado_por": esto lo lee una persona, no un programador.
+//
+// fuente NULL + persona: es el estado de TRANSICION que ya entendia armarHoja
+// antes de esta casilla (ver 'gasto antiguo CON persona pero sin fuente sigue
+// contando como "por devolver"') — se describe igual que 'devuelve'.
+// Acotada por iglesia como el resto de las consultas a persona de este modulo
+// (ver el POST y el PATCH de gastos): pagadoPorId sale de una fila YA guardada,
+// que esta ruta no valida —solo valida lo que entra—, asi que una fila legada
+// con un pagador de otra congregacion pondria el nombre de un desconocido en el
+// rastro de esta iglesia. Hoy ninguna ruta permite crear ese gasto; esto es
+// defensa en profundidad, y si pasara cae solo en 'alguien que ya no está'.
+function descOrigenGasto(fuente, pagadoPorId, iglesiaId) {
+  if (fuente === 'caja') return 'pagó la caja';
+  if (pagadoPorId == null) return 'sin registrar quién puso';
+  const persona = db.prepare('SELECT nombre FROM persona WHERE id = ? AND iglesia_id = ?')
+    .get(pagadoPorId, iglesiaId);
+  const nombre = persona ? persona.nombre : 'alguien que ya no está';
+  return fuente === 'aporte' ? `aporte de ${nombre}` : `se devuelve a ${nombre}`;
+}
+
 // Arma la hoja completa (cosas + gastos + total + evento) a partir de su row.
 // total_gastado NUNCA se persiste: se recalcula al leer, asi no queda descuadrado.
 function armarHoja(org) {
@@ -77,22 +110,47 @@ function armarHoja(org) {
       WHERE c.org_id = ? ORDER BY c.orden, c.id`
   ).all(org.id);
   const gastos = db.prepare(
-    `SELECT g.id, g.concepto, g.monto, g.creado_en, g.pagado_por, p.nombre AS pagado_por_nombre
+    `SELECT g.id, g.concepto, g.monto, g.creado_en, g.pagado_por, g.fuente, p.nombre AS pagado_por_nombre
        FROM evento_org_gasto g LEFT JOIN persona p ON p.id = g.pagado_por
       WHERE g.org_id = ? ORDER BY g.id`
   ).all(org.id);
   const total = db.prepare('SELECT COALESCE(SUM(monto),0) AS t FROM evento_org_gasto WHERE org_id = ?').get(org.id).t;
-  // "Quien puso que": cuanto puso cada persona, de mayor a menor. Es lo que se
-  // mira al final para saber a quien devolverle cuanto.
-  const aportes = db.prepare(
+  // "Quien puso que", partido en tres, porque ya no es una sola cosa:
+  //  - lo que pago la caja directo (no hay a quien devolverle nada)
+  //  - lo que alguien puso y HAY que devolverle (incluye lo de antes de esta
+  //    casilla, fuente NULL con persona: es lo que ya significaba)
+  //  - lo que alguien puso como aporte y NO se devuelve
+  const totalCaja = db.prepare(
+    `SELECT COALESCE(SUM(monto),0) AS t FROM evento_org_gasto WHERE org_id = ? AND fuente = 'caja'`
+  ).get(org.id).t;
+  const porDevolver = db.prepare(
     `SELECT g.pagado_por AS persona_id, p.nombre, SUM(g.monto) AS total
        FROM evento_org_gasto g JOIN persona p ON p.id = g.pagado_por
-      WHERE g.org_id = ? GROUP BY g.pagado_por, p.nombre ORDER BY total DESC, p.nombre`
+      WHERE g.org_id = ? AND g.pagado_por IS NOT NULL AND (g.fuente = 'devuelve' OR g.fuente IS NULL)
+      GROUP BY g.pagado_por, p.nombre ORDER BY total DESC, p.nombre`
   ).all(org.id);
+  const aportesDonados = db.prepare(
+    `SELECT g.pagado_por AS persona_id, p.nombre, SUM(g.monto) AS total
+       FROM evento_org_gasto g JOIN persona p ON p.id = g.pagado_por
+      WHERE g.org_id = ? AND g.fuente = 'aporte'
+      GROUP BY g.pagado_por, p.nombre ORDER BY total DESC, p.nombre`
+  ).all(org.id);
+  // El historial de correcciones de ESTA hoja. Viaja con la hoja (que ya es una
+  // sola respuesta) en vez de por una ruta aparte: son cero filas en el caso
+  // normal. Acotado tambien por iglesia_id, no solo por la referencia.
+  const correcciones = db.prepare(
+    `SELECT a.id, a.detalle, a.fecha, p.nombre AS actor_nombre
+       FROM auditoria a LEFT JOIN persona p ON p.id = a.actor_id
+      WHERE a.ref_tabla = 'evento_org' AND a.ref_id = ? AND a.iglesia_id = ?
+        AND a.accion = 'editar_gasto'
+      ORDER BY a.id DESC`
+  ).all(org.id, org.iglesia_id);
   const evento = org.evento_id
     ? db.prepare('SELECT id, titulo, fecha, hora_inicio, lugar FROM evento WHERE id = ?').get(org.evento_id)
     : null;
-  return { ...org, evento, cosas, gastos, aportes, total_gastado: total };
+  return { ...org, evento, cosas, gastos, total_gastado: total,
+    total_caja: totalCaja, por_devolver: porDevolver, aportes_donados: aportesDonados,
+    correcciones };
 }
 
 // Obtiene el row de la hoja y valida edición. Responde 404/403 y devuelve null,
@@ -323,24 +381,138 @@ r.delete('/cosas/:cosaId', (req, res) => {
 // ---------- Gastos (se suman en total_gastado) ----------
 // El total NO se guarda en ninguna columna: se recalcula al leer la hoja, asi
 // nunca queda descuadrado respecto a las filas de gastos.
+//
+// FUENTES_GASTO: quien puso el dinero de verdad, no solo quien queda anotado.
+// 'caja' no lleva persona (pago la iglesia directo). 'devuelve'/'aporte' SI
+// llevan persona: la diferencia es si se le debe devolver o no.
+const FUENTES_GASTO = ['caja', 'devuelve', 'aporte'];
 const gastoSchema = z.object({
   concepto: z.string().trim().min(1, 'falta el concepto'),
   monto: z.coerce.number().positive('el monto debe ser mayor a 0'),
   // Opcional: si no viene, paga quien registra el gasto (el caso normal).
-  pagado_por: z.coerce.number().int().positive().optional()
+  pagado_por: z.coerce.number().int().positive().optional(),
+  // Opcional para no romper llamadas viejas: sin ella, el gasto queda "no
+  // especificado" (fuente NULL), igual que antes de que esta casilla
+  // existiera. El frontend (Task 5) la manda siempre.
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
 });
 r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
   const org = hojaEditable(req, res, Number(req.params.id));
   if (!org) return;
-  const quienPago = req.body.pagado_por ?? req.user.persona_id;
-  // Solo gente de la misma iglesia: atribuirle un pago a un tercero de otra
-  // congregacion no significa nada y ensucia el resumen de a quien devolver.
-  const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?')
-    .get(quienPago, req.user.iglesia_id);
-  if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
-  const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por) VALUES (?,?,?,?)')
-    .run(org.id, req.body.concepto, req.body.monto, quienPago);
+  // "La caja de la iglesia" no tiene persona: pagado_por queda NULL. Ese NULL
+  // NO reutiliza el significado historico de "no se sabe quien puso" — lo
+  // que distingue un caso del otro es la columna fuente, no el hueco vacio.
+  const esCaja = req.body.fuente === 'caja';
+  const quienPago = esCaja ? null : (req.body.pagado_por ?? req.user.persona_id);
+  if (quienPago != null) {
+    // Solo gente de la misma iglesia: atribuirle un pago a un tercero de otra
+    // congregacion no significa nada y ensucia el resumen de a quien devolver.
+    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?')
+      .get(quienPago, req.user.iglesia_id);
+    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+  }
+  const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por, fuente) VALUES (?,?,?,?,?)')
+    .run(org.id, req.body.concepto, req.body.monto, quienPago, req.body.fuente || null);
   res.json({ ok: true, id: Number(info.lastInsertRowid) });
+});
+
+// Corregir un gasto (monto mal tecleado, fuente equivocada). A diferencia
+// del resto de los items de la hoja (que nunca dejaron rastro de nada), esta
+// SI se audita: es la condicion explicita del dueño para poder corregir.
+const editarGastoSchema = z.object({
+  concepto: z.string().trim().min(1, 'falta el concepto').optional(),
+  monto: z.coerce.number().positive('el monto debe ser mayor a 0').optional(),
+  pagado_por: z.coerce.number().int().positive().nullable().optional(),
+  // MISMO mensaje que gastoSchema (Task 2): no puede contener la palabra
+  // "fuente", que es el nombre tecnico del campo. validar() compone
+  // "Datos invalidos: " + este texto y se lo suelta tal cual a la persona.
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
+});
+r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
+  // Acotado por iglesia en la MISMA consulta: es el fallo que ya se colo una
+  // vez en musica.js (borrado que cruzaba congregaciones). El resto de las
+  // rutas de cosas/gastos de este archivo resuelven sin ese acotador y
+  // filtran despues via hojaEditable (que si filtra) — sigue siendo seguro,
+  // pero esta ruta nueva no repite ese patron.
+  const gasto = db.prepare(
+    `SELECT g.* FROM evento_org_gasto g JOIN evento_org o ON o.id = g.org_id
+      WHERE g.id = ? AND o.iglesia_id = ?`
+  ).get(Number(req.params.gastoId), req.user.iglesia_id);
+  if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' });
+  const org = hojaEditable(req, res, gasto.org_id);   // valida permiso (403); iglesia ya validada arriba
+  if (!org) return;
+
+  const concepto = req.body.concepto ?? gasto.concepto;
+  const monto = req.body.monto ?? gasto.monto;
+
+  // fuente y pagado_por se corrigen juntos, pero SOLO se exige coherencia
+  // cuando el PATCH toca alguno de los dos. Un gasto historico (fuente y
+  // pagado_por ambos NULL, "no se sabe quien puso") tiene que poder corregir
+  // su concepto o su monto SIN verse obligado a inventarle un pagador: si no,
+  // arreglar una falta de ortografia le adjudicaria a alguien una deuda que
+  // nadie contrajo.
+  const tocaFuente = req.body.fuente !== undefined;
+  const tocaPagador = req.body.pagado_por !== undefined;
+  const fuente = tocaFuente ? req.body.fuente : gasto.fuente;
+  let pagadoPor = tocaPagador ? req.body.pagado_por : gasto.pagado_por;
+
+  if (fuente === 'caja') {
+    // Pago la caja: no hay persona, pase lo que pase se haya mandado.
+    pagadoPor = null;
+  } else if (tocaFuente || tocaPagador) {
+    // Solo aqui se exige que haya alguien: el PATCH esta cambiando de verdad
+    // quien puso el dinero. Si no toca ninguno de los dos, se conserva lo que
+    // hubiera -- incluido "no se sabe".
+    if (pagadoPor == null) return res.status(400).json({ error: 'Elige quien puso el dinero, o marca que pago la caja' });
+  }
+  if (pagadoPor != null) {
+    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?').get(pagadoPor, req.user.iglesia_id);
+    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+  }
+
+  // El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo
+  // (actor_id y fecha son columnas propias de la tabla auditoria).
+  //
+  // El cambio de ORIGEN solo se anota si cambio de verdad. Importa porque pasar
+  // un gasto de "se devuelve a Carolina" a "pago la caja" BORRA una deuda con
+  // una persona, y sin esta parte el rastro decia literalmente
+  //   "Carne" $20.000 -> "Carne" $20.000
+  // o sea, aparentaba que no habia cambiado nada justo en el unico cambio que
+  // hace desaparecer plata que se le debia a alguien. Si solo se corrigio el
+  // concepto o el monto no se anade: seria ruido en el historial de la hoja.
+  const cambioOrigen = fuente !== gasto.fuente || pagadoPor !== gasto.pagado_por;
+  const origen = cambioOrigen
+    ? ` · ${descOrigenGasto(gasto.fuente, gasto.pagado_por, req.user.iglesia_id)} -> ${descOrigenGasto(fuente, pagadoPor, req.user.iglesia_id)}`
+    : '';
+  const detalle = `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`;
+
+  // El UPDATE y su apunte van en UNA transaccion. Si auditar() fallara despues
+  // del UPDATE, quedaria una correccion de dinero APLICADA Y SIN RASTRO — justo
+  // lo contrario de lo que esta ruta promete, y dejar rastro es la condicion
+  // explicita que puso el dueño para permitir corregir un gasto. O se guardan
+  // los dos, o no se guarda ninguno.
+  //
+  // (Se documento un tiempo como "la convencion del repo es no usar
+  //  transacciones". Era falso: este mismo archivo las usa al borrar la hoja y
+  //  al duplicarla, y tambien asistencia.js, cuenta.js, cuidado.js, eventos.js,
+  //  musica.js, ninos.js y eliminarIglesia.js.)
+  //
+  // La referencia apunta a la HOJA (gasto.org_id), no al gasto: si manana se
+  // borra el gasto, su correccion sigue apareciendo en el historial de la hoja.
+  // Apuntando al gasto, el rastro quedaria huerfano justo en el caso en que mas
+  // importa (alguien corrige un monto y despues borra la linea entera).
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE evento_org_gasto SET concepto=?, monto=?, pagado_por=?, fuente=? WHERE id=?')
+      .run(concepto, monto, pagadoPor, fuente, gasto.id);
+    auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
+      detalle, { tabla: 'evento_org', id: gasto.org_id });
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo corregir el gasto' });
+  }
+  res.json({ ok: true });
 });
 
 r.delete('/gastos/:gastoId', (req, res) => {
