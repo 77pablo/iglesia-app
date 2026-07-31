@@ -536,7 +536,38 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 30 jul 2026 · tarde — **420 tests en verde**)
+### 👉 POR DÓNDE RETOMAR (al 31 jul 2026 — **456 tests en verde**, ⚠️ **14 commits SIN SUBIR**)
+
+**Lo primero: subir.** `main` va 14 commits por delante de GitHub. Compruébalo de verdad con `git log origin/main..main --oneline` antes de creerte esta línea: en este documento esa frase ha estado equivocada en los dos sentidos.
+
+**Lo hecho el 31 jul:** la Fase 13 (quién puede retirar a cada niño) fusionada y verificada, la corrección del texto legal, y **cuatro documentos de diseño nuevos**.
+
+#### Listo para ejecutar, sin nada que decidir
+Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorporadas. Se ejecutan con `superpowers:subagent-driven-development`.
+
+1. **Corregir el nombre de una persona** — spec `2026-07-31-corregir-nombre-design.md`, plan `2026-07-31-corregir-nombre.md`. **5 tareas**, 14 tests nuevos, sin migración ni rutas nuevas.
+   Decidido: lo corrige **uno mismo** desde su perfil **y el pastor** desde Administración, sin más condición; tope de 120 caracteres; con `auditar()` en los dos caminos; sin texto de ayuda extra en el botón.
+   > 📜 **Cierra una promesa legal falsa:** el documento ARCO afirma que la rectificación "ya existe" por la pantalla de perfil, y **para el nombre es mentira** — ese formulario nunca aceptó ese campo.
+
+2. **Fuente del gasto (Organización)** — spec `2026-07-31-fuente-del-gasto-design.md`, plan `2026-07-31-fuente-del-gasto.md`. **6 tareas**, +15 tests.
+   Decidido: columna aditiva `fuente` con tres valores (`caja` · `devuelve` · `aporte`), `NULL` para lo histórico; cuando paga la caja el significado sale de `fuente` y **no** del hueco de `pagado_por`; `PATCH` para corregir un gasto, auditado. Tesorería sigue fuera de alcance a propósito.
+   > ⚠️ **FALTA UNA TAREA POR ESCRIBIR, y ya está decidida:** el dueño quiere **un historial de correcciones visible en la propia hoja** (*"Abel cambió el monto de $12.000 a $8.000 el 3 de agosto"*), porque hoy `auditar()` escribe en una tabla que **ninguna pantalla muestra**: el rastro se guarda y solo se lee abriendo la BD por fuera. Descartada la pantalla de auditoría general (trabajo aparte y mayor).
+   > **El problema a resolver al escribirla:** `auditoria` **no guarda a qué registro se refiere** cada apunte, solo un `detalle` de texto libre — no hay forma limpia de pedir "las correcciones de la hoja 7". Caminos: id en el `detalle` + `LIKE` (frágil, cero migración) · columnas de referencia en `auditoria` (limpio, pero toca una tabla que usan 40 módulos) · tabla propia del módulo (aislado, una tabla más).
+   > Y ojo: el plan dice partir de **455** tests; ya son **456**.
+
+#### Decidido, pero sin spec todavía
+3. **Mensajes del portal público.** Informe completo en el scratchpad de la sesión (`portal-publico-mensajes.md`). **Está fallando ahora con gente real:** `contacto_publico` se escribe y **no la lee nadie** — cero `SELECT` en todo el proyecto. La notificación al pastor sí lleva el texto, pero **no se puede pulsar** y la pantalla de notificaciones **no tiene "ver más"** (el backend sí pagina), así que pasadas 50 notificaciones ese mensaje desaparece de la vista.
+   Decidido: **bandeja solo para el pastor**, y **el formulario NO se toca** (sigue sin pedir correo ni teléfono).
+   > ⚠️ **Consecuencia asumida:** la página pública seguirá prometiendo *"te contactaremos pronto"* sin poder cumplirlo. Se ofreció cambiar **esa frase** (no el formulario), que cuesta una línea; **pendiente de que el dueño lo confirme**.
+   > 📜 La Política de Privacidad **no menciona en ningún sitio** los datos de quien escribe desde el portal público. Cerrarlo antes o junto con la bandeja.
+   > 💡 La plantilla ya existe: **Cuidado Pastoral** es este mismo problema ya resuelto (lista con estado abierto/seguimiento/atendido).
+
+#### Acciones del dueño en Render (siguen abiertas, no son código)
+`SMTP_USER`/`SMTP_PASS` — sin ellas **nadie puede recuperar su contraseña** · `SUPERADMIN_PASSWORD` · comprobar en los logs que la zona horaria dice `America/Santiago` y no `UTC` · `LEGAL_CONTACT_EMAIL` solo **después** de que el abogado limpie los placeholders `[…]`.
+
+---
+
+### 👉 POR DÓNDE RETOMAR (al 30 jul 2026 · tarde — 420 tests, superado por lo del 31 jul)
 
 **Lo primero: subir.** Lo de esta tarde está en `main` local y **sin subir**. Comprueba de verdad con `git log origin/main..main --oneline` antes de creerte esta línea o la de abajo: **las dos secciones anteriores de este documento afirmaron cosas sobre el push que ya no eran ciertas al leerlas.**
 
