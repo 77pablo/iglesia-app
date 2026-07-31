@@ -432,8 +432,16 @@ En `vistaPerfilDirectorio()`, justo antes del campo Teléfono, añadir:
 ```
 
 ⚠️ `escHtml` **obligatorio** en el `value`: sin él, un nombre con comillas
-rompe el atributo (mismo patrón que ya usan `dp-tel` y `dp-email` en esa
-misma pantalla).
+rompe el atributo.
+
+🔴 **NO copies el patrón de los campos vecinos.** `dp-tel` y `dp-email`
+(`app.js:2859` y `2861`) **no usan `escHtml`**: usan un filtro de comillas
+hecho a mano, `String(p.telefono).replace(/"/g,'&quot;')`. Es el mismo tipo de
+apaño que este proyecto ya tuvo que erradicar de los `onclick` (hay un test que
+lo vigila: *"en web/app.js ya no queda ningun filtro de comillas hecho a mano
+en un onclick"*). Ahí sobreviven porque un `value` de atributo no es un
+`onclick`, pero **no son el ejemplo a seguir**. Usa `escHtml`. Y **no los
+"arregles" de paso**: son de otro campo y de otra tarea.
 
 - [ ] **Step 2: Mandarlo al guardar**
 
@@ -451,13 +459,23 @@ En `guardarPerfilDirectorio()`, añadir `nombre` al `body`:
 ```
 
 Y tras guardar con éxito, refrescar `ME.persona.nombre` (varias pantallas lo
-leen de memoria, ej. el avatar de esta misma vista):
+leen de memoria, ej. el avatar de esta misma vista).
+
+🔴 **Aquí solo se AÑADE una línea. No reemplaces el bloque.** La línea de
+arriba, `if(file) body.foto_url=await uploadArchivo(file);`, tiene que seguir
+donde está: es la que sube la foto de perfil. Si se sustituye el interior del
+`try` por el trozo de abajo tal cual, **la subida de foto desaparece** y
+guardar el perfil borraría la foto que la persona acababa de elegir, sin dar
+ningún error. Así tiene que quedar el `try` **completo**:
 
 ```js
+    try{
+      if(file) body.foto_url=await uploadArchivo(file);   // ← YA EXISTE, no se toca
       await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
-      if(ME.persona) ME.persona.nombre=body.nombre;
+      if(ME.persona) ME.persona.nombre=body.nombre;       // ← la única línea nueva
       toast('✅ Perfil actualizado');
       vistaDirectorio();
+    }catch(e){ toast(e.message); }
 ```
 
 - [ ] **Step 3: Probarlo en el navegador**
@@ -521,7 +539,10 @@ Añadir después de `adminResetClave` (mismo patrón: buscar el usuario en
 
 ```js
 function adminCorregirNombre(id){
-  const u=(window._admin.usuarios||[]).find(x=>x.id===id); if(!u) return;
+  // El guardia `d && d.usuarios` es el mismo de adminResetClave: si la lista
+  // aun no cargo, window._admin es undefined y leerle .usuarios reventaria la
+  // pantalla entera en vez de no hacer nada.
+  const d=window._admin; const u=(d&&d.usuarios||[]).find(x=>x.id===id); if(!u) return;
   modalPrompt(`Nuevo nombre para <b>${escHtml(u.nombre)}</b>.`, async(nombre)=>{
     try{ await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({nombre})});
       toast('✅ Nombre corregido'); vistaAdmin(); }

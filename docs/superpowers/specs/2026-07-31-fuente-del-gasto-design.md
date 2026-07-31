@@ -3,6 +3,7 @@
 **Fecha:** 31 de julio de 2026
 **Autor:** Pablo (con Claude Code)
 **Estado:** aprobado (Camino A, decisión ya tomada por el dueño); listo para plan de implementación
+**Ampliado el 31 jul 2026** con la sección "El historial de correcciones, en la propia hoja" — la tarea que el dueño había decidido y quedaba sin escribir. Afecta a las Tasks 4 y 6 del plan; ver esa sección.
 
 ## De qué se trata
 
@@ -69,6 +70,7 @@ la persona esté activa, a diferencia de las cosas a llevar
 | Semántica de la casilla nueva | Columna `fuente` con 3 valores: `caja` · `devuelve` · `aporte` | Reciclar `pagado_por IS NULL` para significar "pagó la iglesia" — choca con los `NULL` históricos, que significan "no se sabe quién puso" |
 | Corregir un gasto | **Sí, con `PATCH`**, condición explícita del dueño | Dejarlo fijo una vez anotado; borrar y volver a crear (pierde lo poco de historia que hay) |
 | Dónde vive el rastro de la corrección | La tabla `auditoria` que ya existe, vía `auditar()` — mismo mecanismo que usa el resto de la app | Una tabla de historial de gastos (antes/después por versión) — más trabajo del que pide la decisión ya tomada |
+| **Que el rastro se VEA** *(decidido el 31 jul, ver sección propia)* | **`auditoria` gana dos columnas** (`ref_tabla`, `ref_id`) para poder preguntarle "las correcciones de esta hoja", y la hoja muestra su historial | Meter el id dentro del `detalle` y buscar por texto (frágil: cualquiera que reescriba la redacción lo rompe en silencio, y no usa índices); una tabla propia del módulo (aislada, pero escribe el mismo hecho dos veces y no sirve a ningún otro módulo); una pantalla de auditoría general (trabajo aparte y mayor) |
 | Fuente por defecto de un gasto viejo | `fuente = NULL` = "de antes de esta casilla, no se especificó" (igual que hoy con `pagado_por` histórico) | Asumir `devuelve` o `caja` para lo ya guardado — inventaría un dato que nadie anotó |
 | Comprobar que la persona esté activa al anotar un gasto | Fuera de alcance, sigue como hoy | Arreglarlo de paso, ya que se toca el archivo — es un bug aparte, no de esta decisión |
 
@@ -125,10 +127,18 @@ reciclar el hueco, es dejar de necesitar mirarlo solo.
 tres consultas**, una por bloque:
 
 - `total_caja` — `SUM(monto)` de los gastos con `fuente = 'caja'`.
-- `por_devolver` — `GROUP BY pagado_por` de los gastos con persona y
-  `fuente IN ('devuelve', NULL)` (esto último para que los gastos de antes de
-  la casilla sigan contando como "hay que devolver", que es lo que ya
-  significaban).
+- `por_devolver` — `GROUP BY pagado_por` de los gastos con persona y cuya
+  `fuente` sea `'devuelve'` **o esté vacía** (esto último para que los gastos
+  de antes de la casilla sigan contando como "hay que devolver", que es lo que
+  ya significaban).
+
+  > ⚠️ **En SQL eso se escribe `(fuente = 'devuelve' OR fuente IS NULL)`, nunca
+  > `fuente IN ('devuelve', NULL)`.** `IN` con `NULL` **no casa nunca** —
+  > devuelve desconocido, no verdadero. Escrito con `IN`, todos los gastos
+  > antiguos desaparecerían del bloque "por devolver" sin ningún error: la
+  > hoja simplemente dejaría de decir que hay que devolverle ese dinero a
+  > alguien. Es el tipo de fallo que se ve como "una cuenta que no cuadra", no
+  > como un bug.
 - `aportes_donados` — `GROUP BY pagado_por` de los gastos con
   `fuente = 'aporte'`.
 
@@ -152,17 +162,18 @@ mecanismo que usa el resto de este módulo para crear/editar/borrar/duplicar la
 hoja. El `detalle` describe qué cambió (concepto y monto, antes → después),
 igual que otras acciones auditadas de la app dejan un resumen legible.
 
-Es "lo más simple que cumple" la condición del dueño, y punto honesto que hay
-que decir: **hoy nadie ve esta tabla desde la pantalla.** No existe ninguna
-vista de auditoría en `web/app.js`, y ninguna ruta del backend expone un
-listado de `auditoria` (verificado: cero coincidencias de una vista de
-auditoría en el frontend). Esto no es una carencia nueva de este diseño — es
-exactamente como ya funcionan `crear_org`, `editar_org`, `borrar_org` y
-`duplicar_org` hoy — pero significa que "queda escrito" hoy es literal:
-queda escrito en la base de datos, consultable por quien tenga acceso a ella,
-no por el pastor abriendo una pantalla. Si en algún momento se quiere que el
-pastor pueda *ver* quién corrigió qué, eso es una pantalla nueva sobre una
-tabla que ya existe — no un cambio de este diseño.
+Cuando se escribió este párrafo por primera vez decía, con razón, que **nadie
+veía esa tabla desde la pantalla**: `auditar()` guardaba el rastro en la base
+de datos y solo se podía leer abriéndola por fuera. El dueño decidió el 31 de
+julio que eso no basta — quiere ver las correcciones en la propia hoja — así
+que **eso ya no es cierto**: ver la sección "El historial de correcciones, en
+la propia hoja" más abajo, que es parte de este mismo diseño.
+
+Lo que sí sigue siendo cierto es el alcance: **no se construye una pantalla de
+auditoría general.** Lo que se ve es el historial de correcciones **de una
+hoja**, dentro de esa hoja. `crear_org`, `editar_org`, `borrar_org` y
+`duplicar_org` siguen escribiendo en `auditoria` sin que ninguna pantalla los
+muestre, exactamente como hoy.
 
 **Reglas de la corrección**, para que la fuente y la persona no queden
 contradictorias:
@@ -180,6 +191,137 @@ contradictorias:
 **Quién puede corregir:** lo mismo que hoy edita cualquier cosa de la hoja
 — el creador de la hoja o el pastor (`puedeEditarOrg`,
 `organizacion.js:63-65`). No un permiso nuevo.
+
+## El historial de correcciones, en la propia hoja
+
+*(Añadido el 31 jul 2026, decisión del dueño. Esto es lo que faltaba por
+escribir del plan.)*
+
+Guardar el rastro y no enseñarlo no cumple lo que se pidió. Lo que el dueño
+quiere ver, en la hoja, es esto:
+
+> **Correcciones**
+> Abel · "Pan" $12.000 → "Pan" $8.000 · 3 ago
+> María · "Carne" $30.000 → "Carne" $28.500 · 1 ago
+
+### El problema que hay que resolver primero
+
+`auditoria` (`db.js:220-228`) tiene `iglesia_id`, `actor_id`, `accion`,
+`modulo`, `detalle` y `fecha`. **No guarda a qué registro se refiere cada
+apunte** — solo un `detalle` de texto libre. No hay forma limpia de pedir "las
+correcciones de la hoja 7".
+
+### La solución elegida: dos columnas de referencia
+
+`auditoria` gana `ref_tabla TEXT` y `ref_id INTEGER`, aditivas por el mismo
+`agregarColumna()` de siempre, más un índice sobre el par `(ref_tabla, ref_id)`.
+Ambas nacen `NULL` para las filas históricas.
+
+`auditar()` (`auth.js:186-190`) gana un **sexto parámetro opcional al final**.
+Los ~40 sitios que ya la llaman **no se tocan**: siguen compilando igual,
+siguen funcionando igual y escriben `NULL` en las dos columnas nuevas. La única
+llamada que lo usa por ahora es la corrección de un gasto.
+
+Se eligió esto sobre las dos alternativas por una razón que va más allá de esta
+hoja: el día que cualquier otro módulo quiera mostrar su propio historial, la
+estructura ya está y no hay que volver a inventarla. Las alternativas
+descartadas y por qué están en la tabla de decisiones.
+
+### La referencia apunta a la HOJA, no al gasto
+
+`ref_tabla = 'evento_org'`, `ref_id =` el id de la hoja.
+
+Es deliberado y es el punto fino de este diseño: **si mañana se borra el gasto,
+su corrección sigue apareciendo en el historial de la hoja.** Si la referencia
+apuntara al gasto, el rastro quedaría huérfano justo en el caso en que más
+importa — alguien corrige un monto y después borra la línea entera.
+
+### Cómo se lee
+
+La hoja ya viaja en una sola respuesta (`armarHoja`), así que el historial viaja
+con ella; no hace falta una ruta nueva ni una segunda petición. La consulta se
+acota por `ref_tabla`, `ref_id` **y `iglesia_id`**, con `JOIN persona` sobre
+`actor_id` para tener el nombre de quien corrigió.
+
+Quien puede ver el historial es quien puede ver la hoja: no se añade ningún
+permiso nuevo.
+
+### Dos cosas que esto cambia del plan ya escrito
+
+No son efectos colaterales imprevistos; son parte del trabajo y hay que
+escribirlos en las tareas:
+
+1. **La Task 4 escribe los montos sin formato** (`$12000`). Para que el
+   historial se lea como el resto de la app (`$12.000`), la Task 4 pasa a
+   formatearlos al escribir el `detalle`, con un ayudante de una línea dentro
+   de `organizacion.js`. **Sin `toLocaleString`**: no se usa en ningún sitio del
+   backend hoy (verificado: cero coincidencias en `backend/src/`) y haría
+   depender el texto guardado de la configuración regional del servidor.
+2. **Eso rompe a propósito una prueba de la Task 4**, la que busca `1000` en el
+   `detalle`: pasa a buscar `1.000`.
+
+Y la Task 6 (dejarlo en `ESTADO.md`) pierde uno de sus tres pendientes: el
+rastro **ya** tiene pantalla.
+
+### En el papel también — y dónde ponerlo exactamente
+
+El historial sale también en la **🧾 Rendición impresa**, no solo en pantalla.
+La rendición es el documento con el que se rinde cuentas ante la iglesia: si un
+monto se corrigió, que se vea ahí es justamente el punto — nadie cambia una
+cifra sin que quede dicho. Solo ocupa espacio si hubo correcciones.
+
+**Dónde va no es un detalle de estilo, y hay dos formas de equivocarse:**
+
+De la hoja salen **dos papeles distintos**, y lo único que los separa es una
+clase en el `<body>` (`Org._conPapel`, `app.js:4210-4226`):
+
+| Papel | Para qué | Qué lleva |
+|---|---|---|
+| 🖨️ Imprimir | Se pega en **la puerta de la iglesia** | Cosas a llevar. **Sin gastos** — `.card-gastos` es `no-print` (`app.js:4098`) |
+| 🧾 Rendición | Se le lleva **al tesorero** | Gastos, total y quién puso qué (`.modo-rendicion .card-gastos{display:block!important}`, `styles.css:681`) |
+
+- 🔴 **Si el bloque se pone FUERA de `.card-gastos`, sale en la hoja de la
+  puerta.** Es decir: *"Abel cambió el monto de $12.000 a $8.000"* colgado
+  donde lo lee toda la congregación. Va **dentro** de `.card-gastos`, que ya
+  hereda el ocultarse en un papel y verse en el otro.
+- ⚠️ **Y no envolverlo en `no-print`** "porque es solo para pantalla": esa
+  clase gana con `!important` y el historial no saldría nunca en la rendición,
+  sin que nada avise. El propio CSS lleva escrito el aviso de lo caro que es
+  este fallo (`styles.css:676-680`).
+
+**Orden dentro de la tarjeta:** después del resumen de "Quién puso qué" y
+**antes** del bloque `.solo-rendicion` de "Recibí conforme"
+(`app.js:4105`) — la firma tiene que quedar al final del papel.
+
+### Seguridad
+
+El `detalle` contiene **el concepto que tecleó una persona** (`"Pan"`), y el
+nombre de quien corrigió sale de la base de datos. Los dos van con `escHtml`.
+
+Merece decirse explícito porque el texto guardado **lleva comillas dobles
+dentro** (`"Pan" $12.000 -> "Pan" $8.000`), que es exactamente el sitio donde
+se cuelan los descuidos al interpolar en `innerHTML` o en un atributo. Un gasto
+llamado `<script>…` se ejecutaría al abrir la hoja de cualquiera que la mire.
+
+### Las fechas, otra vez UTC
+
+`auditoria.fecha` es `datetime('now')`: **UTC**, igual que `creado_en`. Una
+corrección hecha a las 21:00 hora de Chile mostraría el día siguiente si se
+corta el texto sin convertir. Se usa el mismo ayudante de conversión al mostrar
+que se introduce en el diseño de la bandeja del portal público
+(`2026-07-31-bandeja-portal-publico-design.md`). **No se cambia lo que se
+guarda** — ver la regla de la sección "Verificación del análisis previo": las
+zonas horarias se arreglan al mostrar, no al guardar.
+
+### Pruebas
+
+- las columnas nuevas nacen `NULL` en todo lo histórico
+- `auditar()` llamada **sin** el parámetro nuevo sigue escribiendo igual
+  (retrocompatibilidad de los ~40 sitios que ya la usan)
+- corregir un gasto deja la referencia apuntando a **la hoja**
+- la hoja devuelve sus correcciones, con el nombre de quien corrigió
+- un líder de **otra** iglesia no ve esas correcciones
+- **borrar el gasto no borra su corrección** del historial de la hoja
 
 ## Qué pasa con los gastos ya guardados
 
@@ -203,10 +345,13 @@ gasto con `pagado_por` y `fuente` ambos `NULL` a partir de esta función.
 - **No se comprueba que la persona esté activa** al anotar o corregir un
   gasto, aunque sí se comprueba en las cosas a llevar
   (`organizacion.js:282-284`). Bug preexistente, no de esta decisión.
-- **No hay historial de versiones de un gasto** (qué decía antes de cada
-  corrección) — solo el resumen del último cambio en `auditoria`. Si algún
-  día hace falta reconstruir cada edición, hay que replantear esto con una
-  tabla de historial propia.
+- **No hay historial de versiones del gasto como objeto.** `auditoria` es
+  append-only, así que cada corrección deja su propia fila y el historial de la
+  hoja las muestra todas, en orden — no solo la última. Lo que no existe es
+  poder pedirle a la app "cómo estaba este gasto el 2 de agosto" y que lo
+  reconstruya sola: eso se lee encadenando los "antes → después" a ojo. Si
+  alguna vez hace falta reconstruirlo de verdad, es una tabla de versiones
+  propia y un replanteo, no un ajuste de esto.
 - **La zona horaria de `creado_en` no se toca** (sigue en UTC, ver
   "Verificación" arriba). No se agrega ninguna fecha nueva a `evento_org_gasto`
   que pudiera introducir el mismo problema.
@@ -227,10 +372,15 @@ gasto con `pagado_por` y `fuente` ambos `NULL` a partir de esta función.
 |---|---|
 | `POST /api/organizacion/:id/gastos` | Acepta `fuente` opcional (`'caja'` \| `'devuelve'` \| `'aporte'`); si no viene, se comporta exactamente como hoy |
 | `PATCH /api/organizacion/gastos/:gastoId` | **Nuevo.** Corrige `concepto`, `monto`, `pagado_por` y/o `fuente`; audita el cambio |
-| `GET /api/organizacion/:id` y `GET /api/organizacion/evento/:eventoId` | La hoja devuelve `total_caja`, `por_devolver` y `aportes_donados` en vez del único `aportes` de hoy |
+| `GET /api/organizacion/:id` y `GET /api/organizacion/evento/:eventoId` | La hoja devuelve `total_caja`, `por_devolver` y `aportes_donados` en vez del único `aportes` de hoy, **y además `correcciones`** (el historial de esa hoja) |
 
-**Sin migración de datos, aditiva:** una columna nueva en `evento_org_gasto`
-vía el mismo `agregarColumna()` que ya usa el resto de `db.js`.
+**Sin migración de datos, aditiva:** una columna nueva en `evento_org_gasto` y
+dos en `auditoria` (`ref_tabla`, `ref_id`), todas vía el mismo
+`agregarColumna()` que ya usa el resto de `db.js`, más un índice sobre
+`(ref_tabla, ref_id)`. Ninguna fila existente cambia de valor.
+
+**`auditar()` cambia de firma de forma retrocompatible:** un sexto parámetro
+opcional al final. Ninguno de los ~40 sitios que ya la llaman se toca.
 
 **Aislamiento entre iglesias:** el `PATCH` nuevo resuelve el gasto acotado por
 `iglesia_id` en la **misma** consulta (`JOIN evento_org` en el `WHERE`), no en
@@ -250,13 +400,23 @@ zod 4 el parámetro para el mensaje de un enum es `error`, **nunca `errorMap`**
 
 ## Riesgo conocido
 
-**El rastro de la corrección no es visible desde ninguna pantalla, solo desde
-la base de datos.** `auditar()` escribe correctamente quién y cuándo, pero
-"quién puede corregir un gasto" es exactamente "quien puede editar la hoja" —
-el creador o el pastor —, y si el creador se equivoca dos veces y lo corrige
-dos veces, nadie lo va a notar sin mirar la tabla `auditoria` a mano. Esto no
-es peor que el resto de la app hoy (nada de este módulo se ve desde una
-pantalla de auditoría), pero es la primera vez que se le pide *explícitamente*
-que deje rastro por una condición del dueño, así que vale la pena decirlo
-claro: si el uso real demuestra que hace falta que alguien lo *vea*, es una
-pantalla nueva, no un cambio a este diseño.
+> **Nota:** este apartado decía que el rastro no se veía desde ninguna
+> pantalla. Con la sección "El historial de correcciones, en la propia hoja"
+> eso quedó resuelto, y el riesgo es ahora otro.
+
+**El historial solo cuenta lo que pasó por el `PATCH`.** Un gasto que se
+**borra** no deja nada (`DELETE` sigue sin auditar, a propósito, ver "Fuera de
+alcance"), y un gasto que se borra y se vuelve a crear con otro monto es, para
+el historial, un gasto nuevo sin correcciones. Quien quiera esquivar el rastro
+tiene esa puerta abierta.
+
+No se cierra aquí por coherencia: en este módulo **ningún** ítem (ni las cosas
+ni los gastos) deja rastro al crearse o borrarse, y auditar solo el borrado del
+gasto sería un parche asimétrico. Si se decide auditar el nivel de ítems, va
+parejo para cosas y gastos, crear y borrar — y es un cambio aparte.
+
+Segundo riesgo, menor: **el `detalle` es texto libre y el historial lo muestra
+tal cual se guardó.** Si alguien cambia la redacción de ese texto en el futuro,
+las correcciones viejas se seguirán viendo con la redacción antigua y las
+nuevas con la nueva. Es aceptable —el texto sigue siendo legible— pero conviene
+saber que no hay forma de re-formatear lo ya escrito.

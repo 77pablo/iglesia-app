@@ -596,6 +596,32 @@ agregarColumna('persona', 'debe_cambiar_pass', 'INTEGER NOT NULL DEFAULT 0');
 // IGLESIA: desactivar/reactivar (reversible, NUNCA se borra). Si activa=0,
 // nadie de esa iglesia puede iniciar sesion (ver auth.js login()).
 agregarColumna('iglesia', 'activa', 'INTEGER NOT NULL DEFAULT 1');
+// CONTACTO_PUBLICO: en que estado esta cada mensaje del portal publico.
+//   'nuevo'    -> llego y nadie lo ha atendido (DEFAULT de la columna)
+//   'atendido' -> el pastor lo marco
+//   'previo'   -> ya estaba guardado ANTES de que existiera la bandeja; nadie
+//                 lo vio nunca porque no habia donde. No es 'atendido' (seria
+//                 mentira: la app afirmaria que el pastor lo atendio) ni
+//                 'nuevo' (la primera apertura serian meses de deuda de golpe).
+//
+// OJO: esta funcion se exporta para que las pruebas puedan llamarla dos veces
+// (y demostrar que la segunda no hace nada) y tambien contra una conexion
+// propia con el esquema ANTERIOR a la columna (y demostrar que la primera vez
+// hace lo correcto: mandar a 'previo' lo que ya estaba, no lo que llega despues).
+// El UPDATE tiene que quedar DENTRO de la guarda: fuera, correria en cada
+// arranque y mandaria a 'previo' todos los mensajes nuevos, sin dar ningun
+// error y dejando la bandeja ciega.
+//
+// conexion = db por defecto: la llamada de mas abajo (al cargar el modulo)
+// sigue migrando la base real sin pasar nada.
+export function migrarEstadoContactoPublico(conexion = db) {
+  const yaExiste = conexion.prepare("PRAGMA table_info(contacto_publico)").all()
+    .some(c => c.name === 'estado');
+  if (yaExiste) return;
+  conexion.exec("ALTER TABLE contacto_publico ADD COLUMN estado TEXT NOT NULL DEFAULT 'nuevo'");
+  conexion.exec("UPDATE contacto_publico SET estado = 'previo'");
+}
+migrarEstadoContactoPublico();
 
 // --- Índices: aceleran los filtros más usados (por iglesia, persona, evento, grupo) ---
 // Sin esto, cada consulta hace un escaneo completo; se nota al crecer los datos.
@@ -645,7 +671,7 @@ db.exec(`
   -- (INSERT OR IGNORE de dedupe en recordatorios.js); no se hacen SELECT
   -- adicionales por iglesia_id o persona_id solos.
   -- contacto_publico(iglesia_id): el pastor revisa los mensajes de su iglesia.
-  CREATE INDEX IF NOT EXISTS idx_contactopublico_iglesia ON contacto_publico(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_contactopublico_iglesia ON contacto_publico(iglesia_id, estado);
   CREATE INDEX IF NOT EXISTS idx_consentimiento_persona ON consentimiento(persona_id, tipo, id);
 `);
 

@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; dos planes nuevos listos para ejecutar — **456 tests**, ⚠️ **15 commits SIN SUBIR**)*
+*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; dos planes nuevos listos para ejecutar). El número de tests y si `main` está subida/desplegada son datos de **`main`** y caducan con cada rama que se fusiona — no repitas de memoria una cifra escrita aquí (ni siquiera esta): compruébala con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
@@ -536,9 +536,9 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 31 jul 2026 — **456 tests en verde**, ⚠️ **14 commits SIN SUBIR**)
+### 👉 POR DÓNDE RETOMAR (estado de `main` al 31 jul 2026 — compruébalo con los comandos de abajo antes de creerlo, incluida esta cabecera)
 
-**Lo primero: subir.** `main` va 14 commits por delante de GitHub. Compruébalo de verdad con `git log origin/main..main --oneline` antes de creerte esta línea: en este documento esa frase ha estado equivocada en los dos sentidos.
+**Ya no hay nada pendiente de subir.** Verificado el 31 jul: `git log origin/main..main --oneline` no devuelve nada, y el `app.js` que sirve Render trae `autorizados`, `modalPrompt`, `escJsAttr` y `Prédica`. (Esta línea decía "14 commits SIN SUBIR"; era falsa. Compruébalo igual con esos dos comandos antes de creerte cualquier versión de esta frase: ha estado equivocada en los dos sentidos.)
 
 **Lo hecho el 31 jul:** la Fase 13 (quién puede retirar a cada niño) fusionada y verificada, la corrección del texto legal, y **cuatro documentos de diseño nuevos**.
 
@@ -549,18 +549,22 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
    Decidido: lo corrige **uno mismo** desde su perfil **y el pastor** desde Administración, sin más condición; tope de 120 caracteres; con `auditar()` en los dos caminos; sin texto de ayuda extra en el botón.
    > 📜 **Cierra una promesa legal falsa:** el documento ARCO afirma que la rectificación "ya existe" por la pantalla de perfil, y **para el nombre es mentira** — ese formulario nunca aceptó ese campo.
 
-2. **Fuente del gasto (Organización)** — spec `2026-07-31-fuente-del-gasto-design.md`, plan `2026-07-31-fuente-del-gasto.md`. **6 tareas**, +15 tests.
+2. **Fuente del gasto (Organización)** — spec `2026-07-31-fuente-del-gasto-design.md`, plan `2026-07-31-fuente-del-gasto.md`. **6 tareas**, +17 tests.
    Decidido: columna aditiva `fuente` con tres valores (`caja` · `devuelve` · `aporte`), `NULL` para lo histórico; cuando paga la caja el significado sale de `fuente` y **no** del hueco de `pagado_por`; `PATCH` para corregir un gasto, auditado. Tesorería sigue fuera de alcance a propósito.
-   > ⚠️ **FALTA UNA TAREA POR ESCRIBIR, y ya está decidida:** el dueño quiere **un historial de correcciones visible en la propia hoja** (*"Abel cambió el monto de $12.000 a $8.000 el 3 de agosto"*), porque hoy `auditar()` escribe en una tabla que **ninguna pantalla muestra**: el rastro se guarda y solo se lee abriendo la BD por fuera. Descartada la pantalla de auditoría general (trabajo aparte y mayor).
-   > **El problema a resolver al escribirla:** `auditoria` **no guarda a qué registro se refiere** cada apunte, solo un `detalle` de texto libre — no hay forma limpia de pedir "las correcciones de la hoja 7". Caminos: id en el `detalle` + `LIKE` (frágil, cero migración) · columnas de referencia en `auditoria` (limpio, pero toca una tabla que usan 40 módulos) · tabla propia del módulo (aislado, una tabla más).
-   > Y ojo: el plan dice partir de **455** tests; ya son **456**.
+   > ✅ **La tarea que faltaba ya está decidida y escrita en el spec** (sección "El historial de correcciones, en la propia hoja"): `auditoria` gana `ref_tabla`/`ref_id`, la referencia apunta **a la hoja y no al gasto** (para que borrar un gasto no deje su corrección huérfana), y el historial sale en pantalla **y en la rendición impresa**. Falta pasarla a tareas del plan. Descartada la pantalla de auditoría general.
+   > 🔴 **REVISADO EL 31 JUL Y CORREGIDO — el plan traía un fallo de dinero.** Un gasto antiguo "sin registrar quién puso" no se podía corregir: por la API daba 400, y por la pantalla se guardaba **adjudicándole la deuda a quien lo corregía** (el selector lo pintaba como "Lo puse yo"). Arreglado en las Tasks 4 y 5, que son **las dos mitades del mismo arreglo**: si se implementa solo una, el fallo sigue vivo. Hay 2 pruebas nuevas y un paso de comprobación manual que lo fijan.
+   > ⚠️ **No desplegar entre la Task 3 y la Task 5:** con solo la 3 arriba, todo el dinero de la hoja se muestra bajo "Sin registrar quién puso", sin ningún error visible.
+   > Los números de tests del plan **ya están corregidos** partiendo de 456 (llega a 473).
 
 #### Decidido, pero sin spec todavía
-3. **Mensajes del portal público.** Informe completo en el scratchpad de la sesión (`portal-publico-mensajes.md`). **Está fallando ahora con gente real:** `contacto_publico` se escribe y **no la lee nadie** — cero `SELECT` en todo el proyecto. La notificación al pastor sí lleva el texto, pero **no se puede pulsar** y la pantalla de notificaciones **no tiene "ver más"** (el backend sí pagina), así que pasadas 50 notificaciones ese mensaje desaparece de la vista.
-   Decidido: **bandeja solo para el pastor**, y **el formulario NO se toca** (sigue sin pedir correo ni teléfono).
-   > ⚠️ **Consecuencia asumida:** la página pública seguirá prometiendo *"te contactaremos pronto"* sin poder cumplirlo. Se ofreció cambiar **esa frase** (no el formulario), que cuesta una línea; **pendiente de que el dueño lo confirme**.
-   > 📜 La Política de Privacidad **no menciona en ningún sitio** los datos de quien escribe desde el portal público. Cerrarlo antes o junto con la bandeja.
-   > 💡 La plantilla ya existe: **Cuidado Pastoral** es este mismo problema ya resuelto (lista con estado abierto/seguimiento/atendido).
+3. ✅ ~~**Mensajes del portal público.**~~ — **HECHO el 31 jul** en la rama `feat/bandeja-y-historial-correcciones`; si ya está fusionada a `main` y desplegada es dato de `main` y caduca con cada fusión — no lo repitas de memoria, compruébalo con `git log origin/main..main --oneline` y contra el `app.js` que sirve Render (busca `filaMensajePortal`). Spec `docs/superpowers/specs/2026-07-31-bandeja-portal-publico-design.md`, plan `docs/superpowers/plans/2026-07-31-bandeja-portal-publico.md`. Suite en **471 tests** (partió en 456).
+   Se construyó: la columna `estado` en `contacto_publico` con el valor `previo` para lo que ya estaba guardado antes de que existiera la bandeja (migración de una sola vez, `migrarEstadoContactoPublico()`); la bandeja **solo para el pastor** (el obispo no la ve) con marcar-atendido; la notificación 📬 ahora se puede pulsar y lleva a la bandeja; Notificaciones gana **"Ver más"** (el backend ya paginaba, la pantalla no lo usaba); se quitaron las dos frases del portal que prometían "te contactaremos pronto" sin poder cumplirlo; y la sección **4.9** de la Política de Privacidad sobre datos de visitantes del portal, **en borrador para el abogado**.
+   > **Sigue sin resolver**, a propósito o por quedar fuera de alcance:
+   > 1. **No se puede responder desde la app**: el formulario sigue sin pedir correo ni teléfono (decisión del dueño). La única vía es que la persona lo escriba dentro del mensaje.
+   > 2. **La sección de mensajes anteriores puede no abrirse nunca.** Están contados y accesibles, pero nada obliga a mirarlos y no generan aviso.
+   > 3. **No se puede borrar un mensaje** ni marcar atendido en bloque.
+   > 4. **La fecha de Cuidado pastoral (`verCaso()` en `app.js:2102`) sigue con el fallo de UTC** — se ve el día siguiente para lo escrito después de las 20:00. El ayudante `fechaDeUTC` ya existe y lo arregla en una línea; se dejó fuera a propósito para no ensuciar este diff.
+   > 5. **La Política de Privacidad 4.9 está en borrador** y necesita al abogado.
 
 #### Acciones del dueño en Render (siguen abiertas, no son código)
 `SMTP_USER`/`SMTP_PASS` — sin ellas **nadie puede recuperar su contraseña** · `SUPERADMIN_PASSWORD` · comprobar en los logs que la zona horaria dice `America/Santiago` y no `UTC` · `LEGAL_CONTACT_EMAIL` solo **después** de que el abogado limpie los placeholders `[…]`.

@@ -19,6 +19,7 @@ const NAV = [
   ['reportes','📈','Reportes'],
   ['musicos','🎵','Grupo de Alabanza'],
   ['cuidado_pastoral','❤️','Cuidado pastoral'],
+  ['mensajes_portal','📬','Mensajes del portal'],
   ['ninos','👶','Niños / Esc. Dominical'],
   ['tesoreria','💰','Tesorería'],
   ['organizacion','🗒️','Organización'],
@@ -510,6 +511,7 @@ const EMOJI_ICON={
   '🎨':_ic('<circle cx="13.5" cy="6.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/><circle cx="8.5" cy="7.5" r=".8"/><circle cx="6.5" cy="12.5" r=".8"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C22 6 17.5 2 12 2z"/>'),
   '🧹':_ic('<path d="M3 21l6-6"/><path d="M14 4l6 6-5 5-6-6z"/><path d="M9 15l-3 6h6"/>'),
   '📩':_ic('<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/>'),
+  '📬':_ic('<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/>'),
   '📨':_ic('<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/>'),
   '✉':_ic('<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/>'),
   '🎉':_ic('<path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01M22 8h.01M15 2h.01M22 20h.01"/><path d="M22 2 19.76 2.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L12 14l4 4 5.5-5.5"/>'),
@@ -609,6 +611,7 @@ function navTo(key){
   if(key==='reportes') return vistaReportes();
   if(key==='musicos') return vistaMusica();
   if(key==='cuidado_pastoral') return vistaCuidado();
+  if(key==='mensajes_portal') return vistaMensajesPortal();
   if(key==='tesoreria') return vistaTesoreria();
   if(key==='organizacion') return vistaOrganizacion();
   if(key==='ninos') return vistaNinos();
@@ -1239,18 +1242,42 @@ async function verNotificaciones(){
     cont.className='';
     const botonLeer = d.noLeidas>0 ? `<div class="row" style="justify-content:flex-end;margin-bottom:10px">
       <button class="btn ghost small-btn" onclick="marcarLeidas()">Marcar todas como leídas</button></div>` : '';
-    cont.innerHTML=botonLeer + d.items.map(n=>{
-      const dest=_destinoNotif(n.tipo);
-      const accion=n.tipo==='aprobacion'?'Revisar y aprobar ›':(dest?'Ver ›':'');
-      return `<div class="notif-item ${n.leida?'':'no-leida'}" ${dest?`style="cursor:pointer" onclick="abrirNotif('${n.tipo}')"`:''}>
-      <div style="font-weight:600">${escHtml(n.titulo)}</div>${n.texto?`<div class="muted small">${escHtml(n.texto)}</div>`:''}
-      ${accion?`<div class="small" style="color:var(--primary);font-weight:600;margin-top:4px">${accion}</div>`:''}</div>`;
-    }).join('');
+    _notifOffset=0;
+    cont.innerHTML=botonLeer + `<div id="ln-lista">${d.items.map(filaNotif).join('')}</div>` +
+      (d.hayMas?'<button class="btn ghost small-btn" id="ln-mas" style="margin-top:10px" onclick="cargarMasNotificaciones()">Ver más</button>':'');
     actualizarCampana();
   }catch{ $('ln').innerHTML='<p class="error">No se pudieron cargar.</p>'; }
 }
+// Se saca a su propia función porque ahora la usan dos sitios: la carga inicial
+// y el "Ver más".
+function filaNotif(n){
+  const dest=_destinoNotif(n.tipo);
+  const accion=n.tipo==='aprobacion'?'Revisar y aprobar ›':(dest?'Ver ›':'');
+  return `<div class="notif-item ${n.leida?'':'no-leida'}" ${dest?`style="cursor:pointer" onclick="abrirNotif('${n.tipo}')"`:''}>
+    <div style="font-weight:600">${escHtml(n.titulo)}</div>${n.texto?`<div class="muted small">${escHtml(n.texto)}</div>`:''}
+    ${accion?`<div class="small" style="color:var(--primary);font-weight:600;margin-top:4px">${accion}</div>`:''}</div>`;
+}
+// El backend ya paginaba de 50 en 50 y mandaba hayMas (notificaciones.js:79-92);
+// esta pantalla simplemente nunca lo miró, así que pasadas 50 notificaciones las
+// viejas eran irrecuperables para cualquiera.
+let _notifOffset=0;
+async function cargarMasNotificaciones(){
+  await conBoton($('ln-mas'), async()=>{
+    const siguiente=_notifOffset+50;
+    try{
+      const d=await api('/notificaciones?offset='+siguiente);
+      _notifOffset=siguiente;
+      $('ln-lista').insertAdjacentHTML('beforeend', d.items.map(filaNotif).join(''));
+      if(!d.hayMas){ const b=$('ln-mas'); if(b) b.remove(); }
+    }catch(e){ toast(e.message); }
+  });
+}
 function _destinoNotif(tipo){
-  return {aprobacion:'calendario', musica:'musicos', grupo:'mi_grupo', recordatorio:'mi_servicio', predica:'predica'}[tipo]||'';
+  // contacto_publico: sin esta línea la notificación 📬 del portal no se puede
+  // pulsar (abrirNotif no navega si el destino es ''), y era el único aviso de
+  // que alguien había escrito.
+  return {aprobacion:'calendario', musica:'musicos', grupo:'mi_grupo', recordatorio:'mi_servicio',
+    predica:'predica', contacto_publico:'mensajes_portal'}[tipo]||'';
 }
 function abrirNotif(tipo){ const d=_destinoNotif(tipo); if(d) navTo(d); }
 async function marcarLeidas(){
@@ -2095,6 +2122,103 @@ async function atenderCaso(id){
 }
 
 // ============================================================
+//  MENSAJES DEL PORTAL PÚBLICO (solo el pastor)
+//  Los manda gente sin cuenta desde "Planifica tu visita". Antes se guardaban
+//  y no los leía nadie: no había ninguna pantalla que los mostrara.
+// ============================================================
+let _mpOffset=0, _mpPreviosOffset=0;
+
+// Un solo lugar para el chip de estado: lo usan filaMensajePortal (al listar)
+// y atenderMensajePortal (al marcar, sin recargar la tarjeta) — si vivieran
+// duplicados, la tarjeta recien marcada podria verse distinta de las demas
+// hasta la proxima recarga.
+function chipMensajePortal(estado){
+  return estado==='atendido'
+    ? '<span class="estado-chip estado-aceptado">✅ Atendido</span>'
+    : estado==='previo'
+    ? '<span class="estado-chip estado-pendiente">📥 Anterior</span>'
+    : '<span class="estado-chip estado-pendiente">🆕 Nuevo</span>';
+}
+
+// El texto de aquí lo escribe un desconocido de internet, sin cuenta y sin
+// moderación: es el dato menos confiable de la app. escHtml SIEMPRE.
+function filaMensajePortal(m){
+  const chip = chipMensajePortal(m.estado);
+  const boton = m.estado==='atendido' ? ''
+    : `<button class="btn ghost small-btn" onclick="atenderMensajePortal(${m.id})">Marcar atendido</button>`;
+  // id en la tarjeta y en el bloque de accion: asi atenderMensajePortal puede
+  // actualizar solo esta tarjeta sin recargar toda la vista (ver esa funcion).
+  return `<div class="item-card flex" style="margin-top:10px;align-items:flex-start" id="mp-msg-${m.id}">
+      <div style="flex:1"><b>${escHtml(m.nombre)}</b>
+        <div class="muted small" style="white-space:pre-wrap;margin-top:4px">${escHtml(m.mensaje)}</div>
+        <div class="muted small" style="margin-top:6px">${escHtml(fechaDeUTC(m.creado_en))}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0" id="mp-accion-${m.id}">
+        ${chip}${boton}
+      </div>
+    </div>`;
+}
+
+async function vistaMensajesPortal(){
+  _mpOffset=0; _mpPreviosOffset=0;
+  $('content').innerHTML='<div id="mp" class="muted">Cargando…</div>';
+  try{
+    const d=await api('/publico/mensajes');
+    const z=$('mp'); z.className='';
+    const lista = d.items.length
+      ? d.items.map(filaMensajePortal).join('')
+      : '<div class="placeholder"><div class="big">📬</div><p>No hay mensajes del portal.</p></div>';
+    // La sección de los anteriores nace PLEGADA: es lo que evita que la primera
+    // apertura sea un muro de meses acumulados. El número va a la vista para
+    // que no se ignoren sin querer.
+    const previos = d.previos>0
+      ? `<button class="link" id="mp-ver-previos" style="margin-top:18px" onclick="verPreviosPortal()">
+           ▸ 📥 Mensajes anteriores a esta bandeja (${d.previos})</button>
+         <div id="mp-previos"></div>`
+      : '';
+    z.innerHTML=`<div id="mp-lista">${lista}</div>
+      ${d.hayMas?'<button class="btn ghost small-btn" id="mp-mas" style="margin-top:10px" onclick="cargarMasMensajesPortal()">Ver más</button>':''}
+      ${previos}`;
+  }catch(e){ $('mp').innerHTML='<p class="error">'+escHtml(e.message||'No se pudieron cargar')+'</p>'; }
+}
+
+async function cargarMasMensajesPortal(){
+  await conBoton($('mp-mas'), async()=>{
+    const siguiente=_mpOffset+50;
+    try{
+      const d=await api('/publico/mensajes?offset='+siguiente);
+      _mpOffset=siguiente;
+      $('mp-lista').insertAdjacentHTML('beforeend', d.items.map(filaMensajePortal).join(''));
+      if(!d.hayMas){ const b=$('mp-mas'); if(b) b.remove(); }
+    }catch(e){ toast(e.message); }
+  });
+}
+
+async function verPreviosPortal(){
+  await conBoton($('mp-ver-previos'), async()=>{
+    try{
+      const d=await api('/publico/mensajes?previos=1&offset='+_mpPreviosOffset);
+      $('mp-previos').insertAdjacentHTML('beforeend', d.items.map(filaMensajePortal).join(''));
+      const btn=$('mp-ver-previos');
+      if(d.hayMas){ _mpPreviosOffset+=50; if(btn) btn.textContent='Ver más anteriores'; }
+      else if(btn) btn.remove();
+    }catch(e){ toast(e.message); }
+  });
+}
+
+async function atenderMensajePortal(id){
+  try{
+    await api('/publico/mensajes/'+id+'/atender',{method:'PATCH'});
+    toast('✅ Marcado como atendido');
+    // Se actualiza SOLO esta tarjeta, en vez de recargar toda la vista: una
+    // recarga completa reseteaba los offsets de paginacion y volvia a plegar
+    // la seccion de "mensajes anteriores" aunque el pastor la hubiera abierto.
+    const acciones=$('mp-accion-'+id);
+    if(acciones) acciones.innerHTML=chipMensajePortal('atendido');
+  }catch(e){ toast(e.message); }
+}
+
+// ============================================================
 //  FASE 3: TESORERÍA (contabilidad + transparencia)
 // ============================================================
 // Formato unico de dinero para toda la app (CLP: miles con punto, sin decimales).
@@ -2332,6 +2456,27 @@ function borrarNino(id){
 //  Helper de escape para innerHTML (seguro)
 // ============================================================
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// SQLite guarda datetime('now') en UTC SIEMPRE, aunque el proceso corra en hora
+// de Chile. Cortar el texto con .slice(0,10) muestra el dia equivocado: un
+// mensaje enviado un lunes a las 21:00 se veria fechado el martes. Se arregla
+// al MOSTRAR, nunca cambiando lo guardado (eso volveria inconsistentes las
+// filas viejas con las nuevas, y esta app ya se llevo cinco fallos por tocar
+// zonas horarias sin necesidad).
+//
+// La fecha sale en la zona de quien mira, que es lo correcto: para la iglesia
+// es Chile, y para el pastor de viaje es donde este.
+function fechaDeUTC(s){
+  if(!s) return '';
+  const d=new Date(String(s).replace(' ','T')+'Z');   // sin la Z se leeria como hora local
+  // Mismo formato que fechaTxt(f, true) ("28 Jul 2026") en vez de
+  // toLocaleDateString ("28-07-2026"): la conversion de UTC a hora local es
+  // la razon de ser de esta funcion, el formato de salida no tiene por que
+  // ser distinto del resto de la app. Con año SIEMPRE (a diferencia de
+  // fechaTxt, que lo deja opcional): esta lista no borra nada (ver Política
+  // de Privacidad 4.9), asi que van a convivir mensajes de años distintos y
+  // "28 Jul" no los distingue.
+  return isNaN(d.getTime()) ? String(s).slice(0,10) : d.getDate()+' '+(MESES[d.getMonth()]||'')+' '+d.getFullYear();
+}
 // Neutraliza URLs peligrosas (javascript:, data:, vbscript:) antes de ponerlas en un href.
 // Deja pasar http/https, rutas relativas y enlaces sin esquema (no rompe links legítimos).
 function safeUrl(u){ const s=String(u==null?'':u).trim(); return /^\s*(javascript|data|vbscript):/i.test(s) ? '#' : s; }
