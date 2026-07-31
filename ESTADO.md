@@ -538,7 +538,12 @@ app/
 
 ### 👉 POR DÓNDE RETOMAR (estado de `main` al 31 jul 2026 — compruébalo con los comandos de abajo antes de creerlo, incluida esta cabecera)
 
-**⚠️ Hay trabajo sin subir.** La bandeja del portal público quedó **fusionada a `main` el 31 jul** (merge `fef2742`) pero **NO empujada a GitHub**. Mientras no se haga el push, producción sirve la versión anterior y **el pastor sigue sin poder leer los mensajes de las visitas**. El push lo hace Pablo con GitHub Desktop, y es lo que dispara el redespliegue en Render.
+**⚠️ Hay trabajo sin subir: DOS cosas.** Las dos quedaron **fusionadas a `main` el 31 jul** y **ninguna empujada a GitHub**:
+
+1. **La bandeja del portal público** (merge `fef2742`). Mientras no se suba, **el pastor sigue sin poder leer los mensajes de las visitas**.
+2. **La fuente del gasto y el historial de correcciones** (merge `b0ff2da`). Suite **509**.
+
+El push lo hace Pablo con GitHub Desktop, y es lo que dispara el redespliegue en Render. **Un solo push las sube las dos**, que además es lo correcto: la fuente del gasto **exige** que backend y frontend viajen juntos (ver el punto 8 de sus pendientes).
 
 Esta frase ha estado equivocada **en los dos sentidos** más de una vez: llegó a decir "14 commits SIN SUBIR" cuando no quedaba ninguno, y también lo contrario. **No te creas ninguna versión de ella sin comprobarlo** — `git log origin/main..main --oneline` para saber si queda algo por subir, y un `curl` al `/app.js` de producción buscando `filaMensajePortal` para saber si el despliegue llegó de verdad.
 
