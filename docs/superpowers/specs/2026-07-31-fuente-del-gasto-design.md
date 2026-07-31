@@ -127,10 +127,18 @@ reciclar el hueco, es dejar de necesitar mirarlo solo.
 tres consultas**, una por bloque:
 
 - `total_caja` — `SUM(monto)` de los gastos con `fuente = 'caja'`.
-- `por_devolver` — `GROUP BY pagado_por` de los gastos con persona y
-  `fuente IN ('devuelve', NULL)` (esto último para que los gastos de antes de
-  la casilla sigan contando como "hay que devolver", que es lo que ya
-  significaban).
+- `por_devolver` — `GROUP BY pagado_por` de los gastos con persona y cuya
+  `fuente` sea `'devuelve'` **o esté vacía** (esto último para que los gastos
+  de antes de la casilla sigan contando como "hay que devolver", que es lo que
+  ya significaban).
+
+  > ⚠️ **En SQL eso se escribe `(fuente = 'devuelve' OR fuente IS NULL)`, nunca
+  > `fuente IN ('devuelve', NULL)`.** `IN` con `NULL` **no casa nunca** —
+  > devuelve desconocido, no verdadero. Escrito con `IN`, todos los gastos
+  > antiguos desaparecerían del bloque "por devolver" sin ningún error: la
+  > hoja simplemente dejaría de decir que hay que devolverle ese dinero a
+  > alguien. Es el tipo de fallo que se ve como "una cuenta que no cuadra", no
+  > como un bug.
 - `aportes_donados` — `GROUP BY pagado_por` de los gastos con
   `fuente = 'aporte'`.
 
@@ -255,12 +263,35 @@ escribirlos en las tareas:
 Y la Task 6 (dejarlo en `ESTADO.md`) pierde uno de sus tres pendientes: el
 rastro **ya** tiene pantalla.
 
-### En el papel también
+### En el papel también — y dónde ponerlo exactamente
 
 El historial sale también en la **🧾 Rendición impresa**, no solo en pantalla.
 La rendición es el documento con el que se rinde cuentas ante la iglesia: si un
 monto se corrigió, que se vea ahí es justamente el punto — nadie cambia una
 cifra sin que quede dicho. Solo ocupa espacio si hubo correcciones.
+
+**Dónde va no es un detalle de estilo, y hay dos formas de equivocarse:**
+
+De la hoja salen **dos papeles distintos**, y lo único que los separa es una
+clase en el `<body>` (`Org._conPapel`, `app.js:4210-4226`):
+
+| Papel | Para qué | Qué lleva |
+|---|---|---|
+| 🖨️ Imprimir | Se pega en **la puerta de la iglesia** | Cosas a llevar. **Sin gastos** — `.card-gastos` es `no-print` (`app.js:4098`) |
+| 🧾 Rendición | Se le lleva **al tesorero** | Gastos, total y quién puso qué (`.modo-rendicion .card-gastos{display:block!important}`, `styles.css:681`) |
+
+- 🔴 **Si el bloque se pone FUERA de `.card-gastos`, sale en la hoja de la
+  puerta.** Es decir: *"Abel cambió el monto de $12.000 a $8.000"* colgado
+  donde lo lee toda la congregación. Va **dentro** de `.card-gastos`, que ya
+  hereda el ocultarse en un papel y verse en el otro.
+- ⚠️ **Y no envolverlo en `no-print`** "porque es solo para pantalla": esa
+  clase gana con `!important` y el historial no saldría nunca en la rendición,
+  sin que nada avise. El propio CSS lleva escrito el aviso de lo caro que es
+  este fallo (`styles.css:676-680`).
+
+**Orden dentro de la tarjeta:** después del resumen de "Quién puso qué" y
+**antes** del bloque `.solo-rendicion` de "Recibí conforme"
+(`app.js:4105`) — la firma tiene que quedar al final del papel.
 
 ### Seguridad
 
