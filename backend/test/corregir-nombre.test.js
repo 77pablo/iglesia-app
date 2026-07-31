@@ -110,13 +110,20 @@ test('PATCH /api/admin/usuarios/:id: el pastor corrige el nombre de otro', async
   assert.equal(fila.nombre, 'Juan Pérez');
 });
 
-test('PATCH /api/admin/usuarios/:id: sincroniza aprobacion_log.actor_nombre de la persona corregida', async () => {
+test('PATCH /api/admin/usuarios/:id: sincroniza aprobacion_log.actor_nombre de la persona corregida, y no toca las de otro', async () => {
   logAprobacion(SEM.miembro1.id, 'Miembro Uno');
+  // Se siembra tambien la fila de OTRO actor, igual que en el test gemelo del
+  // perfil propio: sin ella, quitarle el `WHERE actor_id = ?` al UPDATE
+  // reescribiria el historial de aprobaciones de TODA la iglesia con el mismo
+  // nombre y esta prueba seguiria pasando.
+  logAprobacion(SEM.pastor.id, 'Pastor');
 
   await corregirOtro(SEM.pastor, SEM.miembro1.id, 'Juan Pérez');
 
   const fila = db.prepare('SELECT actor_nombre FROM aprobacion_log WHERE actor_id = ?').get(SEM.miembro1.id);
+  const ajena = db.prepare('SELECT actor_nombre FROM aprobacion_log WHERE actor_id = ?').get(SEM.pastor.id);
   assert.equal(fila.actor_nombre, 'Juan Pérez');
+  assert.equal(ajena.actor_nombre, 'Pastor', 'no debe tocar el rastro de otra persona');
 });
 
 test('PATCH /api/admin/usuarios/:id: corregir el nombre queda auditado, sin duplicar editar_usuario', async () => {
