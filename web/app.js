@@ -2278,7 +2278,8 @@ async function cargarNinos(){
     c.className=n.length?'list':'muted';
     c.innerHTML=n.length? n.map(x=>`<div class="item-card"><b>${escHtml(x.nombre)}</b>${x.edad?' <span class="muted small">'+escHtml(String(x.edad))+' años</span>':''}
       ${x.alergias?` <span class="estado-chip estado-rechazado">⚠️ ${escHtml(x.alergias)}</span>`:''}
-      <div class="muted small">${x.familia?'Familia '+escHtml(x.familia):''}</div></div>`).join('') : '<p class="small">Sin niños.</p>';
+      <div class="muted small">${x.familia?'Familia '+escHtml(x.familia):''}</div>
+      ${x.autorizados?`<div class="muted small">🤝 Puede retirarlo: ${escHtml(x.autorizados)}</div>`:''}</div>`).join('') : '<p class="small">Sin niños.</p>';
   }catch{
     if(c){ c.className='muted'; c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarNinos()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; }
     window._ninos=[];
@@ -2289,9 +2290,12 @@ function formNino(){ const z=$('form-nino'); if(z.innerHTML){z.innerHTML='';retu
     <div class="row"><input id="n-nombre" placeholder="Nombre"/><input id="n-edad" type="number" placeholder="Edad" style="max-width:90px"/></div>
     <input id="n-familia" placeholder="Familia" style="margin-top:10px"/>
     <input id="n-alergias" placeholder="Alergias / notas" style="margin-top:10px"/>
+    <label for="n-autorizados" style="margin-top:10px">Quién puede retirarlo</label>
+    <input id="n-autorizados" maxlength="300" placeholder="Ej. Ana Rojas (abuela), Juan Pérez (papá)"/>
+    <p class="muted small" style="margin-top:4px">Nombre y parentesco. No hace falta teléfono ni RUT.</p>
     <button class="btn small-btn" style="margin-top:10px" onclick="guardarNino()">Guardar</button></div>`; }
 async function guardarNino(){
-  try{ await api('/ninos/ninos',{method:'POST',body:JSON.stringify({clase_id:_claseActual,nombre:$('n-nombre').value.trim(),edad:$('n-edad').value,familia:$('n-familia').value.trim(),alergias:$('n-alergias').value.trim()})});
+  try{ await api('/ninos/ninos',{method:'POST',body:JSON.stringify({clase_id:_claseActual,nombre:$('n-nombre').value.trim(),edad:$('n-edad').value,familia:$('n-familia').value.trim(),alergias:$('n-alergias').value.trim(),autorizados:$('n-autorizados').value.trim()})});
     $('form-nino').innerHTML=''; cargarNinos(); toast('Niño agregado'); }catch(e){ toast(e.message);} }
 // Aquí vivían renderAsistNinos() y guardarAsistNinos(): pasar lista de los
 // niños. Se retiraron el 30 jul 2026 porque la iglesia no la usa. La tabla
