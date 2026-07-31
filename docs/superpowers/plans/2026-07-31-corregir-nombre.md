@@ -39,7 +39,7 @@ Crear `backend/test/corregir-nombre.test.js`:
 // ============================================================
 //  Corregir el nombre de una persona.
 //  "juan perez" quedaba asi para siempre: ni "Mi perfil" (directorio.js) ni
-//  "Cambiar mi cuenta" (cuenta.js) aceptaban 'nombre'. Este archivo cubre los
+//  "Mi cuenta" de Ajustes (cuenta.js) aceptaban 'nombre'. Este archivo cubre los
 //  dos caminos: el propio (autoservicio) y el del pastor sobre otra persona.
 // ============================================================
 import { test, before, beforeEach, after } from 'node:test';

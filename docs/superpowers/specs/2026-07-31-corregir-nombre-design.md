@@ -9,7 +9,7 @@
 Alguien se registra escribiendo su nombre "juan perez", en minúsculas, o con un
 apellido mal tecleado. Hoy **no hay ningún sitio en la app** donde corregirlo:
 ni "Mi perfil" en el Directorio (que edita teléfono, correo, foto y cumpleaños,
-pero no nombre), ni "Cambiar mi cuenta" en Ajustes (que edita correo y
+pero no nombre), ni "Mi cuenta" en Ajustes (que edita correo y
 contraseña, pero no nombre), ni el panel de Administración del pastor (que
 activa/desactiva cuentas y asigna roles, pero no toca el nombre). Verificado
 leyendo los tres módulos completos: `backend/src/directorio.js`,
