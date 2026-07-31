@@ -14,7 +14,7 @@ r.use((req, res, next) => {
   if (!esLiderEdOPastor(req.user.persona_id) && !esObispo(req.user.persona_id)) return res.status(403).json({ error: 'Solo Escuela Dominical o el pastor' });
   next();
 });
-// Editar (crear clases, niños, material, asistencia): SOLO el encargado; el pastor solo observa.
+// Editar (crear clases, niños, material): SOLO el encargado; el pastor solo observa.
 function soloEncargado(req, res, next) {
   if (!esLiderEdEstricto(req.user.persona_id))
     return res.status(403).json({ error: 'Solo el encargado de Escuela Dominical puede editar (el pastor solo observa).' });
