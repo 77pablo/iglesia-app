@@ -4168,6 +4168,7 @@ const Org = {
   _hoja:null,
   _render(h, origen){
     Org._hoja=h;
+    Org._gastoEditando=null;   // una hoja recien abierta nunca esta "editando" un gasto
     if(origen && ORG_ORIGEN[origen]) Org._origen=origen;
     const volver=ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion;
     const ed=!!h.puede_editar;
@@ -4188,20 +4189,40 @@ const Org = {
         ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar ${escHtml(x.nombre)}" onclick="Org.borrarCosa(${x.id})">✕</button>`:''}
       </div>`;
     }).join('') || '<p class="muted small">Sin cosas todavía.</p>';
-    const gastos=h.gastos.map(g=>`<div class="org-row">
-        <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b>${g.pagado_por_nombre?` <span class="muted small">· puso ${escHtml(g.pagado_por_nombre)}</span>`:''}</span>
-        ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar el gasto ${escHtml(g.concepto)}" onclick="Org.borrarGasto(${g.id})">✕</button>`:''}
-      </div>`).join('') || '<p class="muted small">Sin gastos todavía.</p>';
-    // "Quién puso qué": lo que se mira al final para saber a quién devolverle cuánto.
-    // Los gastos anteriores a esta función no tienen a nadie registrado, así que
-    // la suma de los aportes puede quedar por debajo del total: se dice en vez de
+    const gastos=h.gastos.map(g=>{
+      // Como se lee la fuente en la fila: 'caja' no tiene persona (le pone su
+      // propio texto); con persona, el matiz (se devuelve / es aporte) solo
+      // se agrega si YA se especifico — un gasto de antes de esta casilla
+      // (fuente NULL con persona) se ve igual que siempre, sin inventar nada.
+      const fuenteTxt = g.fuente==='caja' ? 'pagó la caja de la iglesia'
+        : g.pagado_por_nombre ? `puso ${escHtml(g.pagado_por_nombre)}${g.fuente==='aporte'?' (aporte, no se devuelve)':g.fuente==='devuelve'?' (se le devuelve)':''}`
+        : '';
+      return `<div class="org-row">
+        <span>${escHtml(g.concepto)} — <b>${money(g.monto)}</b>${fuenteTxt?` <span class="muted small">· ${fuenteTxt}</span>`:''}</span>
+        ${ed?`<div class="row" style="width:auto;gap:4px">
+          <button class="link icon-only" aria-label="Corregir el gasto ${escHtml(g.concepto)}" onclick="Org.editarGasto(${g.id})">✏️</button>
+          <button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar el gasto ${escHtml(g.concepto)}" onclick="Org.borrarGasto(${g.id})">✕</button>
+        </div>`:''}
+      </div>`;
+    }).join('') || '<p class="muted small">Sin gastos todavía.</p>';
+    // "Quién puso qué", en tres bloques (ya no es una sola lista): lo que
+    // pagó la caja, a quién hay que devolverle, y los aportes donados. Lo que
+    // no cae en ninguno de los tres es de antes de que existiera pagado_por
+    // (ni siquiera hay a quién atribuirlo): se dice aparte en vez de
     // callarlo, si no el resumen parece una cuenta mal hecha.
-    const listaAportes=h.aportes||[];
-    const sumaAportes=listaAportes.reduce((s,a)=>s+Number(a.total||0),0);
-    const sinRegistrar=Number(h.total_gastado||0)-sumaAportes;
-    const aportes=listaAportes.length
-      ? `<div class="org-aportes"><b class="muted small">Quién puso qué</b>${listaAportes.map(a=>
-          `<div class="org-row"><span>${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')}
+    const totalCaja=Number(h.total_caja||0);
+    const porDevolver=h.por_devolver||[];
+    const aportesDonados=h.aportes_donados||[];
+    const sumaConocida=totalCaja
+      +porDevolver.reduce((s,a)=>s+Number(a.total||0),0)
+      +aportesDonados.reduce((s,a)=>s+Number(a.total||0),0);
+    const sinRegistrar=Number(h.total_gastado||0)-sumaConocida;
+    const hayResumen=totalCaja>0||porDevolver.length||aportesDonados.length||sinRegistrar>0;
+    const aportes=hayResumen
+      ? `<div class="org-aportes"><b class="muted small">Quién puso qué</b>
+          ${totalCaja>0?`<div class="org-row"><span>Pagó la caja de la iglesia</span><b>${money(totalCaja)}</b></div>`:''}
+          ${porDevolver.map(a=>`<div class="org-row"><span>Por devolver: ${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')}
+          ${aportesDonados.map(a=>`<div class="org-row"><span>Aporte donado: ${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')}
           ${sinRegistrar>0?`<div class="org-row muted small"><span>Sin registrar quién puso</span><b>${money(sinRegistrar)}</b></div>`:''}</div>`
       : '';
 
@@ -4249,13 +4270,18 @@ const Org = {
              tampoco (alli no hay cuentas que recibir). -->
         <div class="solo-rendicion">Recibí conforme: ______________________
           &nbsp;&nbsp;&nbsp; Fecha: ________________</div>
-        ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px">
+        ${ed?`<div class="row no-print" style="gap:6px;margin-top:10px;flex-wrap:wrap">
           <input id="org-gasto-concepto" placeholder="Ej. Pan">
           <input id="org-gasto-monto" type="number" min="1" placeholder="Monto" style="max-width:110px">
-          <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?">
+          <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?" onchange="Org.cambioQuienPago(this.value)">
             <option value="">Lo puse yo</option>
           </select>
-          <button class="btn small-btn" onclick="Org.addGasto()">Añadir</button></div>`:''}
+          <select id="org-gasto-fuente" style="max-width:130px" title="¿Se le devuelve?">
+            <option value="devuelve">Se devuelve</option>
+            <option value="aporte">Es un aporte</option>
+          </select>
+          <button class="btn small-btn" id="org-gasto-guardar" onclick="Org.guardarGasto()">Añadir</button>
+          <button class="link" id="org-gasto-cancelar" style="display:none" onclick="Org.cancelarEdicionGasto()">Cancelar</button></div>`:''}
         ${ed?`<div class="no-print" style="margin-top:16px;text-align:right"><button class="link" style="color:var(--red-tx)" onclick="Org.borrarHoja()">🗑️ Borrar esta lista</button></div>`:''}
       </div>`;
     if(ed) Org._llenarQuienPago();
@@ -4266,9 +4292,30 @@ const Org = {
     const sel=$('org-gasto-quien'); if(!sel) return;
     try{
       if(!Org._personas) Org._personas=await api('/directorio');
-      sel.innerHTML='<option value="">Lo puse yo</option>'+
+      sel.innerHTML='<option value="">Lo puse yo</option><option value="caja">La caja de la iglesia</option>'+
         Org._personas.map(p=>`<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
-    }catch{ /* si falla, queda "Lo puse yo", que es el caso normal */ }
+    }catch{ /* si falla, quedan "Lo puse yo" y "La caja", que cubren el caso normal */ }
+    Org.cambioQuienPago(sel.value);
+  },
+  // El segundo selector (se devuelve / es un aporte) solo tiene sentido si hay
+  // una persona: si pago la caja no hay a quien devolverle nada, y si el gasto
+  // es de los antiguos "sin registrar" no se esta afirmando nada de nadie.
+  cambioQuienPago(valor){
+    const f=$('org-gasto-fuente');
+    if(f) f.style.display = (valor==='caja'||valor==='sin') ? 'none' : '';
+  },
+  // "Sin registrar quien puso" NO es una opcion al crear un gasto: ese conjunto
+  // esta cerrado y solo puede achicarse (ver el spec). Solo aparece mientras se
+  // corrige un gasto que YA estaba asi, para poder arreglarle el concepto o el
+  // monto sin verse obligado a inventarle un pagador.
+  _opcionSinRegistrar(mostrar){
+    const sel=$('org-gasto-quien'); if(!sel) return;
+    const ya=sel.querySelector('option[value="sin"]');
+    if(mostrar && !ya){
+      const o=document.createElement('option');
+      o.value='sin'; o.textContent='Sin registrar quién puso';
+      sel.appendChild(o);
+    }else if(!mostrar && ya){ ya.remove(); }
   },
   _personas:null,
   _recargar(){ if(Org._hoja) Org.abrir(Org._hoja.id); },
@@ -4295,15 +4342,63 @@ const Org = {
       catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
     }, {danger:true});
   },
-  async addGasto(){
-    const concepto=$('org-gasto-concepto').value.trim(); const monto=Number($('org-gasto-monto').value);
+  _gastoEditando:null,
+  // Abre el formulario ya lleno con los datos del gasto, para corregirlo. Los
+  // inputs son los mismos del alta: no hace falta un panel aparte.
+  editarGasto(id){
+    const g=(Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===id); if(!g) return;
+    Org._gastoEditando=id;
+    $('org-gasto-concepto').value=g.concepto;
+    $('org-gasto-monto').value=g.monto;
+    // Un gasto de los antiguos (sin fuente y sin pagador) NO se puede pintar
+    // como "Lo puse yo": esa opcion afirma que paga quien esta editando, y
+    // guardar una correccion de ortografia le adjudicaria una deuda que nadie
+    // contrajo. Para ese caso se anade la opcion "Sin registrar quien puso".
+    const sinRegistrar = g.fuente==null && g.pagado_por==null;
+    Org._opcionSinRegistrar(sinRegistrar);
+    const quien = sinRegistrar ? 'sin' : (g.fuente==='caja' ? 'caja' : String(g.pagado_por||''));
+    $('org-gasto-quien').value=quien;
+    Org.cambioQuienPago(quien);
+    $('org-gasto-fuente').value = g.fuente==='aporte' ? 'aporte' : 'devuelve';
+    $('org-gasto-guardar').textContent='Guardar cambios';
+    $('org-gasto-cancelar').style.display='inline-flex';
+    $('org-gasto-concepto').scrollIntoView({behavior:'smooth', block:'center'});
+  },
+  cancelarEdicionGasto(){
+    Org._gastoEditando=null;
+    Org._opcionSinRegistrar(false);   // no debe quedar disponible para un gasto NUEVO
+    $('org-gasto-concepto').value=''; $('org-gasto-monto').value='';
+    $('org-gasto-quien').value=''; Org.cambioQuienPago('');
+    $('org-gasto-fuente').value='devuelve';
+    $('org-gasto-guardar').textContent='Añadir';
+    $('org-gasto-cancelar').style.display='none';
+  },
+  // Sirve para añadir (Org._gastoEditando vacío) y para corregir (con id):
+  // mismo patrón que formNino/guardarNino en el módulo de Escuela Dominical.
+  async guardarGasto(){
+    const concepto=$('org-gasto-concepto').value.trim();
+    const monto=Number($('org-gasto-monto').value);
     if(!concepto) return toast('Escribe el concepto');
     if(!(monto>0)) return toast('El monto debe ser mayor a 0');
-    const quien=Number(($('org-gasto-quien')||{}).value)||null;   // vacío = lo puse yo
+    const quien=($('org-gasto-quien')||{}).value||'';   // '' = yo · 'caja' = caja · 'sin' = no tocar · id = otra persona
+    // 'sin' manda SOLO concepto y monto: sin fuente ni pagado_por, el PATCH
+    // deja los dos como estaban (ver la regla del backend en la Task 4). Es lo
+    // que permite corregir un gasto antiguo sin cambiar de quien es el dinero.
+    const cuerpo = quien==='sin'
+      ? {concepto,monto}
+      : quien==='caja'
+      ? {concepto,monto,fuente:'caja'}
+      : {concepto,monto,fuente:($('org-gasto-fuente')||{}).value||'devuelve',
+         pagado_por: quien?Number(quien):ME.persona.id};
+    const id=Org._gastoEditando;
     await conBoton(botonActual(), async()=>{
-      const cuerpo = quien ? {concepto,monto,pagado_por:quien} : {concepto,monto};
-      try{ await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)}); Org._recargar(); }
-      catch(e){ toast((e&&e.message)||'No se pudo añadir'); }
+      try{
+        if(id) await api('/organizacion/gastos/'+id,{method:'PATCH',body:JSON.stringify(cuerpo)});
+        else   await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)});
+        Org.cancelarEdicionGasto();
+        Org._recargar();
+        toast(id?'Gasto corregido':'Gasto añadido');
+      }catch(e){ toast((e&&e.message)||'No se pudo guardar'); }
     });
   },
   // Un gasto lleva el monto y quién puso el dinero: es el registro con el que se
