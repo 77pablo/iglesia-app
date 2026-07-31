@@ -557,11 +557,14 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
    > Los números de tests del plan **ya están corregidos** partiendo de 456 (llega a 473).
 
 #### Decidido, pero sin spec todavía
-3. **Mensajes del portal público.** Informe completo en el scratchpad de la sesión (`portal-publico-mensajes.md`). **Está fallando ahora con gente real:** `contacto_publico` se escribe y **no la lee nadie** — cero `SELECT` en todo el proyecto. La notificación al pastor sí lleva el texto, pero **no se puede pulsar** y la pantalla de notificaciones **no tiene "ver más"** (el backend sí pagina), así que pasadas 50 notificaciones ese mensaje desaparece de la vista.
-   Decidido: **bandeja solo para el pastor**, y **el formulario NO se toca** (sigue sin pedir correo ni teléfono).
-   > ⚠️ **Consecuencia asumida:** la página pública seguirá prometiendo *"te contactaremos pronto"* sin poder cumplirlo. Se ofreció cambiar **esa frase** (no el formulario), que cuesta una línea; **pendiente de que el dueño lo confirme**.
-   > 📜 La Política de Privacidad **no menciona en ningún sitio** los datos de quien escribe desde el portal público. Cerrarlo antes o junto con la bandeja.
-   > 💡 La plantilla ya existe: **Cuidado Pastoral** es este mismo problema ya resuelto (lista con estado abierto/seguimiento/atendido).
+3. ✅ ~~**Mensajes del portal público.**~~ — **HECHO el 31 jul** (rama `feat/bandeja-y-historial-correcciones`, **local, sin fusionar a `main` ni desplegada**). Spec `docs/superpowers/specs/2026-07-31-bandeja-portal-publico-design.md`, plan `docs/superpowers/plans/2026-07-31-bandeja-portal-publico.md`. Suite en **469 tests** (partió en 456).
+   Se construyó: la columna `estado` en `contacto_publico` con el valor `previo` para lo que ya estaba guardado antes de que existiera la bandeja (migración de una sola vez, `migrarEstadoContactoPublico()`); la bandeja **solo para el pastor** (el obispo no la ve) con marcar-atendido; la notificación 📬 ahora se puede pulsar y lleva a la bandeja; Notificaciones gana **"Ver más"** (el backend ya paginaba, la pantalla no lo usaba); se quitaron las dos frases del portal que prometían "te contactaremos pronto" sin poder cumplirlo; y la sección **4.9** de la Política de Privacidad sobre datos de visitantes del portal, **en borrador para el abogado**.
+   > **Sigue sin resolver**, a propósito o por quedar fuera de alcance:
+   > 1. **No se puede responder desde la app**: el formulario sigue sin pedir correo ni teléfono (decisión del dueño). La única vía es que la persona lo escriba dentro del mensaje.
+   > 2. **La sección de mensajes anteriores puede no abrirse nunca.** Están contados y accesibles, pero nada obliga a mirarlos y no generan aviso.
+   > 3. **No se puede borrar un mensaje** ni marcar atendido en bloque.
+   > 4. **La fecha de Cuidado pastoral (`app.js:2076`) sigue con el fallo de UTC** — se ve el día siguiente para lo escrito después de las 20:00. El ayudante `fechaDeUTC` ya existe y lo arregla en una línea; se dejó fuera a propósito para no ensuciar este diff.
+   > 5. **La Política de Privacidad 4.9 está en borrador** y necesita al abogado.
 
 #### Acciones del dueño en Render (siguen abiertas, no son código)
 `SMTP_USER`/`SMTP_PASS` — sin ellas **nadie puede recuperar su contraseña** · `SUPERADMIN_PASSWORD` · comprobar en los logs que la zona horaria dice `America/Santiago` y no `UTC` · `LEGAL_CONTACT_EMAIL` solo **después** de que el abogado limpie los placeholders `[…]`.
