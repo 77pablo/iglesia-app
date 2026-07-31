@@ -50,9 +50,14 @@ vanilla JS (template strings en `innerHTML`) · tests `node:test`.
 - **Puramente aditivo:** ningún gasto ya guardado cambia de valor. La columna
   `fuente` nace `NULL` para todo lo existente y se lee como "no especificado",
   igual que ya se leía el `pagado_por` histórico.
-- La suite completa (`cd backend && npm test`) está en **456 tests en verde**
-  (medido el 31-jul-2026; este plan se escribió cuando eran 455, y **todos los
-  números de más abajo ya están corregidos a partir de 456**) y no debe bajar.
+- La suite completa (`cd backend && npm test`) está en **471 tests en verde**
+  (medido sobre `main` el 31-jul-2026, ya con la bandeja del portal público
+  fusionada; **todos los números de más abajo parten de 471** y el plan termina
+  en **494**) y no debe bajar.
+  > ⚠️ Este plan ya ha tenido que reajustar sus cifras **dos veces** porque otro
+  > trabajo se fusionó entretanto. **Mídelo antes de empezar** en vez de creerte
+  > este número: si no coincide, corrige los de abajo por el mismo desfase antes
+  > de escribir una sola línea.
 - Commits en castellano, minúsculas, `tipo(ámbito): efecto para la persona`.
   Sin coautoría ni menciones a Claude.
 
@@ -163,7 +168,7 @@ Expected: PASA — 1 test.
 - [ ] **Step 5: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **457 tests, 0 fail** (456 + 1).
+Expected: **472 tests, 0 fail** (471 + 1).
 
 - [ ] **Step 6: Commit**
 
@@ -336,7 +341,7 @@ Expected: PASA — 5 tests.
 - [ ] **Step 5: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **461 tests, 0 fail** (457 + 4).
+Expected: **476 tests, 0 fail** (472 + 4).
 
 - [ ] **Step 6: Commit**
 
@@ -551,7 +556,7 @@ en verde.
 - [ ] **Step 6: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **464 tests, 0 fail** (461 + 3).
+Expected: **479 tests, 0 fail** (476 + 3).
 
 - [ ] **Step 7: Commit**
 
@@ -827,7 +832,7 @@ Expected: PASA — 17 tests (el total del archivo).
 - [ ] **Step 5: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **473 tests, 0 fail** (464 + 9).
+Expected: **488 tests, 0 fail** (479 + 9).
 
 - [ ] **Step 6: Commit**
 
@@ -1198,7 +1203,7 @@ Comprobar, entrando como líder:
 - [ ] **Step 9: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **473, 0 fail** — esta tarea no toca backend; si el número cambia,
+Expected: **488, 0 fail** — esta tarea no toca backend; si el número cambia,
 algo se salió de alcance.
 
 - [ ] **Step 10: Commit**
@@ -1351,7 +1356,7 @@ Expected: PASA — 20 tests (el total del archivo).
 - [ ] **Step 7: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **476 tests, 0 fail** (473 + 3).
+Expected: **491 tests, 0 fail** (488 + 3).
 
 - [ ] **Step 8: Commit**
 
@@ -1557,7 +1562,7 @@ Comprobar, entrando como líder:
 - [ ] **Step 8: Correr la suite completa**
 
 Run: `cd backend && npm test`
-Expected: **479 tests, 0 fail** (476 + 3).
+Expected: **494 tests, 0 fail** (491 + 3).
 
 - [ ] **Step 9: Commit**
 
@@ -1579,7 +1584,7 @@ Añadir una sección con qué se construyó — la casilla `fuente` en
 `evento_org_gasto`, el `PATCH` para corregir gastos, el resumen partido en tres
 bloques, y **el historial de correcciones visible en la hoja y en la rendición
 impresa** (con `auditoria.ref_tabla`/`ref_id`) —, el número nuevo de tests
-(**479**), y **lo que sigue sin resolver**:
+(**494**), y **lo que sigue sin resolver**:
 
 1. Los gastos de la hoja de Organización siguen sin aparecer en **Tesorería**:
    sigue siendo el Camino C, no decidido.
