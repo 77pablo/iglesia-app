@@ -110,6 +110,29 @@ el nombre de una persona distinto rompería esa regla sin necesidad.
 más), tiene precedente de sincronización en el propio código, y el costo es
 una línea de SQL igual a la que ya existe en `cuenta.js`.
 
+### Un hueco de esta búsqueda, y por qué no cambia la conclusión
+
+*(Añadido el 31 jul 2026, al revisar el plan.)*
+
+La búsqueda se hizo por columnas con patrón `%_nombre`. **Ese patrón no
+encuentra las columnas que se llaman por su papel en vez de por su tipo**, y
+hay dos así: `predica.predicador` y `sermon.predicador` (`db.js:334` y `431`),
+las dos `TEXT`.
+
+Se comprobaron, y **no son copias de `persona.nombre`**: el formulario las
+rellena con un `<input>` de texto libre (`app.js:2631`, con el marcador de
+posición *"Quién predicó"*), no con un selector de personas. Pueden nombrar a
+un predicador invitado que no tiene cuenta en la app. Sincronizarlas sería
+incorrecto — no hay ninguna relación que sincronizar.
+
+⚠️ **Consecuencia asumida, y conviene tenerla escrita porque va a parecer un
+fallo:** si alguien escribió "juan perez" en el campo Predicador de una prédica
+y después corrige su nombre a "Juan Pérez", **la prédica sigue diciendo "juan
+perez"** — incluido en el **portal público**, que muestra ese campo
+(`publico.js:96`). No está roto: es texto libre, y se arregla editando esa
+prédica. Si algún día se quiere que el predicador sea una *persona* y no un
+texto, es un cambio de modelo aparte.
+
 ## Quién puede corregir — lo que la app ya hace en casos parecidos
 
 Se repasaron los tres módulos relevantes:
