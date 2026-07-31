@@ -7,7 +7,10 @@
 // ============================================================
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { cargarDb, reiniciar, sembrarMinimo } from './helpers.js';
 
 let db, srv, base, signToken, SEM;
@@ -77,6 +80,53 @@ test('🔴 la migracion es de UNA sola vez: llamarla otra vez no toca nada', asy
     'atendido', 'ni deshacer lo que el pastor ya atendio');
 });
 
+// 🔴 La prueba de arriba solo demuestra que la SEGUNDA llamada no hace nada.
+// Sin esta, la suite pasaria igual si el UPDATE de la migracion dijera
+// SET estado = 'atendido', o si la migracion no existiera: el dia del
+// despliegue el pastor abriria la bandeja y veria el muro de meses que todo
+// este diseno existe para evitar, sin ningun error que lo avisara antes.
+// Se monta una conexion propia con el esquema ANTERIOR a la columna 'estado'
+// (el que tendria una base real creada antes de que existiera la bandeja).
+test('🔴 la migracion, la PRIMERA vez, manda a "previo" lo que ya estaba', async () => {
+  const { migrarEstadoContactoPublico } = await import('../src/db.js');
+  const archivo = path.join(mkdtempSync(path.join(tmpdir(), 'iglesia-migracion-')), 'previa.db');
+  const conexion = new DatabaseSync(archivo);
+  conexion.exec(`
+    CREATE TABLE iglesia (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, codigo_unico TEXT NOT NULL UNIQUE
+    );
+    CREATE TABLE contacto_publico (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      iglesia_id  INTEGER NOT NULL REFERENCES iglesia(id),
+      nombre      TEXT NOT NULL,
+      mensaje     TEXT,
+      creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  const igId = Number(conexion.prepare(
+    "INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Vieja','VIEJAMIG')"
+  ).run().lastInsertRowid);
+  const insertar = nombre => Number(conexion.prepare(
+    'INSERT INTO contacto_publico (iglesia_id, nombre, mensaje) VALUES (?,?,?)'
+  ).run(igId, nombre, 'hola').lastInsertRowid);
+
+  const antes1 = insertar('Antes 1');
+  const antes2 = insertar('Antes 2');
+
+  migrarEstadoContactoPublico(conexion);
+
+  assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(antes1).estado,
+    'previo', 'lo que ya estaba guardado tiene que nacer "previo", no "nuevo" ni "atendido"');
+  assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(antes2).estado,
+    'previo');
+
+  const despues = insertar('Llega despues de migrar');
+  assert.equal(conexion.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(despues).estado,
+    'nuevo', 'una fila insertada DESPUES de migrar nace "nuevo" por el DEFAULT de la columna, no "previo"');
+
+  conexion.close();
+});
+
 // ---------- La bandeja ----------
 
 test('el pastor ve los mensajes de SU iglesia y no los de otra', async () => {
@@ -91,10 +141,13 @@ test('el pastor ve los mensajes de SU iglesia y no los de otra', async () => {
   assert.equal(d.items[0].mensaje, 'De mi iglesia');
 });
 
-test('un lider que no es pastor recibe 403', async () => {
-  mensaje('Algo');
+test('un lider que no es pastor recibe 403, y el 403 no filtra nada del contenido', async () => {
+  mensaje('Algo que el lider no deberia poder leer');
   const res = await fetch(base + '/api/publico/mensajes', { headers: H(SEM.lider) });
   assert.equal(res.status, 403);
+  const texto = await res.text();
+  assert.doesNotMatch(texto, /Algo que el lider no deberia poder leer/,
+    'un 403 nunca deberia traer de vuelta el mensaje que bloqueo');
 });
 
 test('la bandeja NO trae los "previo", pero si dice cuantos hay', async () => {
@@ -192,4 +245,17 @@ test('la bandeja escapa el nombre y el mensaje del visitante', () => {
   assert.match(cuerpo, /escHtml\(m\.mensaje\)/, 'el mensaje tambien');
   assert.doesNotMatch(cuerpo, /\$\{m\.nombre\}/, 'nunca el nombre crudo');
   assert.doesNotMatch(cuerpo, /\$\{m\.mensaje\}/, 'nunca el mensaje crudo');
+});
+
+// 🔴 De esta linea depende que la notificacion 📬 del portal se pueda pulsar:
+// sin el mapeo 'contacto_publico' -> 'mensajes_portal', _destinoNotif()
+// devuelve '' y abrirNotif() no navega a ningun lado (es el unico camino por
+// el que el pastor llega de verdad a la bandeja desde el aviso).
+test('_destinoNotif manda "contacto_publico" a la bandeja del portal', () => {
+  const src = readFileSync(new URL('../../web/app.js', import.meta.url), 'utf8');
+  const i = src.indexOf('function _destinoNotif');
+  assert.ok(i > 0, 'falta _destinoNotif en web/app.js');
+  const cuerpo = src.slice(i, src.indexOf('\n}', i));
+  assert.match(cuerpo, /contacto_publico\s*:\s*'mensajes_portal'/,
+    'sin este mapeo la notificacion del portal no se puede pulsar');
 });

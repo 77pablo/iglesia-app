@@ -604,14 +604,22 @@ agregarColumna('iglesia', 'activa', 'INTEGER NOT NULL DEFAULT 1');
 //                 mentira: la app afirmaria que el pastor lo atendio) ni
 //                 'nuevo' (la primera apertura serian meses de deuda de golpe).
 //
-// OJO: esta funcion se exporta SOLO para que una prueba pueda llamarla dos
-// veces y demostrar que la segunda no hace nada. El UPDATE tiene que quedar
-// DENTRO de la guarda: fuera, correria en cada arranque y mandaria a 'previo'
-// todos los mensajes nuevos, sin dar ningun error y dejando la bandeja ciega.
-export function migrarEstadoContactoPublico() {
-  if (columnaExiste('contacto_publico', 'estado')) return;
-  agregarColumna('contacto_publico', 'estado', "TEXT NOT NULL DEFAULT 'nuevo'");
-  db.exec("UPDATE contacto_publico SET estado = 'previo'");
+// OJO: esta funcion se exporta para que las pruebas puedan llamarla dos veces
+// (y demostrar que la segunda no hace nada) y tambien contra una conexion
+// propia con el esquema ANTERIOR a la columna (y demostrar que la primera vez
+// hace lo correcto: mandar a 'previo' lo que ya estaba, no lo que llega despues).
+// El UPDATE tiene que quedar DENTRO de la guarda: fuera, correria en cada
+// arranque y mandaria a 'previo' todos los mensajes nuevos, sin dar ningun
+// error y dejando la bandeja ciega.
+//
+// conexion = db por defecto: la llamada de mas abajo (al cargar el modulo)
+// sigue migrando la base real sin pasar nada.
+export function migrarEstadoContactoPublico(conexion = db) {
+  const yaExiste = conexion.prepare("PRAGMA table_info(contacto_publico)").all()
+    .some(c => c.name === 'estado');
+  if (yaExiste) return;
+  conexion.exec("ALTER TABLE contacto_publico ADD COLUMN estado TEXT NOT NULL DEFAULT 'nuevo'");
+  conexion.exec("UPDATE contacto_publico SET estado = 'previo'");
 }
 migrarEstadoContactoPublico();
 
