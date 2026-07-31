@@ -375,3 +375,44 @@ test('corregir un gasto deja la referencia apuntando a la HOJA, no al gasto', as
   assert.equal(log.ref_id, hojaId, 'apunta a la hoja: si se borra el gasto, su correccion no queda huerfana');
   assert.notEqual(log.ref_id, id, 'NO al gasto');
 });
+
+// ---------- El historial, en la hoja ----------
+
+test('la hoja devuelve sus correcciones, con el nombre de quien corrigio', async () => {
+  const b = await servidor();
+  const S = sembrar('HIST');
+  const { hojaId, auth } = await hoja(b, S);
+  const res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Pan', monto: 12000 }) });
+  const { id } = await res.json();
+
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 8000 }) });
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hojaRes.correcciones.length, 1);
+  assert.equal(hojaRes.correcciones[0].actor_nombre, 'Lider');
+  assert.match(hojaRes.correcciones[0].detalle, /\$12\.000/);
+  assert.match(hojaRes.correcciones[0].detalle, /\$8\.000/);
+});
+
+test('una hoja sin correcciones devuelve la lista vacia, no undefined', async () => {
+  const b = await servidor();
+  const S = sembrar('SINC');
+  const { hojaId, auth } = await hoja(b, S);
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.deepEqual(hojaRes.correcciones, []);
+});
+
+test('borrar el gasto NO borra su correccion del historial de la hoja', async () => {
+  const b = await servidor();
+  const S = sembrar('BORR');
+  const { hojaId, auth } = await hoja(b, S);
+  const res = await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Pan', monto: 12000 }) });
+  const { id } = await res.json();
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 8000 }) });
+
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'DELETE', headers: auth });
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hojaRes.correcciones.length, 1, 'es justo el caso en que mas importa que el rastro siga ahi');
+});

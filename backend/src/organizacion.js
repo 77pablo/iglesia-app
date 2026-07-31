@@ -135,11 +135,22 @@ function armarHoja(org) {
       WHERE g.org_id = ? AND g.fuente = 'aporte'
       GROUP BY g.pagado_por, p.nombre ORDER BY total DESC, p.nombre`
   ).all(org.id);
+  // El historial de correcciones de ESTA hoja. Viaja con la hoja (que ya es una
+  // sola respuesta) en vez de por una ruta aparte: son cero filas en el caso
+  // normal. Acotado tambien por iglesia_id, no solo por la referencia.
+  const correcciones = db.prepare(
+    `SELECT a.id, a.detalle, a.fecha, p.nombre AS actor_nombre
+       FROM auditoria a LEFT JOIN persona p ON p.id = a.actor_id
+      WHERE a.ref_tabla = 'evento_org' AND a.ref_id = ? AND a.iglesia_id = ?
+        AND a.accion = 'editar_gasto'
+      ORDER BY a.id DESC`
+  ).all(org.id, org.iglesia_id);
   const evento = org.evento_id
     ? db.prepare('SELECT id, titulo, fecha, hora_inicio, lugar FROM evento WHERE id = ?').get(org.evento_id)
     : null;
   return { ...org, evento, cosas, gastos, total_gastado: total,
-    total_caja: totalCaja, por_devolver: porDevolver, aportes_donados: aportesDonados };
+    total_caja: totalCaja, por_devolver: porDevolver, aportes_donados: aportesDonados,
+    correcciones };
 }
 
 // Obtiene el row de la hoja y valida edición. Responde 404/403 y devuelve null,

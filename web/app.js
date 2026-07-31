@@ -4222,6 +4222,16 @@ const Org = {
       +aportesDonados.reduce((s,a)=>s+Number(a.total||0),0);
     const sinRegistrar=Number(h.total_gastado||0)-sumaConocida;
     const hayResumen=totalCaja>0||porDevolver.length||aportesDonados.length||sinRegistrar>0;
+    // Historial de correcciones de la hoja. Solo aparece si hubo alguna.
+    // escHtml en las dos cosas: el detalle lleva DENTRO el concepto que tecleó
+    // una persona (y con comillas dobles: `"Pan" $12.000 -> "Pan" $8.000`), y
+    // el nombre sale de la base de datos.
+    const correcciones=(h.correcciones||[]).length
+      ? `<div class="org-aportes" style="margin-top:14px"><b class="muted small">Correcciones</b>
+          ${h.correcciones.map(c=>`<div class="org-row"><span class="muted small">
+            ${escHtml(c.actor_nombre||'Alguien')} · ${escHtml(c.detalle||'')}</span>
+            <span class="muted small">${escHtml(fechaDeUTC(c.fecha))}</span></div>`).join('')}</div>`
+      : '';
     const aportes=hayResumen
       ? `<div class="org-aportes"><b class="muted small">Quién puso qué</b>
           ${totalCaja>0?`<div class="org-row"><span>Pagó la caja de la iglesia</span><b>${money(totalCaja)}</b></div>`:''}
@@ -4269,6 +4279,7 @@ const Org = {
         <div id="org-gastos">${gastos}</div>
         <div class="org-total">Total gastado: <b>${money(h.total_gastado)}</b></div>
         ${aportes}
+        ${correcciones}
         <!-- Solo en el papel de rendicion: el tesorero firma que recibio las
              cuentas. En pantalla no pinta nada, y en la hoja de la puerta
              tampoco (alli no hay cuentas que recibir). -->
