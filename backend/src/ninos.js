@@ -92,6 +92,32 @@ r.patch('/ninos/:id', soloEncargado, validar(editarNinoSchema), (req, res) => {
   res.json({ ok: true });
 });
 
+// Borrar la ficha, y con ella su historial de asistencia. La asistencia de
+// ninos se retiro de la app el 30 jul: ese historial ya no lo muestra ninguna
+// pantalla, asi que conservarlo seria guardar datos de un menor que nadie
+// puede consultar. Decision explicita del dueno.
+r.delete('/ninos/:id', soloEncargado, (req, res) => {
+  // Acotado por iglesia en la MISMA consulta (ver comentario en el PATCH de arriba).
+  const nino = db.prepare('SELECT id, nombre FROM nino WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, req.user.iglesia_id);
+  if (!nino) return res.status(404).json({ error: 'Niño no encontrado' });
+
+  // Las asistencias van PRIMERO: asistencia_nino.nino_id referencia nino(id), y
+  // al reves salta FOREIGN KEY constraint failed. En transaccion, para no dejar
+  // asistencias huerfanas si algo falla a medias.
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM asistencia_nino WHERE nino_id = ?').run(nino.id);
+    db.prepare('DELETE FROM nino WHERE id = ?').run(nino.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo eliminar al niño' });
+  }
+  auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_nino', 'ninos', nino.nombre);
+  res.json({ ok: true });
+});
+
 // --- Material / lecciones ---
 r.get('/clase/:id/material', (req, res) => {
   if (!claseDeIglesia(req.params.id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });

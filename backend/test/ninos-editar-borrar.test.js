@@ -119,3 +119,86 @@ test('una lista de autorizados larguisima -> 400 en castellano', async () => {
   const { error } = await res.json();
   assert.doesNotMatch(error, /autorizados/, 'no debe soltarle al usuario el nombre tecnico del campo');
 });
+
+// ------------------------------------------------------------
+//  Borrar la ficha, y con ella su historial de asistencia.
+//  Ese historial ya no lo muestra ninguna pantalla (la asistencia de ninos se
+//  retiro el 30 jul), asi que conservarlo seria guardar datos de un menor que
+//  nadie puede consultar.
+// ------------------------------------------------------------
+const borrar = (persona, id, iglesiaId) => fetch(base + '/api/ninos/ninos/' + id, {
+  method: 'DELETE', headers: H(persona, iglesiaId)
+});
+
+test('borrar un nino con asistencias historicas se lleva las dos cosas', async () => {
+  conEncargada();
+  const { claseId, ninoId } = claseConNino('Sofia');
+  db.prepare('INSERT INTO asistencia_nino (clase_id, nino_id, fecha) VALUES (?,?,?)')
+    .run(claseId, ninoId, '2026-07-05');
+  db.prepare('INSERT INTO asistencia_nino (clase_id, nino_id, fecha) VALUES (?,?,?)')
+    .run(claseId, ninoId, '2026-07-12');
+
+  const res = await borrar(SEM.lider, ninoId);
+  assert.equal(res.status, 200);
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM nino WHERE id = ?').get(ninoId).n, 0);
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM asistencia_nino WHERE nino_id = ?').get(ninoId).n, 0,
+    'no deben quedar asistencias huerfanas apuntando a un nino que ya no existe'
+  );
+});
+
+test('borrar un nino sin historial funciona igual', async () => {
+  conEncargada();
+  const { ninoId } = claseConNino('Mateo');
+  assert.equal((await borrar(SEM.lider, ninoId)).status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM nino').get().n, 0);
+});
+
+test('borrar NO se lleva por delante a los demas ninos ni sus asistencias', async () => {
+  conEncargada();
+  const { claseId, ninoId } = claseConNino('Sofia');
+  const otro = Number(db.prepare('INSERT INTO nino (iglesia_id, clase_id, nombre) VALUES (?,?,?)')
+    .run(SEM.iglesiaId, claseId, 'Mateo').lastInsertRowid);
+  db.prepare('INSERT INTO asistencia_nino (clase_id, nino_id, fecha) VALUES (?,?,?)')
+    .run(claseId, otro, '2026-07-05');
+
+  await borrar(SEM.lider, ninoId);
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM nino WHERE id = ?').get(otro).n, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM asistencia_nino WHERE nino_id = ?').get(otro).n, 1);
+});
+
+test('un encargado de OTRA iglesia recibe 404 y el nino sigue ahi', async () => {
+  conEncargada();
+  const { ninoId } = claseConNino('Sofia');
+
+  const otraIglesia = Number(db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRA')")
+    .run().lastInsertRowid);
+  const otroGrupo = Number(db.prepare("INSERT INTO grupo (iglesia_id, nombre, color) VALUES (?, 'Ninos', '#2f7')")
+    .run(otraIglesia).lastInsertRowid);
+  const ajeno = Number(db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo) VALUES (?,'ed2','Encargada Ajena','x',1)"
+  ).run(otraIglesia).lastInsertRowid);
+  db.prepare('INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?,?)').run(ajeno, otroGrupo, 'lider_ed');
+
+  assert.equal((await borrar({ id: ajeno }, ninoId, otraIglesia)).status, 404);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM nino WHERE id = ?').get(ninoId).n, 1);
+});
+
+test('el pastor solo observa: 403 al borrar', async () => {
+  conEncargada();
+  const { ninoId } = claseConNino();
+  assert.equal((await borrar(SEM.pastor, ninoId)).status, 403);
+});
+
+test('borrar queda auditado', async () => {
+  conEncargada();
+  const { ninoId } = claseConNino('Sofia');
+  await borrar(SEM.lider, ninoId);
+
+  const log = db.prepare("SELECT accion, modulo, detalle FROM auditoria WHERE accion = 'eliminar_nino'").get();
+  assert.ok(log, 'borrar la ficha de un menor tiene que dejar rastro');
+  assert.equal(log.modulo, 'ninos');
+  assert.match(log.detalle, /Sofia/);
+});
