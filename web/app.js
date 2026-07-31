@@ -3077,6 +3077,8 @@ async function vistaPerfilDirectorio(){
         <input id="dp-foto" type="file" accept="image/*"/>
       </div>
     </div>
+    <label for="dp-nombre">Nombre</label>
+    <input id="dp-nombre" value="${escHtml(ME.persona.nombre||'')}" maxlength="120"/>
     <label for="dp-tel">Teléfono</label>
     <input id="dp-tel" type="tel" value="${p.telefono?String(p.telefono).replace(/"/g,'&quot;'):''}" placeholder="Ej. +56 9 1234 5678"/>
     <label for="dp-email" style="margin-top:10px">Correo</label>
@@ -3091,6 +3093,7 @@ async function vistaPerfilDirectorio(){
 }
 async function guardarPerfilDirectorio(){
   const body={
+    nombre:$('dp-nombre').value.trim(),
     telefono:$('dp-tel').value.trim(),
     email:$('dp-email').value.trim(),
     cumple:fechaSelectValor('dp-cumple'),
@@ -3102,6 +3105,7 @@ async function guardarPerfilDirectorio(){
     try{
       if(file) body.foto_url=await uploadArchivo(file);
       await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
+      if(ME.persona) ME.persona.nombre=body.nombre;
       toast('✅ Perfil actualizado');
       vistaDirectorio();
     }catch(e){ toast(e.message); }
