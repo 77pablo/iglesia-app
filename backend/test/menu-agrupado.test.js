@@ -152,6 +152,28 @@ test('en el umbral o por encima devuelve los grupos, con titulo', () => {
   assert.deepEqual(repartidas.slice().sort(), muchas.slice().sort());
 });
 
+test('el modo agrupado sale en el orden de GRUPOS_NAV, no en el del NAV', () => {
+  // ⚠️ La prueba de arriba ordena con .sort() antes de comparar, o sea DESCARTA
+  // el orden a proposito — y el orden es justo lo unico que ve la persona. Por
+  // ese hueco paso tres commits en verde un fallo que reordenaba el menu del
+  // escritorio. Aqui el orden SI se afirma.
+  const agruparNav = cargarAgrupar();
+  const salida = agruparNav(CLAVES_NAV.slice()).flatMap(g => g.claves);
+
+  // Lo esperado: los grupos en el orden en que estan escritos, y dentro de cada
+  // uno sus claves en el orden en que estan escritas.
+  assert.deepEqual(salida, clavesDeGrupos(recortarLista('GRUPOS_NAV')),
+    'el reparto no respeta el orden de GRUPOS_NAV');
+
+  // Y dos hechos escritos a mano, para que esto no sea comparar el archivo
+  // consigo mismo: en el NAV 'mi_servicio' va ANTES que 'predica', y agrupado
+  // tiene que ser al reves ("Dia a dia" incluye predica y va antes que "Lo mio").
+  assert.ok(CLAVES_NAV.indexOf('mi_servicio') < CLAVES_NAV.indexOf('predica'),
+    'cambio el NAV: este caso ya no demuestra lo que pretendia');
+  assert.ok(salida.indexOf('predica') < salida.indexOf('mi_servicio'),
+    'agrupado sale en el orden del NAV: el reparto por temas no se esta aplicando');
+});
+
 test('en el umbral EXACTO ya se agrupa, y ningun grupo vacio se pinta', () => {
   const agruparNav = cargarAgrupar();
   // 12 claves: el umbral exacto, elegidas para que al menos un grupo quede vacio.
@@ -165,4 +187,75 @@ test('en el umbral EXACTO ya se agrupa, y ningun grupo vacio se pinta', () => {
     'en modo agrupado toda seccion lleva encabezado');
   assert.ok(r.every(g => g.claves.length > 0),
     'un encabezado sin nada debajo es ruido: no debe pintarse');
+});
+
+test('a 11 entradas, una menos que el umbral, todavia NO se agrupa', () => {
+  // Con solo el 9 de "por debajo" y el 12 del umbral, en medio quedaba un hueco:
+  // NAV_UMBRAL_GRUPOS podia valer 10, 11 o 12 y la suite entera seguia en verde.
+  // Con el par 11/12 el numero queda clavado por los dos lados.
+  //
+  // Y el 11 no es un numero cualquiera: un lider de cuerpo esta EXACTAMENTE en
+  // 12, al borde. Si mañana pierde un modulo cae a 11, y ahi su menu no debe
+  // cambiar de estructura entera.
+  const agruparNav = cargarAgrupar();
+  const once = CLAVES_NAV.slice(0, 11);
+  const r = agruparNav(once);
+  assert.equal(r.length, 1, 'a 11 entradas todavia no se agrupa: el umbral es 12');
+  assert.equal(r[0].titulo, null, 'sin titulo = sin encabezado que pintar');
+  assert.deepEqual(r[0].claves, once, 'y conserva el orden que traia');
+});
+
+// --- el cableado de buildNav ---------------------------------------------------
+//
+// ⚠️ Honestidad sobre lo que sigue: NO prueba el render. Este proyecto no tiene
+// banco de pruebas de navegador, asi que lo de abajo mira el TEXTO FUENTE de
+// buildNav y de la hoja de estilos. No dice que el menu se pinte bien; solo evita
+// que alguien reescriba buildNav y deje las pruebas de arriba en verde
+// comparando NAV contra GRUPOS_NAV mientras el menu real hace otra cosa.
+function fuenteDeBuildNav() {
+  const i = fuente.indexOf('function buildNav(');
+  assert.ok(i >= 0, 'no se encontro buildNav en web/app.js');
+  let saldo = 0, fin = -1;
+  for (let j = fuente.indexOf('{', i); j < fuente.length; j++) {
+    if (fuente[j] === '{') saldo++;
+    else if (fuente[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
+  }
+  assert.ok(fin > 0, 'no se pudo cerrar buildNav');
+  return fuente.slice(i, fin);
+}
+
+test('buildNav sigue llamando a agruparNav y sigue colgando el badge de Mensajes', () => {
+  const cuerpo = fuenteDeBuildNav();
+  assert.ok(cuerpo.includes('agruparNav('),
+    'buildNav ya no llama a agruparNav: lo que prueban las demas pruebas dejaria de ser lo que ve la persona');
+  assert.ok(cuerpo.includes('nav-badge-mensajes'),
+    'buildNav ya no pinta el badge de mensajes sin leer');
+});
+
+test('el orden por temas se aplica SOLO en el movil', () => {
+  // El fallo que esto vigila: buildNav pintando el DOM en orden de grupo. Como
+  // agruparNav no consulta el ancho de pantalla, eso reordena TAMBIEN el
+  // escritorio, y ocultar los encabezados por CSS no deshace un reordenamiento
+  // hecho en el DOM. La solucion es `order` de flexbox, y `order` solo puede
+  // acotarse a un ancho desde la hoja de estilos.
+  const cuerpo = fuenteDeBuildNav();
+  assert.ok(cuerpo.includes("setProperty('--ord'"),
+    'buildNav ya no marca el orden del movil con --ord');
+
+  const CSS = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'styles.css'), 'utf8');
+  const i = CSS.indexOf('@media (max-width:900px){');
+  assert.ok(i >= 0, 'no se encontro el @media de 900px en web/styles.css');
+  let saldo = 0, fin = -1;
+  for (let j = CSS.indexOf('{', i); j < CSS.length; j++) {
+    if (CSS[j] === '{') saldo++;
+    else if (CSS[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
+  }
+  assert.ok(fin > 0, 'no se pudo cerrar el @media de 900px');
+
+  const movil = CSS.slice(i, fin);
+  const resto = CSS.slice(0, i) + CSS.slice(fin);
+  assert.ok(/order\s*:\s*var\(\s*--ord/.test(movil),
+    'el @media del movil ya no convierte --ord en order: el menu no se agrupara en el telefono');
+  assert.ok(!resto.includes('--ord'),
+    'hay un --ord fuera del @media de 900px: el escritorio quedaria reordenado, que es justo el fallo');
 });
