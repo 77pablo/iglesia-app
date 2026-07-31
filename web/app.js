@@ -1241,18 +1241,42 @@ async function verNotificaciones(){
     cont.className='';
     const botonLeer = d.noLeidas>0 ? `<div class="row" style="justify-content:flex-end;margin-bottom:10px">
       <button class="btn ghost small-btn" onclick="marcarLeidas()">Marcar todas como leídas</button></div>` : '';
-    cont.innerHTML=botonLeer + d.items.map(n=>{
-      const dest=_destinoNotif(n.tipo);
-      const accion=n.tipo==='aprobacion'?'Revisar y aprobar ›':(dest?'Ver ›':'');
-      return `<div class="notif-item ${n.leida?'':'no-leida'}" ${dest?`style="cursor:pointer" onclick="abrirNotif('${n.tipo}')"`:''}>
-      <div style="font-weight:600">${escHtml(n.titulo)}</div>${n.texto?`<div class="muted small">${escHtml(n.texto)}</div>`:''}
-      ${accion?`<div class="small" style="color:var(--primary);font-weight:600;margin-top:4px">${accion}</div>`:''}</div>`;
-    }).join('');
+    _notifOffset=0;
+    cont.innerHTML=botonLeer + `<div id="ln-lista">${d.items.map(filaNotif).join('')}</div>` +
+      (d.hayMas?'<button class="btn ghost small-btn" id="ln-mas" style="margin-top:10px" onclick="cargarMasNotificaciones()">Ver más</button>':'');
     actualizarCampana();
   }catch{ $('ln').innerHTML='<p class="error">No se pudieron cargar.</p>'; }
 }
+// Se saca a su propia función porque ahora la usan dos sitios: la carga inicial
+// y el "Ver más".
+function filaNotif(n){
+  const dest=_destinoNotif(n.tipo);
+  const accion=n.tipo==='aprobacion'?'Revisar y aprobar ›':(dest?'Ver ›':'');
+  return `<div class="notif-item ${n.leida?'':'no-leida'}" ${dest?`style="cursor:pointer" onclick="abrirNotif('${n.tipo}')"`:''}>
+    <div style="font-weight:600">${escHtml(n.titulo)}</div>${n.texto?`<div class="muted small">${escHtml(n.texto)}</div>`:''}
+    ${accion?`<div class="small" style="color:var(--primary);font-weight:600;margin-top:4px">${accion}</div>`:''}</div>`;
+}
+// El backend ya paginaba de 50 en 50 y mandaba hayMas (notificaciones.js:79-92);
+// esta pantalla simplemente nunca lo miró, así que pasadas 50 notificaciones las
+// viejas eran irrecuperables para cualquiera.
+let _notifOffset=0;
+async function cargarMasNotificaciones(){
+  await conBoton($('ln-mas'), async()=>{
+    const siguiente=_notifOffset+50;
+    try{
+      const d=await api('/notificaciones?offset='+siguiente);
+      _notifOffset=siguiente;
+      $('ln-lista').insertAdjacentHTML('beforeend', d.items.map(filaNotif).join(''));
+      if(!d.hayMas){ const b=$('ln-mas'); if(b) b.remove(); }
+    }catch(e){ toast(e.message); }
+  });
+}
 function _destinoNotif(tipo){
-  return {aprobacion:'calendario', musica:'musicos', grupo:'mi_grupo', recordatorio:'mi_servicio', predica:'predica'}[tipo]||'';
+  // contacto_publico: sin esta línea la notificación 📬 del portal no se puede
+  // pulsar (abrirNotif no navega si el destino es ''), y era el único aviso de
+  // que alguien había escrito.
+  return {aprobacion:'calendario', musica:'musicos', grupo:'mi_grupo', recordatorio:'mi_servicio',
+    predica:'predica', contacto_publico:'mensajes_portal'}[tipo]||'';
 }
 function abrirNotif(tipo){ const d=_destinoNotif(tipo); if(d) navTo(d); }
 async function marcarLeidas(){
