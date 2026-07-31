@@ -102,7 +102,7 @@
 
     <section class="portal-card">
       <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span> Planifica tu visita</h2>
-      <p class="muted small" style="margin-bottom:16px">Cuéntanos que quieres visitarnos o que necesitas y te contactaremos pronto.</p>
+      <p class="muted small" style="margin-bottom:16px">Cuéntanos que quieres visitarnos o que necesitas. Tu mensaje le llega directo al pastor.</p>
       <form id="form-contacto">
         <label for="fc-nombre">Tu nombre</label>
         <input id="fc-nombre" name="nombre" maxlength="120" required placeholder="Nombre completo" />
@@ -313,7 +313,7 @@
           })
           .then(function (r) {
             if (r.status !== 200) throw new Error((r.data && r.data.error) || 'No se pudo enviar tu mensaje.');
-            msgBox.textContent = '¡Gracias! Recibimos tu mensaje y te contactaremos pronto.';
+            msgBox.textContent = '¡Gracias! Tu mensaje ya le llegó al pastor.';
             msgBox.className = 'form-msg ok';
             form.reset();
           })
