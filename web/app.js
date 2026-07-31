@@ -2127,6 +2127,9 @@ async function atenderCaso(id){
 //  y no los leía nadie: no había ninguna pantalla que los mostrara.
 // ============================================================
 let _mpOffset=0, _mpPreviosOffset=0;
+// La seccion de "anteriores" es un desplegable de verdad: se abre Y se cierra.
+// _mpPreviosCargados evita volver a pedirlos al reabrir — plegar solo oculta.
+let _mpPreviosAbierto=false, _mpPreviosCargados=false, _mpPreviosTotal=0;
 
 // Un solo lugar para el chip de estado: lo usan filaMensajePortal (al listar)
 // y atenderMensajePortal (al marcar, sin recargar la tarjeta) — si vivieran
@@ -2160,7 +2163,7 @@ function filaMensajePortal(m){
 }
 
 async function vistaMensajesPortal(){
-  _mpOffset=0; _mpPreviosOffset=0;
+  _mpOffset=0; _mpPreviosOffset=0; _mpPreviosAbierto=false; _mpPreviosCargados=false; _mpPreviosTotal=0;
   $('content').innerHTML='<div id="mp" class="muted">Cargando…</div>';
   try{
     const d=await api('/publico/mensajes');
@@ -2171,10 +2174,12 @@ async function vistaMensajesPortal(){
     // La sección de los anteriores nace PLEGADA: es lo que evita que la primera
     // apertura sea un muro de meses acumulados. El número va a la vista para
     // que no se ignoren sin querer.
+    _mpPreviosTotal=d.previos;
     const previos = d.previos>0
-      ? `<button class="link" id="mp-ver-previos" style="margin-top:18px" onclick="verPreviosPortal()">
-           ▸ 📥 Mensajes anteriores a esta bandeja (${d.previos})</button>
-         <div id="mp-previos"></div>`
+      ? `<button class="link" id="mp-ver-previos" style="margin-top:18px"
+                 aria-expanded="false" aria-controls="mp-previos" onclick="verPreviosPortal()">
+           <span id="mp-previos-flecha">▸</span> 📥 <span id="mp-previos-txt">Mensajes anteriores a esta bandeja (${d.previos})</span></button>
+         <div id="mp-previos" style="display:none"></div>`
       : '';
     z.innerHTML=`<div id="mp-lista">${lista}</div>
       ${d.hayMas?'<button class="btn ghost small-btn" id="mp-mas" style="margin-top:10px" onclick="cargarMasMensajesPortal()">Ver más</button>':''}
@@ -2194,14 +2199,75 @@ async function cargarMasMensajesPortal(){
   });
 }
 
+// Abre y CIERRA la seccion de anteriores. Antes solo abria: la flecha ▸
+// prometia un desplegable y no habia forma de volver a plegarlo, asi que una vez
+// abierto el muro de meses se quedaba delante de lo nuevo hasta cambiar de
+// pantalla. La cabecera conserva siempre su etiqueta y su numero; la paginacion
+// vive DENTRO de la caja, para que plegar se la lleve tambien.
 async function verPreviosPortal(){
-  await conBoton($('mp-ver-previos'), async()=>{
+  const caja=$('mp-previos'), flecha=$('mp-previos-flecha'), btn=$('mp-ver-previos');
+  if(!caja) return;
+
+  if(_mpPreviosAbierto){
+    // Plegar no descarta nada: solo oculta. Al reabrir sigue lo que ya se trajo.
+    _mpPreviosAbierto=false;
+    caja.style.display='none';
+    if(flecha) flecha.textContent='▸';
+    if(btn) btn.setAttribute('aria-expanded','false');
+    return;
+  }
+
+  _mpPreviosAbierto=true;
+  caja.style.display='';
+  if(flecha) flecha.textContent='▾';
+  if(btn) btn.setAttribute('aria-expanded','true');
+  if(_mpPreviosCargados) return;   // ya estan en el DOM: no se vuelve a pedir
+
+  await conBoton(btn, async()=>{
     try{
-      const d=await api('/publico/mensajes?previos=1&offset='+_mpPreviosOffset);
-      $('mp-previos').insertAdjacentHTML('beforeend', d.items.map(filaMensajePortal).join(''));
-      const btn=$('mp-ver-previos');
-      if(d.hayMas){ _mpPreviosOffset+=50; if(btn) btn.textContent='Ver más anteriores'; }
-      else if(btn) btn.remove();
+      const d=await api('/publico/mensajes?previos=1&offset=0');
+      _mpPreviosOffset=0; _mpPreviosCargados=true;
+      caja.innerHTML=d.items.map(filaMensajePortal).join('');
+      if(d.hayMas) _mpAnadirBotonMasPrevios(caja);
+    }catch(e){
+      toast(e.message);
+      // Si fallo, se vuelve a PLEGAR del todo. Dejarla abierta y vacia era peor
+      // que no abrirla: la cabecera seguiria diciendo "(12)" sobre una caja sin
+      // nada —o sea, un numero que contradice lo que se ve— y el siguiente clic
+      // habria CERRADO en vez de reintentar, porque para el estado ya estaba
+      // abierta. Justo la clase de flecha que promete algo que no cumple, que es
+      // lo que este arreglo vino a quitar. Asi el clic obvio reintenta.
+      _mpPreviosCargados=false;
+      _mpPreviosAbierto=false;
+      caja.style.display='none';
+      if(flecha) flecha.textContent='▸';
+      if(btn) btn.setAttribute('aria-expanded','false');
+    }
+  });
+}
+
+// El "ver mas" de los anteriores va dentro de la caja plegable, no fuera: si
+// estuviera fuera seguiria visible con la seccion cerrada.
+function _mpAnadirBotonMasPrevios(caja){
+  const b=document.createElement('button');
+  b.className='btn ghost small-btn';
+  b.id='mp-previos-mas';
+  b.style.marginTop='10px';
+  b.textContent='Ver más anteriores';
+  b.onclick=cargarMasPreviosPortal;
+  caja.appendChild(b);
+}
+
+async function cargarMasPreviosPortal(){
+  await conBoton($('mp-previos-mas'), async()=>{
+    const siguiente=_mpPreviosOffset+50;
+    try{
+      const d=await api('/publico/mensajes?previos=1&offset='+siguiente);
+      _mpPreviosOffset=siguiente;
+      const b=$('mp-previos-mas');
+      // beforebegin: las filas nuevas van ANTES del boton, que sigue al final.
+      if(b) b.insertAdjacentHTML('beforebegin', d.items.map(filaMensajePortal).join(''));
+      if(!d.hayMas && b) b.remove();
     }catch(e){ toast(e.message); }
   });
 }
@@ -2215,6 +2281,17 @@ async function atenderMensajePortal(id){
     // la seccion de "mensajes anteriores" aunque el pastor la hubiera abierto.
     const acciones=$('mp-accion-'+id);
     if(acciones) acciones.innerHTML=chipMensajePortal('atendido');
+
+    // Si el que se atendio era uno de los ANTERIORES, baja el numero de la
+    // cabecera. Antes daba igual porque ese numero solo se veia con la seccion
+    // plegada y estando plegada no habia tarjetas que marcar; ahora que se puede
+    // volver a plegar, un numero sin bajar seria una cuenta que miente.
+    const caja=$('mp-previos');
+    if(caja && acciones && caja.contains(acciones) && _mpPreviosTotal>0){
+      _mpPreviosTotal--;
+      const txt=$('mp-previos-txt');
+      if(txt) txt.textContent=`Mensajes anteriores a esta bandeja (${_mpPreviosTotal})`;
+    }
   }catch(e){ toast(e.message); }
 }
 
