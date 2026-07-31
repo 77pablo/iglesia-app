@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; dos planes nuevos listos para ejecutar — **456 tests**, ⚠️ **15 commits SIN SUBIR**)*
+*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; dos planes nuevos listos para ejecutar — **456 tests**, ✅ **todo subido y desplegado**, verificado el 31 jul: `origin/main..main` vacío y el `app.js` de Render trae `autorizados` y `modalPrompt`)*
 
 ---
 
@@ -536,9 +536,9 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 31 jul 2026 — **456 tests en verde**, ⚠️ **14 commits SIN SUBIR**)
+### 👉 POR DÓNDE RETOMAR (al 31 jul 2026 — **456 tests en verde**, ✅ **todo subido y desplegado**)
 
-**Lo primero: subir.** `main` va 14 commits por delante de GitHub. Compruébalo de verdad con `git log origin/main..main --oneline` antes de creerte esta línea: en este documento esa frase ha estado equivocada en los dos sentidos.
+**Ya no hay nada pendiente de subir.** Verificado el 31 jul: `git log origin/main..main --oneline` no devuelve nada, y el `app.js` que sirve Render trae `autorizados`, `modalPrompt`, `escJsAttr` y `Prédica`. (Esta línea decía "14 commits SIN SUBIR"; era falsa. Compruébalo igual con esos dos comandos antes de creerte cualquier versión de esta frase: ha estado equivocada en los dos sentidos.)
 
 **Lo hecho el 31 jul:** la Fase 13 (quién puede retirar a cada niño) fusionada y verificada, la corrección del texto legal, y **cuatro documentos de diseño nuevos**.
 
