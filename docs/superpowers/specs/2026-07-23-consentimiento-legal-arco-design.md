@@ -101,7 +101,7 @@ historial que exige el principio "trazable + revocable".
   (nombre, usuario, correo, teléfono, cumpleaños, foto), grupos/pertenencias, e historial de
   consentimientos de la persona. El frontend lo descarga como archivo `.json`.
 - **Rectificación** — ya existe (editar perfil en Directorio / cuenta en Ajustes): solo se enlaza/menciona.
-  > ⚠️ **Nota del 31-jul-2026:** esto era falso para el nombre — ni "Mi perfil" ni "Cambiar mi cuenta"
+  > ⚠️ **Nota del 31-jul-2026:** esto era falso para el nombre — ni "Mi perfil" (Directorio) ni "👤 Mi cuenta" (Ajustes)
   > aceptaban ese campo, así que quien se registraba mal quedaba así para siempre. Cerrado con
   > `docs/superpowers/specs/2026-07-31-corregir-nombre-design.md`: ahora el propio directorio acepta
   > `nombre`, y para quien no puede hacerlo solo, el pastor lo corrige desde Administración.
