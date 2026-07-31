@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 30 de julio de 2026, tarde (los mensajes de error dejan de hablar en jerga, pulido de UX, y Escuela Dominical deja de pasar lista — **420 tests**, ⚠️ **SIN SUBIR**)*
+*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; dos planes nuevos listos para ejecutar — **456 tests**, ⚠️ **15 commits SIN SUBIR**)*
 
 ---
 
