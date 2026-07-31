@@ -2318,7 +2318,7 @@ function borrarNino(id){
   const x=(window._ninos||[]).find(n=>n.id===id)||{};
   modalConfirm(`¿Borrar la ficha de ${escHtml(x.nombre||'este niño')}?`, ()=>{
     modalConfirm('Se irá también su historial de asistencia. Esto NO se puede deshacer.', async()=>{
-      try{ await api('/ninos/ninos/'+id,{method:'DELETE'}); cargarNinos(); toast('Ficha borrada'); }
+      try{ await api('/ninos/ninos/'+id,{method:'DELETE'}); $('form-nino').innerHTML=''; cargarNinos(); toast('Ficha borrada'); }
       catch(e){ toast(e.message); }
     }, {okLabel:'Sí, borrar', danger:true});
   }, {okLabel:'Continuar', danger:true});
