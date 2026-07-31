@@ -626,12 +626,24 @@ function iniciarIconos(){
 
 function buildNav(){
   const nav=$('nav'); nav.innerHTML='';
-  NAV.filter(n=>tieneModulo(n[0])).forEach(([key,ic,label])=>{
-    const el=document.createElement('div');
-    el.className='nav-item'; el.dataset.key=key;
-    el.innerHTML=`<span class="ic">${NAV_ICON[key]||ic}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
-    el.onclick=()=>navTo(key);
-    nav.appendChild(el);
+  const visibles=NAV.filter(n=>tieneModulo(n[0])).map(n=>n[0]);
+  agruparNav(visibles).forEach(seccion=>{
+    // titulo null = modo plano: no se pinta encabezado ninguno.
+    if(seccion.titulo){
+      const h=document.createElement('div');
+      h.className='nav-sec';
+      // textContent, no innerHTML: los titulos son fijos, pero no hay motivo
+      // para abrir esa puerta en el menu.
+      h.textContent=seccion.titulo;
+      nav.appendChild(h);
+    }
+    seccion.claves.forEach(key=>{
+      const el=document.createElement('div');
+      el.className='nav-item'; el.dataset.key=key;
+      el.innerHTML=`<span class="ic">${NAV_ICON[key]||iconDe(key)}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
+      el.onclick=()=>navTo(key);
+      nav.appendChild(el);
+    });
   });
 }
 function navTo(key){
