@@ -2276,27 +2276,52 @@ async function cargarNinos(){
   const c=$('ninos-lista');
   try{ const n=await api('/ninos/clase/'+_claseActual+'/ninos'); window._ninos=n;
     c.className=n.length?'list':'muted';
-    c.innerHTML=n.length? n.map(x=>`<div class="item-card"><b>${escHtml(x.nombre)}</b>${x.edad?' <span class="muted small">'+escHtml(String(x.edad))+' años</span>':''}
+    const editar = esLiderEdUI();
+    c.innerHTML=n.length? n.map(x=>`<div class="item-card flex">
+      <div style="flex:1"><b>${escHtml(x.nombre)}</b>${x.edad?' <span class="muted small">'+escHtml(String(x.edad))+' años</span>':''}
       ${x.alergias?` <span class="estado-chip estado-rechazado">⚠️ ${escHtml(x.alergias)}</span>`:''}
       <div class="muted small">${x.familia?'Familia '+escHtml(x.familia):''}</div>
-      ${x.autorizados?`<div class="muted small">🤝 Puede retirarlo: ${escHtml(x.autorizados)}</div>`:''}</div>`).join('') : '<p class="small">Sin niños.</p>';
+      ${x.autorizados?`<div class="muted small">🤝 Puede retirarlo: ${escHtml(x.autorizados)}</div>`:''}</div>
+      ${editar?`<div class="row" style="width:auto;gap:8px">
+        <button class="btn ghost small-btn" aria-label="Corregir la ficha de ${escHtml(x.nombre)}" onclick="formNino(${x.id})">Editar</button>
+        <button class="btn ghost small-btn" aria-label="Borrar a ${escHtml(x.nombre)}" onclick="borrarNino(${x.id})">🗑️</button></div>`:''}</div>`).join('') : '<p class="small">Sin niños.</p>';
   }catch{
     if(c){ c.className='muted'; c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarNinos()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; }
     window._ninos=[];
   }
 }
-function formNino(){ const z=$('form-nino'); if(z.innerHTML){z.innerHTML='';return;}
+function formNino(id){ const z=$('form-nino'); if(z.innerHTML && !id){z.innerHTML='';return;}
+  const x=(window._ninos||[]).find(n=>n.id===id)||{};
   z.innerHTML=`<div class="form-panel">
-    <div class="row"><input id="n-nombre" placeholder="Nombre"/><input id="n-edad" type="number" placeholder="Edad" style="max-width:90px"/></div>
-    <input id="n-familia" placeholder="Familia" style="margin-top:10px"/>
-    <input id="n-alergias" placeholder="Alergias / notas" style="margin-top:10px"/>
+    <div class="row"><input id="n-nombre" placeholder="Nombre" value="${escHtml(x.nombre||'')}"/><input id="n-edad" type="number" placeholder="Edad" style="max-width:90px" value="${escHtml(String(x.edad||''))}"/></div>
+    <input id="n-familia" placeholder="Familia" style="margin-top:10px" value="${escHtml(x.familia||'')}"/>
+    <input id="n-alergias" placeholder="Alergias / notas" style="margin-top:10px" value="${escHtml(x.alergias||'')}"/>
     <label for="n-autorizados" style="margin-top:10px">Quién puede retirarlo</label>
-    <input id="n-autorizados" maxlength="300" placeholder="Ej. Ana Rojas (abuela), Juan Pérez (papá)"/>
+    <input id="n-autorizados" maxlength="300" placeholder="Ej. Ana Rojas (abuela), Juan Pérez (papá)" value="${escHtml(x.autorizados||'')}"/>
     <p class="muted small" style="margin-top:4px">Nombre y parentesco. No hace falta teléfono ni RUT.</p>
-    <button class="btn small-btn" style="margin-top:10px" onclick="guardarNino()">Guardar</button></div>`; }
-async function guardarNino(){
-  try{ await api('/ninos/ninos',{method:'POST',body:JSON.stringify({clase_id:_claseActual,nombre:$('n-nombre').value.trim(),edad:$('n-edad').value,familia:$('n-familia').value.trim(),alergias:$('n-alergias').value.trim(),autorizados:$('n-autorizados').value.trim()})});
-    $('form-nino').innerHTML=''; cargarNinos(); toast('Niño agregado'); }catch(e){ toast(e.message);} }
+    <button class="btn small-btn" style="margin-top:10px" onclick="guardarNino(${id||0})">${id?'Guardar cambios':'Guardar'}</button></div>`; }
+async function guardarNino(id){
+  const nombre=$('n-nombre').value.trim();
+  if(!nombre) return toast('Pon el nombre');
+  const datos={nombre,edad:$('n-edad').value,familia:$('n-familia').value.trim(),
+    alergias:$('n-alergias').value.trim(),autorizados:$('n-autorizados').value.trim()};
+  await conBoton(botonActual(), async()=>{
+    try{
+      if(id) await api('/ninos/ninos/'+id,{method:'PATCH',body:JSON.stringify(datos)});
+      else   await api('/ninos/ninos',{method:'POST',body:JSON.stringify({clase_id:_claseActual,...datos})});
+      $('form-nino').innerHTML=''; cargarNinos(); toast(id?'Ficha corregida':'Niño agregado');
+    }catch(e){ toast(e.message); }
+  }, 'Guardando…');
+}
+function borrarNino(id){
+  const x=(window._ninos||[]).find(n=>n.id===id)||{};
+  modalConfirm(`¿Borrar la ficha de ${escHtml(x.nombre||'este niño')}?`, ()=>{
+    modalConfirm('Se irá también su historial de asistencia. Esto NO se puede deshacer.', async()=>{
+      try{ await api('/ninos/ninos/'+id,{method:'DELETE'}); cargarNinos(); toast('Ficha borrada'); }
+      catch(e){ toast(e.message); }
+    }, {okLabel:'Sí, borrar', danger:true});
+  }, {okLabel:'Continuar', danger:true});
+}
 // Aquí vivían renderAsistNinos() y guardarAsistNinos(): pasar lista de los
 // niños. Se retiraron el 30 jul 2026 porque la iglesia no la usa. La tabla
 // asistencia_nino se conserva en la base de datos con lo ya anotado.
