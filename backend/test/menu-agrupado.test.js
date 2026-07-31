@@ -36,24 +36,48 @@ function recortarLista(nombre) {
   return fuente.slice(fuente.indexOf('[', i), fin);
 }
 
-const clavesDe = txt => [...txt.matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
-
 // Las claves del NAV son el PRIMER elemento de cada terna ['clave','icono','Etiqueta'].
 const CLAVES_NAV = [...recortarLista('NAV').matchAll(/\['([a-z_]+)'/g)].map(m => m[1]);
 
-test('cada clave del NAV pertenece a exactamente un grupo', () => {
+// Saca las claves SOLO de los arrays `claves: [...]`, nunca del bloque entero.
+//
+// ⚠️ Esto NO es quisquillosidad. Barriendo todo el bloque, un titulo tambien
+// entraria: hoy no pasa porque los titulos llevan mayusculas, tildes o espacios
+// y no casan con [a-z_]+, pero basta que alguien escriba `titulo: 'admin'` — un
+// copy-paste, un grupo renombrado — para que esa palabra cuente como "asignada"
+// SIN estarlo en ningun `claves: [...]`. Y entonces esta prueba diria que todo
+// esta cubierto justo cuando esa entrada ha desaparecido del menu. O sea: la
+// prueba enmascararia el unico fallo que existe para atrapar.
+function clavesAsignadas() {
   const bloque = recortarLista('GRUPOS_NAV');
-  // Dentro de GRUPOS_NAV, los titulos van con comillas tambien; se filtran
-  // quedandose solo con lo que existe en el NAV, y luego se comprueba al reves.
-  const enGrupos = clavesDe(bloque).filter(c => CLAVES_NAV.includes(c));
+  const arrays = [...bloque.matchAll(/claves:\s*\[([^\]]*)\]/g)].map(m => m[1]);
+  assert.ok(arrays.length, 'no se encontro ningun `claves: [...]` en GRUPOS_NAV');
+  return arrays.flatMap(a => [...a.matchAll(/'([a-z_]+)'/g)].map(m => m[1]));
+}
+
+test('cada clave del NAV pertenece a exactamente un grupo', () => {
+  const enGrupos = clavesAsignadas();
 
   const sinAsignar = CLAVES_NAV.filter(k => !enGrupos.includes(k));
+  const inventadas = enGrupos.filter(k => !CLAVES_NAV.includes(k));
   const duplicadas = enGrupos.filter((k, i) => enGrupos.indexOf(k) !== i);
 
   assert.deepEqual(sinAsignar, [],
     'estas entradas del NAV no estan en ningun grupo: desapareceran del menu agrupado sin dar error');
+  assert.deepEqual(inventadas, [],
+    'estas claves estan en un grupo pero no existen en el NAV: no pintaran nada');
   assert.deepEqual(duplicadas, [], 'estas entradas estan en dos grupos a la vez');
   assert.equal(enGrupos.length, CLAVES_NAV.length);
+});
+
+test('un titulo que coincida con una clave real no puede colar como asignada', () => {
+  // Se comprueba el EXTRACTOR, no el contenido de hoy: es la fisura por la que
+  // la prueba de arriba podria pasar en verde con una entrada desaparecida.
+  const arrays = [...`[
+    { titulo: 'admin', claves: ['inicio'] },
+  ]`.matchAll(/claves:\s*\[([^\]]*)\]/g)].map(m => m[1]);
+  const sacadas = arrays.flatMap(a => [...a.matchAll(/'([a-z_]+)'/g)].map(m => m[1]));
+  assert.deepEqual(sacadas, ['inicio'], 'el titulo no puede contarse como clave asignada');
 });
 
 // --- la funcion de reparto, ejecutada de verdad -------------------------------
@@ -110,11 +134,17 @@ test('en el umbral o por encima devuelve los grupos, con titulo', () => {
   assert.deepEqual(repartidas.slice().sort(), muchas.slice().sort());
 });
 
-test('un grupo sin entradas visibles no se pinta', () => {
+test('en el umbral EXACTO ya se agrupa, y ningun grupo vacio se pinta', () => {
   const agruparNav = cargarAgrupar();
-  // 12 claves (el umbral exacto) elegidas para que al menos un grupo quede vacio.
+  // 12 claves: el umbral exacto, elegidas para que al menos un grupo quede vacio.
   const visibles = CLAVES_NAV.slice(0, 12);
   const r = agruparNav(visibles);
+  // Sin estas dos lineas, cambiar `<` por `<=` en agruparNav devolveria el modo
+  // PLANO con 12 entradas —un solo "grupo" sin titulo— y la asercion de abajo
+  // seguiria en verde, porque ese unico grupo tambien tiene claves.length > 0.
+  assert.ok(r.length > 1, 'a 12 entradas ya toca agrupar: el umbral es "12 o mas"');
+  assert.ok(r.every(g => typeof g.titulo === 'string' && g.titulo.length),
+    'en modo agrupado toda seccion lleva encabezado');
   assert.ok(r.every(g => g.claves.length > 0),
     'un encabezado sin nada debajo es ruido: no debe pintarse');
 });
