@@ -3074,6 +3074,15 @@ async function vistaPerfilDirectorio(){
   let p;
   try{ p=await api('/directorio/perfil'); }
   catch{ $('dir-perfil').innerHTML='<p class="error">No se pudo cargar tu perfil · <a href="javascript:vistaPerfilDirectorio()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; return; }
+  // Punto de reconciliacion de ME: es la unica pantalla que pide el perfil
+  // entero al servidor. ME solo se carga al abrir la app y no se refresca nunca,
+  // asi que si el PASTOR te corrige el nombre, la barra lateral y el saludo del
+  // panel ("Hola, Juan") seguian con el viejo mientras esta pantalla ya ensenaba
+  // el nuevo: la app mostrando dos nombres tuyos a la vez.
+  if(ME.persona && p.nombre && ME.persona.nombre!==p.nombre){
+    ME.persona.nombre=p.nombre;
+    pintarUsuarioLateral();
+  }
   const z=$('dir-perfil'); z.className='';
   // Todo el formulario se prellena con `p` —lo que ACABA de responder
   // /directorio/perfil—, incluido el nombre. Con ME.persona.nombre (una cache
