@@ -104,6 +104,31 @@ Solo uno mismo marca (nadie por otro) · **el líder ve el motivo, como ya hací
 
 ---
 
+## 🆕 FASE 13 (31 jul 2026): Quién puede retirar a cada niño
+
+**455 tests.** Rama `feat/retiro-seguro-ninos`. Spec en `docs/superpowers/specs/2026-07-30-retiro-seguro-ninos-design.md`, plan en `docs/superpowers/plans/2026-07-30-retiro-seguro-ninos.md`.
+
+**La escena:** termina la Escuela Dominical, un adulto que la maestra no conoce dice *"vengo por la Sofi"*, y **la maestra no tiene dónde mirar** quién puede llevársela.
+
+Otro cajón con la etiqueta puesta y vacío: la columna `nino.autorizados` existía y el servidor **ya la aceptaba y la guardaba** al inscribir — pero el frontend **no la mandaba nunca** ni la mostraba (cero coincidencias de `autorizados` en `web/app.js`).
+
+**Lo que hay ahora:** en la ficha de cada niño, la línea *"Puede retirarlo: Ana Rojas (abuela), Juan Pérez (papá)"*; el campo en el formulario, con ayuda que dice qué se espera (nombre y parentesco); y **botones de editar y borrar**, que el módulo no tenía.
+
+### El bloqueo que hubo que quitar antes
+`ninos.js` **solo sabía crear**: ni un `PATCH` ni un `DELETE` en todo el módulo. Una lista de autorizados que no se puede corregir sirve de poco, porque **es justo el dato que cambia** (la abuela se muda, los padres se separan). Ahora se puede corregir la ficha y sacar de la lista a quien ya no viene.
+
+- **Borrar se lleva el historial de asistencia del niño**, en transacción y con las asistencias primero (`asistencia_nino.nino_id` referencia `nino(id)`; al revés salta `FOREIGN KEY constraint failed`). Se decidió así porque ese historial **ya no lo muestra ninguna pantalla** desde que se retiró la asistencia: conservarlo sería guardar datos de un menor que nadie puede consultar.
+- **Editar y borrar se auditan.** Antes **nada de este módulo dejaba rastro** — lo único auditado era la asistencia, y se fue con ella.
+- El `UPDATE` del `PATCH` se construye desde una **lista blanca de columnas**, nunca desde las claves del body.
+
+> ⚠️ **Esto dice quién PUEDE retirar al niño, no quién se lo llevó.** Esa mitad (`asistencia_nino.retiro_por`) se fue con la asistencia de niños el 30 jul. Si el papá pregunta el domingo *"¿con quién se fue?"*, la app sigue sin poder responder. Si en uso real hace falta, la conversación es **reabrir lo de la asistencia**, no añadir un campo.
+> ⚠️ **Siguen sin poder editarse ni borrarse las clases ni las lecciones.** Solo niños.
+
+### 🔴 El plan traía un XSS, y lo cazó quien lo implementaba
+El código de ejemplo del plan pasaba el nombre del niño **sin escapar** a `modalConfirm`, que mete su mensaje crudo en `innerHTML`. Un niño inscrito con `<script>` en el nombre lo habría ejecutado al pulsar Borrar. Se corrigió, y después se auditaron **las 29 llamadas a `modalConfirm` de toda la app: todas las que pasan datos de usuario ya escapaban** — una lleva incluso un comentario avisando de esta misma trampa. La convención del repo estaba bien; **el plan fue la excepción**. Lección: el código de ejemplo de un plan no está revisado, y se revisa igual que el resto.
+
+---
+
 Documento para **retomar el desarrollo más tarde**. Resume qué está hecho, cómo arrancar todo y qué quedó pendiente.
 
 ---
@@ -518,9 +543,9 @@ app/
 1. **La casilla de la fuente del gasto + corregir un gasto con rastro** (decisiones 1 y 2 de arriba). Ya no necesita brainstorming: está decidido, necesita spec y plan.
 2. **Dos funciones a medio construir que solo necesitan la pantalla** — son lo más barato del proyecto:
    - ✅ ~~**"No puedo servir ese día"** (`fecha_no_disp`)~~ — **HECHO** el 30 jul (rama `feat/no-puedo-servir`). Ver la sección propia más abajo.
-   - **Retiro seguro de niños**: la BD y el servidor ya aceptan y guardan `nino.autorizados`; solo falta el campo en el formulario. ⚠️ **Ojo:** la mitad de "quién retiró" se fue con la asistencia (ver arriba), así que hoy esto es solo *quién puede retirarlo*. Y **la autorización que firman los padres ya promete recoger ese dato** (`legal/consentimientos.md:133`): hay una brecha entre el documento legal y lo que hace el sistema.
+   - ✅ ~~**Retiro seguro de niños**~~ — **HECHO** el 30-31 jul (rama `feat/retiro-seguro-ninos`). Ver la sección propia más abajo.
 3. **Corregir el nombre de una persona** — el documento viejo lo pintaba caro ("queda así para siempre en el directorio, las asistencias y los impresos", que suena a datos duplicados). **Es falso:** el nombre vive solo en `persona.nombre` y todo lo demás llega por `JOIN`. Es añadir una columna a un esquema zod que ya existe.
-4. **Escuela Dominical no tiene editar ni borrar nada** (`ninos.js` no tiene ni un `PATCH` ni un `DELETE`). Bloquea el punto 2: una lista de autorizados que no se puede corregir sirve de poco cuando la abuela cambia.
+4. **Escuela Dominical: ya se pueden editar y borrar NIÑOS** (hecho el 31 jul, ver la fase de abajo). **Siguen sin poder editarse ni borrarse las CLASES ni las LECCIONES**: una clase mal escrita o una lección subida por error se quedan para siempre.
 5. **El formulario público de visitas no pide ningún dato de contacto** mientras la página promete "te contactaremos pronto", y **no hay ninguna pantalla que liste `contacto_publico`**. Hay mensajes de visitas guardados que nadie ha mirado nunca. *(Matiz: la notificación sí lleva el texto completo, así que no se pierden del todo.)*
 6. **Peticiones de oración** — matiz importante frente a la nota vieja: *sí* se puede pedir oración hoy, por chat directo con el pastor. Lo que no existe es la petición como objeto (estado, lista, anonimato). Es la única propuesta que sirve a **toda** la congregación. Dato sensible: hay que pasar por el consentimiento versionado que ya existe.
 7. **Editar el himnario desde la app** · **eventos que se repiten** · **ficha de membresía** (fecha de bautismo = dato sensible).
