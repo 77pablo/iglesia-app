@@ -470,9 +470,6 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
     if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
   }
 
-  db.prepare('UPDATE evento_org_gasto SET concepto=?, monto=?, pagado_por=?, fuente=? WHERE id=?')
-    .run(concepto, monto, pagadoPor, fuente, gasto.id);
-
   // El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo
   // (actor_id y fecha son columnas propias de la tabla auditoria).
   //
@@ -487,13 +484,34 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   const origen = cambioOrigen
     ? ` · ${descOrigenGasto(gasto.fuente, gasto.pagado_por, req.user.iglesia_id)} -> ${descOrigenGasto(fuente, pagadoPor, req.user.iglesia_id)}`
     : '';
+  const detalle = `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`;
+
+  // El UPDATE y su apunte van en UNA transaccion. Si auditar() fallara despues
+  // del UPDATE, quedaria una correccion de dinero APLICADA Y SIN RASTRO — justo
+  // lo contrario de lo que esta ruta promete, y dejar rastro es la condicion
+  // explicita que puso el dueño para permitir corregir un gasto. O se guardan
+  // los dos, o no se guarda ninguno.
+  //
+  // (Se documento un tiempo como "la convencion del repo es no usar
+  //  transacciones". Era falso: este mismo archivo las usa al borrar la hoja y
+  //  al duplicarla, y tambien asistencia.js, cuenta.js, cuidado.js, eventos.js,
+  //  musica.js, ninos.js y eliminarIglesia.js.)
+  //
   // La referencia apunta a la HOJA (gasto.org_id), no al gasto: si manana se
   // borra el gasto, su correccion sigue apareciendo en el historial de la hoja.
   // Apuntando al gasto, el rastro quedaria huerfano justo en el caso en que mas
   // importa (alguien corrige un monto y despues borra la linea entera).
-  auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`,
-    { tabla: 'evento_org', id: gasto.org_id });
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE evento_org_gasto SET concepto=?, monto=?, pagado_por=?, fuente=? WHERE id=?')
+      .run(concepto, monto, pagadoPor, fuente, gasto.id);
+    auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
+      detalle, { tabla: 'evento_org', id: gasto.org_id });
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo corregir el gasto' });
+  }
   res.json({ ok: true });
 });
 
