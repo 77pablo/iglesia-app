@@ -57,7 +57,10 @@ const NAV_UMBRAL_GRUPOS = 12;
 // Funcion pura a proposito: buildNav toca el DOM y no se puede probar sin
 // navegador; esto si.
 function agruparNav(claves){
-  if(claves.length < NAV_UMBRAL_GRUPOS) return [{titulo:null, claves}];
+  // [...claves] y no `claves` a secas: devolver la MISMA referencia que se
+  // recibio invita a que quien la use la ordene o la recorte y le cambie el
+  // array a quien llamo, sin enterarse.
+  if(claves.length < NAV_UMBRAL_GRUPOS) return [{titulo:null, claves:[...claves]}];
   return GRUPOS_NAV
     .map(g=>({titulo:g.titulo, claves:g.claves.filter(k=>claves.includes(k))}))
     .filter(g=>g.claves.length);   // un encabezado sin nada debajo es ruido
@@ -624,26 +627,65 @@ function iniciarIconos(){
   window._emojiObs.observe(document.body,{childList:true,subtree:true,characterData:true});
 }
 
+// Pinta el menu lateral.
+//
+// ⚠️ El DOM sale SIEMPRE en el orden del NAV, agrupado o no. Es deliberado: el
+// agrupamiento por temas es SOLO del movil, y agruparNav() no sabe nada del
+// ancho de pantalla — si aqui pintaramos en orden de grupo, el escritorio
+// tambien quedaria reordenado, y ocultar los encabezados por CSS no deshace un
+// reordenamiento hecho en el DOM: el pastor se encontraria una lista plana
+// barajada (12 de sus 19 entradas cambiaban de sitio).
+//
+// El orden visual del movil se consigue con `order` de flexbox: cada elemento
+// lleva un `--ord` correlativo y UNICO, y el @media de 900px de styles.css es el
+// unico sitio donde ese numero se convierte en `order`. En escritorio no hay
+// ningun `order` activo, asi que manda el orden del DOM = el del NAV de siempre.
+//
+// Los valores son unicos a proposito: entre elementos con el MISMO `order` manda
+// el orden del DOM, y ahi un encabezado podria acabar detras de sus propias
+// entradas.
 function buildNav(){
   const nav=$('nav'); nav.innerHTML='';
   const visibles=NAV.filter(n=>tieneModulo(n[0])).map(n=>n[0]);
-  agruparNav(visibles).forEach(seccion=>{
-    // titulo null = modo plano: no se pinta encabezado ninguno.
-    if(seccion.titulo){
+  const secciones=agruparNav(visibles);
+  // titulo null = modo plano: ni encabezados ni `--ord` (por debajo del umbral
+  // no se agrupa nada, tampoco en el movil).
+  const agrupado=secciones.some(s=>s.titulo);
+
+  const grupoDe=new Map();     // clave del NAV -> titulo de su grupo
+  const ordenDe=new Map();     // clave del NAV -> su sitio en el orden del movil
+  const ordenTitulo=new Map(); // titulo de grupo -> su sitio en el orden del movil
+  if(agrupado){
+    let n=0;   // arranca en 1: `order:0` es el valor por defecto, no lo pisamos
+    secciones.forEach(seccion=>{
+      ordenTitulo.set(seccion.titulo, ++n);
+      seccion.claves.forEach(k=>{ grupoDe.set(k, seccion.titulo); ordenDe.set(k, ++n); });
+    });
+  }
+
+  const pendientes=new Set(ordenTitulo.keys());   // encabezados aun sin pintar
+  visibles.forEach(key=>{
+    // El encabezado se cuela justo antes de la primera entrada suya que aparece,
+    // para que el DOM tampoco quede absurdo para quien lo lea en orden.
+    const titulo=grupoDe.get(key);
+    if(titulo && pendientes.has(titulo)){
+      pendientes.delete(titulo);
       const h=document.createElement('div');
-      h.className='nav-sec';
+      // "primero" es el primero VISUALMENTE (el del grupo 1), que no tiene por
+      // que ser el primero del DOM: por eso una clase y no `:first-child`.
+      h.className='nav-sec'+(ordenTitulo.get(titulo)===1?' nav-sec-primero':'');
       // textContent, no innerHTML: los titulos son fijos, pero no hay motivo
       // para abrir esa puerta en el menu.
-      h.textContent=seccion.titulo;
+      h.textContent=titulo;
+      h.style.setProperty('--ord', ordenTitulo.get(titulo));
       nav.appendChild(h);
     }
-    seccion.claves.forEach(key=>{
-      const el=document.createElement('div');
-      el.className='nav-item'; el.dataset.key=key;
-      el.innerHTML=`<span class="ic">${NAV_ICON[key]||iconDe(key)}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
-      el.onclick=()=>navTo(key);
-      nav.appendChild(el);
-    });
+    const el=document.createElement('div');
+    el.className='nav-item'; el.dataset.key=key;
+    if(agrupado) el.style.setProperty('--ord', ordenDe.get(key));
+    el.innerHTML=`<span class="ic">${NAV_ICON[key]||iconDe(key)}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
+    el.onclick=()=>navTo(key);
+    nav.appendChild(el);
   });
 }
 function navTo(key){
