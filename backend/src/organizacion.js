@@ -323,23 +323,38 @@ r.delete('/cosas/:cosaId', (req, res) => {
 // ---------- Gastos (se suman en total_gastado) ----------
 // El total NO se guarda en ninguna columna: se recalcula al leer la hoja, asi
 // nunca queda descuadrado respecto a las filas de gastos.
+//
+// FUENTES_GASTO: quien puso el dinero de verdad, no solo quien queda anotado.
+// 'caja' no lleva persona (pago la iglesia directo). 'devuelve'/'aporte' SI
+// llevan persona: la diferencia es si se le debe devolver o no.
+const FUENTES_GASTO = ['caja', 'devuelve', 'aporte'];
 const gastoSchema = z.object({
   concepto: z.string().trim().min(1, 'falta el concepto'),
   monto: z.coerce.number().positive('el monto debe ser mayor a 0'),
   // Opcional: si no viene, paga quien registra el gasto (el caso normal).
-  pagado_por: z.coerce.number().int().positive().optional()
+  pagado_por: z.coerce.number().int().positive().optional(),
+  // Opcional para no romper llamadas viejas: sin ella, el gasto queda "no
+  // especificado" (fuente NULL), igual que antes de que esta casilla
+  // existiera. El frontend (Task 5) la manda siempre.
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
 });
 r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
   const org = hojaEditable(req, res, Number(req.params.id));
   if (!org) return;
-  const quienPago = req.body.pagado_por ?? req.user.persona_id;
-  // Solo gente de la misma iglesia: atribuirle un pago a un tercero de otra
-  // congregacion no significa nada y ensucia el resumen de a quien devolver.
-  const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?')
-    .get(quienPago, req.user.iglesia_id);
-  if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
-  const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por) VALUES (?,?,?,?)')
-    .run(org.id, req.body.concepto, req.body.monto, quienPago);
+  // "La caja de la iglesia" no tiene persona: pagado_por queda NULL. Ese NULL
+  // NO reutiliza el significado historico de "no se sabe quien puso" — lo
+  // que distingue un caso del otro es la columna fuente, no el hueco vacio.
+  const esCaja = req.body.fuente === 'caja';
+  const quienPago = esCaja ? null : (req.body.pagado_por ?? req.user.persona_id);
+  if (quienPago != null) {
+    // Solo gente de la misma iglesia: atribuirle un pago a un tercero de otra
+    // congregacion no significa nada y ensucia el resumen de a quien devolver.
+    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?')
+      .get(quienPago, req.user.iglesia_id);
+    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+  }
+  const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por, fuente) VALUES (?,?,?,?,?)')
+    .run(org.id, req.body.concepto, req.body.monto, quienPago, req.body.fuente || null);
   res.json({ ok: true, id: Number(info.lastInsertRowid) });
 });
 
