@@ -104,3 +104,50 @@ test('fuente invalida -> 400 en castellano, sin nombrar el campo', async () => {
   const { error } = await res.json();
   assert.doesNotMatch(error, /fuente/, 'no debe soltarle al usuario el nombre tecnico del campo');
 });
+
+test('el resumen separa lo que pago la caja, lo por devolver y los aportes donados', async () => {
+  const b = await servidor();
+  const S = sembrar('RESU');
+  const { hojaId, auth } = await hoja(b, S, 'Asado');
+  // El ejemplo del spec: el pastor adelanta la carne, la lider pone las
+  // bebidas y se le devuelven, Rosa (aqui: la feligresa) pone el pan y no
+  // quiere que se lo devuelvan.
+  await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Carne', monto: 30000, fuente: 'caja' }) });
+  await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Bebidas', monto: 8000, pagado_por: S.liderId, fuente: 'devuelve' }) });
+  await fetch(b + `/api/organizacion/${hojaId}/gastos`, { method: 'POST', headers: auth, body: JSON.stringify({ concepto: 'Pan', monto: 4000, pagado_por: S.feligresId, fuente: 'aporte' }) });
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hojaRes.total_gastado, 42000);
+  assert.equal(hojaRes.total_caja, 30000);
+  assert.equal(hojaRes.por_devolver.length, 1);
+  assert.deepEqual({ ...hojaRes.por_devolver[0] }, { persona_id: S.liderId, nombre: 'Lider', total: 8000 });
+  assert.equal(hojaRes.aportes_donados.length, 1);
+  assert.deepEqual({ ...hojaRes.aportes_donados[0] }, { persona_id: S.feligresId, nombre: 'Feligres Juan', total: 4000 });
+});
+
+test('gasto antiguo sin persona ni fuente: no aparece en ningun bloque de personas, solo en el total', async () => {
+  const b = await servidor();
+  const S = sembrar('VIEJ2');
+  const { hojaId, auth } = await hoja(b, S, 'Historica');
+  db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto) VALUES (?,?,?)').run(hojaId, 'Gasto antiguo', 5000);
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hojaRes.total_gastado, 5000);
+  assert.equal(hojaRes.total_caja, 0);
+  assert.deepEqual(hojaRes.por_devolver, []);
+  assert.deepEqual(hojaRes.aportes_donados, []);
+});
+
+test('gasto antiguo CON persona pero sin fuente sigue contando como "por devolver"', async () => {
+  const b = await servidor();
+  const S = sembrar('VIEJ3');
+  const { hojaId, auth } = await hoja(b, S, 'De transicion');
+  // Asi quedaban los gastos ANTES de que existiera la casilla fuente: con
+  // persona, sin fuente. Ese significado (hay que devolverle) no cambia.
+  db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por) VALUES (?,?,?,?)')
+    .run(hojaId, 'Gasto de transicion', 7000, S.liderId);
+
+  const hojaRes = await (await fetch(b + '/api/organizacion/' + hojaId, { headers: auth })).json();
+  assert.equal(hojaRes.por_devolver.length, 1);
+  assert.deepEqual({ ...hojaRes.por_devolver[0] }, { persona_id: S.liderId, nombre: 'Lider', total: 7000 });
+});

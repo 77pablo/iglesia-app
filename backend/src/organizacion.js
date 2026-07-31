@@ -77,22 +77,36 @@ function armarHoja(org) {
       WHERE c.org_id = ? ORDER BY c.orden, c.id`
   ).all(org.id);
   const gastos = db.prepare(
-    `SELECT g.id, g.concepto, g.monto, g.creado_en, g.pagado_por, p.nombre AS pagado_por_nombre
+    `SELECT g.id, g.concepto, g.monto, g.creado_en, g.pagado_por, g.fuente, p.nombre AS pagado_por_nombre
        FROM evento_org_gasto g LEFT JOIN persona p ON p.id = g.pagado_por
       WHERE g.org_id = ? ORDER BY g.id`
   ).all(org.id);
   const total = db.prepare('SELECT COALESCE(SUM(monto),0) AS t FROM evento_org_gasto WHERE org_id = ?').get(org.id).t;
-  // "Quien puso que": cuanto puso cada persona, de mayor a menor. Es lo que se
-  // mira al final para saber a quien devolverle cuanto.
-  const aportes = db.prepare(
+  // "Quien puso que", partido en tres, porque ya no es una sola cosa:
+  //  - lo que pago la caja directo (no hay a quien devolverle nada)
+  //  - lo que alguien puso y HAY que devolverle (incluye lo de antes de esta
+  //    casilla, fuente NULL con persona: es lo que ya significaba)
+  //  - lo que alguien puso como aporte y NO se devuelve
+  const totalCaja = db.prepare(
+    `SELECT COALESCE(SUM(monto),0) AS t FROM evento_org_gasto WHERE org_id = ? AND fuente = 'caja'`
+  ).get(org.id).t;
+  const porDevolver = db.prepare(
     `SELECT g.pagado_por AS persona_id, p.nombre, SUM(g.monto) AS total
        FROM evento_org_gasto g JOIN persona p ON p.id = g.pagado_por
-      WHERE g.org_id = ? GROUP BY g.pagado_por, p.nombre ORDER BY total DESC, p.nombre`
+      WHERE g.org_id = ? AND g.pagado_por IS NOT NULL AND (g.fuente = 'devuelve' OR g.fuente IS NULL)
+      GROUP BY g.pagado_por, p.nombre ORDER BY total DESC, p.nombre`
+  ).all(org.id);
+  const aportesDonados = db.prepare(
+    `SELECT g.pagado_por AS persona_id, p.nombre, SUM(g.monto) AS total
+       FROM evento_org_gasto g JOIN persona p ON p.id = g.pagado_por
+      WHERE g.org_id = ? AND g.fuente = 'aporte'
+      GROUP BY g.pagado_por, p.nombre ORDER BY total DESC, p.nombre`
   ).all(org.id);
   const evento = org.evento_id
     ? db.prepare('SELECT id, titulo, fecha, hora_inicio, lugar FROM evento WHERE id = ?').get(org.evento_id)
     : null;
-  return { ...org, evento, cosas, gastos, aportes, total_gastado: total };
+  return { ...org, evento, cosas, gastos, total_gastado: total,
+    total_caja: totalCaja, por_devolver: porDevolver, aportes_donados: aportesDonados };
 }
 
 // Obtiene el row de la hoja y valida edición. Responde 404/403 y devuelve null,
