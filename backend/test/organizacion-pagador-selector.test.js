@@ -37,6 +37,14 @@ const lineas = fuente.split('\n');
 
 // Recorta un metodo del objeto literal Org (indentado con dos espacios),
 // balanceando llaves hasta cerrarlo.
+//
+// ⚠️ Cuenta llaves caracter a caracter, SIN distinguir cadenas ni comentarios.
+// Hoy funciona porque ninguno de estos metodos lleva una llave suelta dentro de
+// un comentario, de una plantilla o de un string. Si alguien mete una (por
+// ejemplo `// ojo con el }` ), el metodo se recorta a medias y el fallo aparece
+// como un SyntaxError dentro del new Function() de mas abajo — NO como "esta
+// prueba dejo de cubrir lo que cubria". Si ves un error de sintaxis raro al
+// tocar web/app.js, mira aqui antes que en ningun otro sitio.
 function recortarMetodo(nombre) {
   const i = lineas.findIndex(l => new RegExp(`^  (?:async )?${nombre}\\(`).test(l));
   assert.ok(i >= 0, `no se encontro el metodo ${nombre} en web/app.js`);
@@ -50,7 +58,7 @@ function recortarMetodo(nombre) {
   return trozo.join('\n');
 }
 
-const METODOS = ['_llenarQuienPago', 'cambioQuienPago', '_ponerPagador', '_opcionAusente',
+const METODOS = ['_llenarQuienPago', 'cambioQuienPago', 'cambioFuente', '_ponerPagador', '_opcionAusente',
   '_opcionSinRegistrar', 'editarGasto', 'cancelarEdicionGasto', 'guardarGasto'];
 
 // ---------- DOM de mentira ----------
@@ -122,6 +130,7 @@ function montar({ gastos, directorio, miId = 3 }) {
   const cuerpo = `
     const Org = {
       _hoja: HOJA, _gastoEditando: null, _pagador: '', _personas: null,
+      _fuente: 'devuelve', _origenTocado: false,
       _recargar(){},
       ${METODOS.map(recortarMetodo).join('\n')}
     };
@@ -147,12 +156,33 @@ test('corregir el concepto de un gasto de alguien DADO DE BAJA no le pasa la deu
   assert.match(sel.querySelector('option[data-ausente]').textContent, /María/);
 
   nodos['org-gasto-concepto'].value = 'Pan';
+  // El selector si sabe quien es (se comprueba ANTES de guardar: al guardar bien
+  // se limpia el formulario): en cuanto alguien toque el origen, la deuda que
+  // viaja es la de Maria y no la de quien esta corrigiendo.
+  assert.equal(Org._pagador, '7');
   await Org.guardarGasto();
 
   assert.equal(llamadas.length, 1);
   assert.equal(llamadas[0].metodo, 'PATCH');
-  assert.equal(llamadas[0].cuerpo.concepto, 'Pan');
-  assert.equal(llamadas[0].cuerpo.pagado_por, 7, 'la deuda tiene que seguir siendo de Maria');
+  // Ni siquiera se nombra al pagador: nadie toco el origen, asi que el PATCH
+  // (parcial) deja fuente y pagado_por como estaban. La deuda sigue siendo de
+  // Maria porque no se manda nada sobre ella.
+  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Pan', monto: 5000 });
+});
+
+test('si ademas cambia el origen, la deuda del DADO DE BAJA sigue siendo suya (no de quien edita)', async () => {
+  const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
+  const { Org, nodos, llamadas } = montar({ gastos: [gasto], directorio: async () => [ABEL] });
+  await Org._llenarQuienPago();
+
+  Org.editarGasto(9);
+  nodos['org-gasto-concepto'].value = 'Pan';
+  nodos['org-gasto-fuente'].value = 'aporte';
+  Org.cambioFuente('aporte', true);   // lo que hace el onchange del <select>
+  await Org.guardarGasto();
+
+  assert.equal(llamadas[0].cuerpo.fuente, 'aporte');
+  assert.equal(llamadas[0].cuerpo.pagado_por, 7, 'el aporte lo puso Maria, no quien corrige');
 });
 
 // --- 2) el directorio caido ----------------------------------------------
@@ -170,10 +200,19 @@ test('con /directorio caido, corregir un gasto DE LA CAJA lo deja pagado por la 
 
   Org.editarGasto(4);
   nodos['org-gasto-concepto'].value = 'Bencina';
+  assert.equal(Org._pagador, 'caja', 'el selector si pudo representar a la caja');
   await Org.guardarGasto();
 
-  assert.equal(llamadas[0].cuerpo.fuente, 'caja');
-  assert.equal(llamadas[0].cuerpo.pagado_por, undefined, 'un gasto de la caja no tiene a quien devolverle nada');
+  // Sin tocar el origen no se manda: el backend conserva el 'caja' que ya tenia.
+  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Bencina', monto: 20000 });
+
+  // Y si ademas se toca el origen, lo que viaja sigue siendo la caja — no una
+  // deuda con quien esta corrigiendo.
+  Org.editarGasto(4);
+  Org.cambioQuienPago('caja', true);
+  await Org.guardarGasto();
+  assert.equal(llamadas[1].cuerpo.fuente, 'caja');
+  assert.equal(llamadas[1].cuerpo.pagado_por, undefined, 'un gasto de la caja no tiene a quien devolverle nada');
 });
 
 test('con /directorio caido, corregir el gasto de una persona no le cambia de dueño', async () => {
@@ -183,9 +222,10 @@ test('con /directorio caido, corregir el gasto de una persona no le cambia de du
 
   Org.editarGasto(5);
   nodos['org-gasto-concepto'].value = 'Pan';
+  assert.equal(Org._pagador, '7', 'con el directorio caido, la opcion inyectada mantiene a Maria');
   await Org.guardarGasto();
 
-  assert.equal(llamadas[0].cuerpo.pagado_por, 7);
+  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Pan', monto: 5000 });
 });
 
 // --- 3) la carrera con el llenado del selector ----------------------------
@@ -206,6 +246,91 @@ test('tocar ✏️ mientras el directorio viaja no deja el gasto historico en "L
   await Org.guardarGasto();
   assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Carne asada', monto: 20000 },
     'sin fuente ni pagado_por: el backend deja los dos como estaban');
+});
+
+// --- 4) la cuarta puerta: mandar el origen sin que nadie lo haya tocado ----
+//
+// En produccion TODOS los gastos guardados tienen fuente = NULL ("no se sabe /
+// no se especifico"). El formulario reenviaba siempre los cuatro campos, asi que
+// la primera vez que alguien tocara el ✏️ sobre cualquiera de ellos, fuente
+// pasaba de NULL a 'devuelve' y el historial de la hoja estampaba
+//   "Pna" $5.000 -> "Pan" $5.000 · se devuelve a Maria -> se devuelve a Maria
+// una linea que existe precisamente para avisar de que cambio quien puso el
+// dinero, afirmando un cambio que nadie hizo. Y con dos personas editando la
+// misma hoja, esos campos reconstruidos desde la instantanea vieja reponian una
+// deuda que la otra acababa de borrar.
+test('corregir SOLO el concepto de un gasto historico (fuente NULL) manda concepto y monto, y nada mas', async () => {
+  // fuente NULL pero CON persona, que es el caso de produccion: los gastos
+  // viejos guardaron a quien puso el dinero, pero no si habia que devolverselo.
+  const gasto = { id: 11, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: null };
+  const MARIA = { id: 7, nombre: 'María' };
+  const { Org, nodos, llamadas } = montar({ gastos: [gasto], directorio: async () => [ABEL, MARIA] });
+  await Org._llenarQuienPago();
+
+  Org.editarGasto(11);
+  nodos['org-gasto-concepto'].value = 'Pan';   // solo la falta de ortografia
+  await Org.guardarGasto();
+
+  assert.equal(llamadas[0].metodo, 'PATCH');
+  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Pan', monto: 5000 },
+    'sin fuente ni pagado_por: el NULL se conserva y el historial no inventa un cambio de origen');
+});
+
+test('el gasto historico se PINTA como "Se devuelve" pero eso no basta para mandarlo', async () => {
+  const gasto = { id: 12, concepto: 'Carne', monto: 20000, pagado_por: 7, pagado_por_nombre: 'María', fuente: null };
+  const MARIA = { id: 7, nombre: 'María' };
+  const { Org, nodos, llamadas } = montar({ gastos: [gasto], directorio: async () => [ABEL, MARIA] });
+  await Org._llenarQuienPago();
+
+  Org.editarGasto(12);
+  assert.equal(nodos['org-gasto-fuente'].value, 'devuelve', 'el desplegable no tiene un tercer estado que dibujar');
+  nodos['org-gasto-monto'].value = '21000';
+  await Org.guardarGasto();
+  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Carne', monto: 21000 });
+
+  // Pero en cuanto la persona lo elige de verdad, si viaja.
+  Org.editarGasto(12);
+  Org.cambioFuente('devuelve', true);   // el onchange, aunque el valor no cambie
+  await Org.guardarGasto();
+  assert.deepEqual(llamadas[1].cuerpo, { concepto: 'Carne', monto: 20000, fuente: 'devuelve', pagado_por: 7 });
+});
+
+// --- el rotulo falso "(cuenta inactiva)" sobre alguien activo -------------
+test('cuando llega el directorio con la persona ACTIVA, se quita la opcion inyectada', async () => {
+  const gasto = { id: 13, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
+  const MARIA = { id: 7, nombre: 'María' };
+  let soltar;
+  const lento = new Promise(res => { soltar = res; });
+  const { Org, sel } = montar({ gastos: [gasto], directorio: () => lento });
+
+  const llenando = Org._llenarQuienPago();   // igual que _render: SIN await
+  Org.editarGasto(13);                       // el ✏️ ya es clicable
+  assert.match(sel.querySelector('option[data-ausente]').textContent, /cuenta inactiva/);
+  soltar([ABEL, MARIA]);                     // Maria si estaba activa
+  await llenando;
+
+  assert.equal(sel.querySelector('option[data-ausente]'), null,
+    'el rotulo "(cuenta inactiva)" sobre una persona activa, y su nombre duplicado, tienen que irse');
+  assert.equal(sel.options.filter(o => o.value === '7').length, 1);
+  assert.equal(sel.value, '7');
+});
+
+test('el directorio no le pisa la eleccion a quien ya cambio el selector a mano', async () => {
+  const gasto = { id: 14, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
+  const MARIA = { id: 7, nombre: 'María' };
+  let soltar;
+  const lento = new Promise(res => { soltar = res; });
+  const { Org, sel } = montar({ gastos: [gasto], directorio: () => lento });
+
+  const llenando = Org._llenarQuienPago();
+  Org.editarGasto(14);
+  sel.value = 'caja';
+  Org.cambioQuienPago('caja', true);   // lo que hace el onchange
+  soltar([ABEL, MARIA]);
+  await llenando;
+
+  assert.equal(sel.value, 'caja', 'lo que eligio la persona manda sobre lo que trae el directorio');
+  assert.equal(Org._pagador, 'caja');
 });
 
 // --- lo que sigue funcionando igual --------------------------------------
@@ -232,7 +357,16 @@ test('cambiar a mano el selector durante una correccion si cambia el pagador', a
 });
 
 // --- el papel del tesorero ------------------------------------------------
-test('el ✏️ y el ✕ de cada gasto no se imprimen en la rendicion', () => {
+//
+// ⚠️ Esto NO comprueba la impresion: no hay navegador ni CSS aqui. Comprueba
+// solo el MARCADO — que el contenedor de los botones de cada gasto lleva escrita
+// la clase `no-print`. Que esa clase oculte algo de verdad depende de la cascada
+// de estilos, y eso esta verificado a mano, no aqui. Y como localiza el
+// contenedor mirando tres lineas por encima del ✏️, meter una linea de mas entre
+// medio la hace fallar sin que nada se haya roto. Se deja asi a proposito: es
+// barato y avisa si alguien le quita la clase; si algun dia hace falta la
+// garantia de verdad, hace falta una prueba de navegador.
+test('el contenedor del ✏️ y el ✕ de cada gasto lleva la clase no-print en el marcado', () => {
   const i = lineas.findIndex(l => l.includes('Org.editarGasto(${g.id})'));
   assert.ok(i > 0, 'no se encontro el boton de corregir el gasto');
   const contenedor = lineas.slice(Math.max(0, i - 3), i).find(l => l.includes('<div class="row'));

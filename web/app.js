@@ -4291,7 +4291,7 @@ const Org = {
           <select id="org-gasto-quien" style="max-width:150px" title="¿Quién puso el dinero?" onchange="Org.cambioQuienPago(this.value, true)">
             <option value="">Lo puse yo</option>
           </select>
-          <select id="org-gasto-fuente" style="max-width:130px" title="¿Se le devuelve?">
+          <select id="org-gasto-fuente" style="max-width:130px" title="¿Se le devuelve?" onchange="Org.cambioFuente(this.value, true)">
             <option value="devuelve">Se devuelve</option>
             <option value="aporte">Es un aporte</option>
           </select>
@@ -4328,8 +4328,22 @@ const Org = {
     // Y si aun así hay una corrección en curso cuyo pagador el selector ya no
     // representa, se repone. Dejarlo en blanco es exactamente lo que le
     // adjudicaba la deuda a quien solo venía a corregir una falta de ortografía.
+    //
+    // Y se reconcilia TAMBIÉN cuando la opción puesta es la inyectada: si la
+    // persona sí estaba activa y su <option> real acaba de llegar con el
+    // directorio, sin esto se queda para siempre el rótulo falso "(cuenta
+    // inactiva)" sobre alguien activo, y su nombre dos veces en la lista.
+    // _ponerPagador es idempotente: quita la inyectada y solo la repone si de
+    // verdad sigue sin estar.
+    //
+    // Se exige que la inyectada sea la SELECCIONADA para no pisar a quien haya
+    // cambiado el selector a mano mientras el directorio viajaba: en ese caso su
+    // elección ya es la buena y reponer al pagador original se la borraría.
     const g=Org._gastoEditando ? (Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===Org._gastoEditando) : null;
-    if(g){ if(sel.value!==Org._pagador) Org._ponerPagador(g); }
+    if(g){
+      const ausente=sel.querySelector('option[data-ausente]');
+      if(sel.value!==Org._pagador || (ausente && ausente.value===sel.value)) Org._ponerPagador(g);
+    }
     else Org.cambioQuienPago(sel.value);
   },
   // El segundo selector (se devuelve / es un aporte) solo tiene sentido si hay
@@ -4342,9 +4356,21 @@ const Org = {
   // dentro del codigo no deben fijar ese estado: quien lo fija al corregir es
   // _ponerPagador, despues de COMPROBAR que el selector pudo representarlo.
   cambioQuienPago(valor, loEligioAlguien){
-    if(loEligioAlguien) Org._pagador=valor;
+    if(loEligioAlguien){ Org._pagador=valor; Org._origenTocado=true; }
     const f=$('org-gasto-fuente');
     if(f) f.style.display = (valor==='caja'||valor==='sin') ? 'none' : '';
+  },
+  // El segundo selector, igual que el primero: su valor se lleva en Org._fuente
+  // y NO se relee del DOM al guardar. Era la ultima relectura del DOM que
+  // quedaba en el camino del dinero.
+  //
+  // loEligioAlguien: SOLO lo pasa el onchange del <select>. Es lo unico que
+  // convierte una correccion en "esta persona quiso cambiar de donde salio el
+  // dinero"; las llamadas internas (pintar el formulario, cancelarlo) ponen el
+  // valor pero no lo marcan como tocado.
+  cambioFuente(valor, loEligioAlguien){
+    Org._fuente = valor==='aporte' ? 'aporte' : 'devuelve';
+    if(loEligioAlguien) Org._origenTocado=true;
   },
   // Deja el selector apuntando a quien puso el dinero DE VERDAD en ese gasto y
   // devuelve el valor que quedo puesto (null si no se pudo).
@@ -4437,11 +4463,26 @@ const Org = {
   // 'sin' = no se sabe (no tocarlo) · null = no se pudo determinar (no tocarlo)
   // · un id = esa persona. Es lo que manda guardarGasto: NO se relee del DOM.
   _pagador:'',
+  // 'devuelve' | 'aporte', segun el segundo selector. Tampoco se relee del DOM.
+  _fuente:'devuelve',
+  // ¿Tocó la persona alguno de los dos selectores del origen en esta corrección?
+  // Solo lo ponen los dos onchange. Mientras siga en false, una corrección manda
+  // SOLO concepto y monto, y el PATCH (parcial por diseño) deja el origen tal
+  // como estaba. Sin esto, el formulario reenviaba siempre los cuatro campos
+  // reconstruidos desde Org._hoja —la instantánea de cuando se abrió la
+  // pantalla— con dos consecuencias: (1) todo gasto histórico (fuente NULL)
+  // pasaba a 'devuelve' con solo tocar el ✏️, y el historial estampaba un
+  // "se devuelve a María -> se devuelve a María" afirmando un cambio que nadie
+  // hizo; (2) con dos personas editando la misma hoja, corregir una falta de
+  // ortografía con la pantalla vieja RESUCITABA una deuda que la otra acababa
+  // de borrar. En un ALTA no aplica: ahí el origen se manda siempre.
+  _origenTocado:false,
   // Abre el formulario ya lleno con los datos del gasto, para corregirlo. Los
   // inputs son los mismos del alta: no hace falta un panel aparte.
   editarGasto(id){
     const g=(Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===id); if(!g) return;
     Org._gastoEditando=id;
+    Org._origenTocado=false;   // empieza limpia: nadie ha tocado el origen todavia
     $('org-gasto-concepto').value=g.concepto;
     $('org-gasto-monto').value=g.monto;
     // Un gasto de los antiguos (sin fuente y sin pagador) NO se puede pintar
@@ -4450,7 +4491,12 @@ const Org = {
     // contrajo. De eso —y de que el selector pueda representar a un pagador
     // que ya no sale en el directorio— se ocupa _ponerPagador.
     if(Org._ponerPagador(g)==null) toast('No se puede mostrar quién puso el dinero: se corregirá sin cambiarlo');
+    // El gasto historico (fuente NULL) se PINTA como "Se devuelve" porque el
+    // desplegable no tiene un tercer estado que dibujar — pero eso es lo que se
+    // ve, no lo que se manda: mientras nadie lo toque, la correccion viaja sin
+    // fuente y el backend conserva el NULL ("no se sabe").
     $('org-gasto-fuente').value = g.fuente==='aporte' ? 'aporte' : 'devuelve';
+    Org.cambioFuente($('org-gasto-fuente').value);
     $('org-gasto-guardar').textContent='Guardar cambios';
     $('org-gasto-cancelar').style.display='inline-flex';
     $('org-gasto-concepto').scrollIntoView({behavior:'smooth', block:'center'});
@@ -4458,11 +4504,12 @@ const Org = {
   cancelarEdicionGasto(){
     Org._gastoEditando=null;
     Org._pagador='';                  // un gasto NUEVO lo pone quien lo registra
+    Org._origenTocado=false;
     Org._opcionSinRegistrar(false);   // no debe quedar disponible para un gasto NUEVO
     Org._opcionAusente(null);         // ni la persona ausente del gasto que se corregia
     $('org-gasto-concepto').value=''; $('org-gasto-monto').value='';
     $('org-gasto-quien').value=''; Org.cambioQuienPago('');
-    $('org-gasto-fuente').value='devuelve';
+    $('org-gasto-fuente').value='devuelve'; Org.cambioFuente('devuelve');
     $('org-gasto-guardar').textContent='Añadir';
     $('org-gasto-cancelar').style.display='none';
   },
@@ -4480,16 +4527,29 @@ const Org = {
     // —cuenta desactivada, o /directorio caido— para que el '' de un <select>
     // sin seleccion se leyera como "lo puse yo" y la deuda cambiara de dueño.
     const quien=Org._pagador;   // '' = yo · 'caja' = caja · 'sin'/null = no tocar · id = otra persona
-    // 'sin' (y null) mandan SOLO concepto y monto: sin fuente ni pagado_por, el
-    // PATCH deja los dos como estaban (ver la regla del backend en la Task 4).
-    // Es lo que permite corregir un gasto sin cambiar de quien es el dinero.
-    const cuerpo = (quien==null||quien==='sin')
-      ? {concepto,monto}
-      : quien==='caja'
-      ? {concepto,monto,fuente:'caja'}
-      : {concepto,monto,fuente:($('org-gasto-fuente')||{}).value||'devuelve',
-         pagado_por: quien?Number(quien):ME.persona.id};
     const id=Org._gastoEditando;
+    // El PATCH del backend es PARCIAL POR DISEÑO: lo que no viene, no se toca.
+    // Asi que una CORRECCION solo manda el origen si la persona toco alguno de
+    // los dos selectores. Reenviarlo siempre —reconstruido desde Org._hoja, la
+    // instantanea de cuando se abrio la pantalla— anulaba esa garantia: le
+    // inventaba un 'devuelve' a todo gasto historico con solo pulsar el ✏️ (y el
+    // historial anotaba un cambio de origen que nadie hizo), y con dos personas
+    // editando reponia una deuda que la otra acababa de borrar.
+    //
+    // En un ALTA se manda siempre: el gasto nace ahora y hay que decir de donde
+    // salio el dinero.
+    //
+    // 'sin' (y null) tampoco lo mandan nunca: sin fuente ni pagado_por, el PATCH
+    // deja los dos como estaban (ver la regla del backend en la Task 4). Es lo
+    // que permite corregir un gasto sin cambiar de quien es el dinero.
+    const cuerpo={concepto,monto};
+    if((!id || Org._origenTocado) && quien!=null && quien!=='sin'){
+      if(quien==='caja') cuerpo.fuente='caja';
+      else {
+        cuerpo.fuente=Org._fuente||'devuelve';
+        cuerpo.pagado_por = quien?Number(quien):ME.persona.id;
+      }
+    }
     await conBoton(botonActual(), async()=>{
       try{
         if(id) await api('/organizacion/gastos/'+id,{method:'PATCH',body:JSON.stringify(cuerpo)});
