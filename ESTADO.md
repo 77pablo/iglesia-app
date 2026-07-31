@@ -124,6 +124,13 @@ Otro cajón con la etiqueta puesta y vacío: la columna `nino.autorizados` exist
 > ⚠️ **Esto dice quién PUEDE retirar al niño, no quién se lo llevó.** Esa mitad (`asistencia_nino.retiro_por`) se fue con la asistencia de niños el 30 jul. Si el papá pregunta el domingo *"¿con quién se fue?"*, la app sigue sin poder responder. Si en uso real hace falta, la conversación es **reabrir lo de la asistencia**, no añadir un campo.
 > ⚠️ **Siguen sin poder editarse ni borrarse las clases ni las lecciones.** Solo niños.
 
+### 📜 Se corrigió el texto legal, y hacía falta por dos motivos
+La **Política de Privacidad** no declaraba la categoría de datos que esta fase empieza a recoger (**las personas autorizadas para retirar al niño**, que son datos de **terceros** que no usan la app), y además seguía declarando *"Asistencia — Registro de asistencia a las actividades infantiles"*, **que es falso desde el 30 jul**. Lo mismo en la autorización que firman los padres. Corregidos los cuatro archivos (`legal/*.md` y `web/legal/*.html`): se añadió la categoría nueva diciendo expresamente que se recogen **solo nombre y parentesco**, se quitó la asistencia y se dejó una nota de que los registros anteriores se conservan hasta que se borre la ficha.
+> ⏳ **Sigue pendiente el abogado** con los placeholders `[…]` de siempre (razón social, RUT, domicilio); esto no lo sustituye. Cuando los limpie, que revise también estas dos secciones.
+
+### ✅ De paso se cerró una brecha legal que nadie había notado
+La Política promete que los datos de un menor *"se eliminan o anonimizan a solicitud del padre, madre o apoderado"*. **Hasta esta fase la app no podía cumplirlo**: no había ninguna forma de borrar a un niño. Ahora sí.
+
 ### 🔴 El plan traía un XSS, y lo cazó quien lo implementaba
 El código de ejemplo del plan pasaba el nombre del niño **sin escapar** a `modalConfirm`, que mete su mensaje crudo en `innerHTML`. Un niño inscrito con `<script>` en el nombre lo habría ejecutado al pulsar Borrar. Se corrigió, y después se auditaron **las 29 llamadas a `modalConfirm` de toda la app: todas las que pasan datos de usuario ya escapaban** — una lleva incluso un comentario avisando de esta misma trampa. La convención del repo estaba bien; **el plan fue la excepción**. Lección: el código de ejemplo de un plan no está revisado, y se revisa igual que el resto.
 

@@ -126,11 +126,11 @@ personales de mi hijo/a o pupilo/a que sean necesarios para su participación y 
 actividades infantiles y juveniles (por ejemplo, Escuela Dominical, grupos de niños o de
 adolescentes), que pueden incluir:
 
-- Nombre completo y fecha de nacimiento.
-- Registro de asistencia a las actividades.
+- Nombre completo y edad.
 - Datos de salud relevantes para su cuidado (por ejemplo, **alergias**, condiciones médicas o
   indicaciones especiales).
-- Nombre y datos de contacto de los padres/apoderados y de personas autorizadas para retirarlo.
+- Nombre y datos de contacto de los padres/apoderados, y **nombre y parentesco** de las personas
+  autorizadas para retirarlo.
 
 Entiendo y acepto que:
 - Estos datos se usan **exclusivamente** para el cuidado, la seguridad y la organización de las
