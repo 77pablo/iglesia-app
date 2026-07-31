@@ -4168,8 +4168,21 @@ const Org = {
   _hoja:null,
   _render(h, origen){
     Org._hoja=h;
+    // INVARIANTE: todo estado de formulario que vive FUERA del DOM se
+    // reinicializa aqui, porque esta funcion recrea el formulario entero. Si un
+    // campo espejado se queda sin reponer, la pantalla dice una cosa y se guarda
+    // otra — y guardarGasto ya NO relee el DOM, a proposito.
+    //
+    // Paso de verdad con _fuente: quedaba en 'aporte' de un gasto anterior, el
+    // <select> recreado nacia en 'devuelve', y anadir una cosa a llevar (que
+    // llama a _recargar -> _render) bastaba para que el gasto siguiente se
+    // guardara como donado mientras la pantalla decia que habia que devolverlo.
+    // Eso BORRA una deuda: quien puso el dinero de su bolsillo se queda sin que
+    // se lo devuelvan, sin ningun aviso.
     Org._gastoEditando=null;   // una hoja recien abierta nunca esta "editando" un gasto
     Org._pagador='';           // ...ni arrastra el pagador de la correccion anterior
+    Org._fuente='devuelve';    // ...ni la fuente elegida antes de repintar
+    Org._origenTocado=false;   // ...ni la marca de "esto lo eligio una persona"
     if(origen && ORG_ORIGEN[origen]) Org._origen=origen;
     const volver=ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion;
     const ed=!!h.puede_editar;

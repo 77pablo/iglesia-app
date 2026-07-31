@@ -373,3 +373,30 @@ test('el contenedor del ✏️ y el ✕ de cada gasto lleva la clase no-print en
   assert.ok(contenedor && contenedor.includes('no-print'),
     'la card de gastos es la que el modo rendicion vuelve visible: estos botones tienen que llevar no-print');
 });
+
+// --- la quinta puerta: estado de formulario que sobrevive al repintado -------
+//
+// `guardarGasto` ya NO relee el <select> del DOM (ese fue el arreglo de la
+// cuarta puerta): lee `Org._fuente` y `Org._pagador`. Eso convierte el reseteo
+// de `_render` en la unica cosa que mantiene sincronizados lo que la pantalla
+// ENSEÑA y lo que se GUARDA — porque `_render` recrea el formulario entero y el
+// <select> recreado nace siempre en 'devuelve'.
+//
+// Paso de verdad: `_fuente` se quedaba en 'aporte' de un gasto anterior y
+// bastaba con anadir una cosa a llevar (que llama a _recargar -> _render) para
+// que el gasto SIGUIENTE se guardara como donado mientras la pantalla decia que
+// habia que devolverlo. Eso BORRA una deuda, en un gasto nuevo, con un solo
+// usuario y sin ninguna carrera.
+//
+// Se comprueba sobre el codigo fuente y no ejecutando `_render` a proposito:
+// esa funcion pinta la pantalla entera y montarla aqui seria un simulacro tan
+// grande que ya no probaria gran cosa. Lo que se fija es la INVARIANTE: todo
+// campo de formulario espejado fuera del DOM se repone donde el DOM se recrea.
+// Si manana se anade otro campo espejado, hay que anadirlo a esta lista.
+test('_render repone TODO el estado de formulario que vive fuera del DOM', () => {
+  const cuerpoRender = recortarMetodo('_render');
+  for (const campo of ['_gastoEditando', '_pagador', '_fuente', '_origenTocado']) {
+    assert.match(cuerpoRender, new RegExp(`Org\.${campo}\s*=`),
+      `_render no repone Org.${campo}: la pantalla dira una cosa y se guardara otra`);
+  }
+});
