@@ -65,7 +65,7 @@ function puedeEditarOrg(personaId, org) {
 }
 
 // Los montos del detalle de auditoria se guardan ya formateados, porque ese
-// texto se le va a MOSTRAR a la gente en la hoja (ver la Task 6): "$12.000" y
+// texto se le va a MOSTRAR a la gente en la hoja (ver la Task 7): "$12.000" y
 // no "$12000", igual que money() en el frontend.
 //
 // A mano y no con toLocaleString('es-CL'): no se usa en ningun sitio del
@@ -82,11 +82,18 @@ function montoTxt(n) {
 // fuente NULL + persona: es el estado de TRANSICION que ya entendia armarHoja
 // antes de esta casilla (ver 'gasto antiguo CON persona pero sin fuente sigue
 // contando como "por devolver"') — se describe igual que 'devuelve'.
-function descOrigenGasto(fuente, pagadoPorId) {
+// Acotada por iglesia como el resto de las consultas a persona de este modulo
+// (ver el POST y el PATCH de gastos): pagadoPorId sale de una fila YA guardada,
+// que esta ruta no valida —solo valida lo que entra—, asi que una fila legada
+// con un pagador de otra congregacion pondria el nombre de un desconocido en el
+// rastro de esta iglesia. Hoy ninguna ruta permite crear ese gasto; esto es
+// defensa en profundidad, y si pasara cae solo en 'alguien que ya no está'.
+function descOrigenGasto(fuente, pagadoPorId, iglesiaId) {
   if (fuente === 'caja') return 'pagó la caja';
   if (pagadoPorId == null) return 'sin registrar quién puso';
-  const persona = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(pagadoPorId);
-  const nombre = persona ? persona.nombre : 'alguien que ya no esta';
+  const persona = db.prepare('SELECT nombre FROM persona WHERE id = ? AND iglesia_id = ?')
+    .get(pagadoPorId, iglesiaId);
+  const nombre = persona ? persona.nombre : 'alguien que ya no está';
   return fuente === 'aporte' ? `aporte de ${nombre}` : `se devuelve a ${nombre}`;
 }
 
@@ -467,7 +474,7 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // concepto o el monto no se anade: seria ruido en el historial de la hoja.
   const cambioOrigen = fuente !== gasto.fuente || pagadoPor !== gasto.pagado_por;
   const origen = cambioOrigen
-    ? ` · ${descOrigenGasto(gasto.fuente, gasto.pagado_por)} -> ${descOrigenGasto(fuente, pagadoPor)}`
+    ? ` · ${descOrigenGasto(gasto.fuente, gasto.pagado_por, req.user.iglesia_id)} -> ${descOrigenGasto(fuente, pagadoPor, req.user.iglesia_id)}`
     : '';
   auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
     `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`);
