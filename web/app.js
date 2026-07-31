@@ -2231,8 +2231,17 @@ async function verPreviosPortal(){
       if(d.hayMas) _mpAnadirBotonMasPrevios(caja);
     }catch(e){
       toast(e.message);
-      // Si fallo, que el proximo clic vuelva a intentarlo en vez de abrir vacio.
+      // Si fallo, se vuelve a PLEGAR del todo. Dejarla abierta y vacia era peor
+      // que no abrirla: la cabecera seguiria diciendo "(12)" sobre una caja sin
+      // nada —o sea, un numero que contradice lo que se ve— y el siguiente clic
+      // habria CERRADO en vez de reintentar, porque para el estado ya estaba
+      // abierta. Justo la clase de flecha que promete algo que no cumple, que es
+      // lo que este arreglo vino a quitar. Asi el clic obvio reintenta.
       _mpPreviosCargados=false;
+      _mpPreviosAbierto=false;
+      caja.style.display='none';
+      if(flecha) flecha.textContent='▸';
+      if(btn) btn.setAttribute('aria-expanded','false');
     }
   });
 }
