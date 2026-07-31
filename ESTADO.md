@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; dos planes nuevos listos para ejecutar — **456 tests**, ✅ **todo subido y desplegado**, verificado el 31 jul: `origin/main..main` vacío y el `app.js` de Render trae `autorizados` y `modalPrompt`)*
+*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; dos planes nuevos listos para ejecutar). El número de tests y si `main` está subida/desplegada son datos de **`main`** y caducan con cada rama que se fusiona — no repitas de memoria una cifra escrita aquí (ni siquiera esta): compruébala con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
@@ -536,7 +536,7 @@ app/
 - ✅ ~~Subir comprobante en Tesorería~~ — ya estaba hecho (Fase 5)
 - ✅ ~~Notificaciones push segmentadas · Modo offline Biblia/Notas · Notas del sermón · Recordatorios automáticos~~ — hechos (Fase 4)
 
-### 👉 POR DÓNDE RETOMAR (al 31 jul 2026 — **456 tests en verde**, ✅ **todo subido y desplegado**)
+### 👉 POR DÓNDE RETOMAR (estado de `main` al 31 jul 2026 — compruébalo con los comandos de abajo antes de creerlo, incluida esta cabecera)
 
 **Ya no hay nada pendiente de subir.** Verificado el 31 jul: `git log origin/main..main --oneline` no devuelve nada, y el `app.js` que sirve Render trae `autorizados`, `modalPrompt`, `escJsAttr` y `Prédica`. (Esta línea decía "14 commits SIN SUBIR"; era falsa. Compruébalo igual con esos dos comandos antes de creerte cualquier versión de esta frase: ha estado equivocada en los dos sentidos.)
 
