@@ -183,10 +183,15 @@ export function perfilPublico(persona) {
 }
 
 // --- AUDITORIA: registra accesos/acciones sensibles ---
-export function auditar(iglesiaId, actorId, accion, modulo, detalle = '') {
+// `ref` es OPCIONAL y va al final a proposito: los ~40 sitios que ya llaman a
+// esta funcion con 5 argumentos no se tocan y siguen escribiendo NULL en las
+// dos columnas nuevas. Con {tabla, id} el apunte queda consultable ("dame las
+// correcciones de la hoja 7"), que es lo que permite ENSENAR el rastro en vez
+// de solo guardarlo.
+export function auditar(iglesiaId, actorId, accion, modulo, detalle = '', ref = null) {
   db.prepare(
-    'INSERT INTO auditoria (iglesia_id, actor_id, accion, modulo, detalle) VALUES (?,?,?,?,?)'
-  ).run(iglesiaId, actorId, accion, modulo, detalle);
+    'INSERT INTO auditoria (iglesia_id, actor_id, accion, modulo, detalle, ref_tabla, ref_id) VALUES (?,?,?,?,?,?,?)'
+  ).run(iglesiaId, actorId, accion, modulo, detalle, ref ? ref.tabla : null, ref ? ref.id : null);
 }
 
 // ¿Es obispo o super-admin? (jerarquía sobre el pastor, ve TODAS las iglesias)

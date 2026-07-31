@@ -603,6 +603,12 @@ agregarColumna('persona', 'debe_cambiar_pass', 'INTEGER NOT NULL DEFAULT 0');
 // IGLESIA: desactivar/reactivar (reversible, NUNCA se borra). Si activa=0,
 // nadie de esa iglesia puede iniciar sesion (ver auth.js login()).
 agregarColumna('iglesia', 'activa', 'INTEGER NOT NULL DEFAULT 1');
+// AUDITORIA: a que registro se refiere el apunte. Sin esto la tabla guarda QUE
+// paso, QUIEN y CUANDO, pero no SOBRE QUE — y no hay forma limpia de pedir "las
+// correcciones de la hoja 7". NULL en todo lo historico y en los ~40 sitios que
+// llaman a auditar() sin la referencia; hoy solo la rellena Organizacion.
+agregarColumna('auditoria', 'ref_tabla', 'TEXT');
+agregarColumna('auditoria', 'ref_id', 'INTEGER');
 // CONTACTO_PUBLICO: en que estado esta cada mensaje del portal publico.
 //   'nuevo'    -> llego y nadie lo ha atendido (DEFAULT de la columna)
 //   'atendido' -> el pastor lo marco
@@ -653,6 +659,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sermon_iglesia       ON sermon(iglesia_id);
   CREATE INDEX IF NOT EXISTS idx_predica_iglesia      ON predica(iglesia_id);
   CREATE INDEX IF NOT EXISTS idx_auditoria_iglesia    ON auditoria(iglesia_id);
+  CREATE INDEX IF NOT EXISTS idx_auditoria_ref ON auditoria(ref_tabla, ref_id);
   CREATE INDEX IF NOT EXISTS idx_avisogrupo_grupo     ON aviso_grupo(grupo_id);
   CREATE INDEX IF NOT EXISTS idx_recursogrupo_grupo   ON recurso_grupo(grupo_id);
   CREATE INDEX IF NOT EXISTS idx_tareagrupo_persona   ON tarea_grupo(persona_id);

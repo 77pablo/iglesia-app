@@ -476,8 +476,13 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   const origen = cambioOrigen
     ? ` · ${descOrigenGasto(gasto.fuente, gasto.pagado_por, req.user.iglesia_id)} -> ${descOrigenGasto(fuente, pagadoPor, req.user.iglesia_id)}`
     : '';
+  // La referencia apunta a la HOJA (gasto.org_id), no al gasto: si manana se
+  // borra el gasto, su correccion sigue apareciendo en el historial de la hoja.
+  // Apuntando al gasto, el rastro quedaria huerfano justo en el caso en que mas
+  // importa (alguien corrige un monto y despues borra la linea entera).
   auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`);
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`,
+    { tabla: 'evento_org', id: gasto.org_id });
   res.json({ ok: true });
 });
 
