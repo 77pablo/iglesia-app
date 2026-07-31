@@ -3266,6 +3266,7 @@ function renderAdmin(){
           ${esCuentaDeSistema?'<span class="muted small">Cuenta de sistema</span>':`
           <button class="btn ghost small-btn" onclick="adminFormRol(${u.id})">+ Rol</button>
           <button class="link" onclick="adminTogglePastor(${u.id},${u.es_pastor})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
+          <button class="link" onclick="adminCorregirNombre(${u.id})">✏️ Corregir nombre</button>
           ${puedeResetear?`<button class="link" onclick="adminResetClave(${u.id})">🔑 Restablecer contraseña</button>`:''}
           <button class="link" style="color:${u.activo?'var(--red-tx)':'var(--green-tx)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>`}
         </div>
@@ -3380,6 +3381,22 @@ function adminResetClave(id){
       });
     }
   );
+}
+// Quien se registró mal ("juan perez") se quedaba así para siempre si no
+// sabía llegar a "Mi perfil" o no podía entrar a la app. Mismo argumento que
+// "Restablecer contraseña": el pastor lo arregla por ella. Sin razón de
+// seguridad para bloquear que se lo haga a sí mismo (ya puede desde su
+// perfil), así que este botón va fuera del if(puedeResetear).
+function adminCorregirNombre(id){
+  // El guardia `d && d.usuarios` es el mismo de adminResetClave: si la lista
+  // aun no cargo, window._admin es undefined y leerle .usuarios reventaria la
+  // pantalla entera en vez de no hacer nada.
+  const d=window._admin; const u=(d&&d.usuarios||[]).find(x=>x.id===id); if(!u) return;
+  modalPrompt(`Nuevo nombre para <b>${escHtml(u.nombre)}</b>.`, async(nombre)=>{
+    try{ await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({nombre})});
+      toast('✅ Nombre corregido'); vistaAdmin(); }
+    catch(e){ toast(e.message); }
+  }, {titulo:'Corregir nombre', placeholder:'Nombre completo', valor:u.nombre, okLabel:'Guardar'});
 }
 function adminMostrarClaveTemporal(u, pass){
   const root=$('modal-root');
