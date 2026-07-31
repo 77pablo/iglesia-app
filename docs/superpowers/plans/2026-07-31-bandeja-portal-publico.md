@@ -1047,7 +1047,7 @@ anotando:
   2. **La sección de mensajes anteriores puede no abrirse nunca.** Están
      contados y accesibles, pero nada obliga a mirarlos y no generan aviso.
   3. **No se puede borrar un mensaje** ni marcar atendido en bloque.
-  4. **La fecha de Cuidado pastoral (`app.js:2076`) sigue con el fallo de UTC**
+  4. **La fecha de Cuidado pastoral (`verCaso()` en `app.js:2102`) sigue con el fallo de UTC**
      — se ve el día siguiente para lo escrito después de las 20:00. El ayudante
      `fechaDeUTC` ya existe y lo arregla en una línea; se dejó fuera a
      propósito para no ensuciar este diff.

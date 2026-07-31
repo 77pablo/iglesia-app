@@ -207,7 +207,7 @@ siempre**, sin importar la zona horaria del proceso (que sí está bien puesta e
 `America/Santiago` desde el `Dockerfile` y `render.yaml`).
 
 La app hoy muestra este tipo de marcas cortando el texto —
-`(x.fecha||'').slice(0,10)` en Cuidado Pastoral, `app.js:2076` — así que **un
+`(x.fecha||'').slice(0,10)` en Cuidado Pastoral (`verCaso()` en `app.js:2102`) — así que **un
 mensaje enviado un lunes a las 21:00 hora de Chile se ve fechado el martes.**
 Ese fallo ya existe hoy en Cuidado Pastoral; no lo introduce este trabajo.
 
@@ -218,7 +218,7 @@ inconsistentes las filas viejas con las nuevas, y esta app ya se llevó cinco
 fallos por tocar zonas horarias sin necesidad. Se arregla al mostrar, no al
 guardar.
 
-**La fecha de Cuidado Pastoral (`app.js:2076`) NO se corrige en este trabajo**,
+**La fecha de Cuidado Pastoral (`verCaso()` en `app.js:2102`) NO se corrige en este trabajo**,
 aunque el ayudante nuevo la arreglaría en una línea. Es un módulo que este
 diseño no toca, y meterle un cambio de paso ensucia el diff con el que se va a
 revisar la bandeja. Queda anotado en `ESTADO.md` como pendiente conocido, con
