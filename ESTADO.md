@@ -1,5 +1,22 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; la bandeja del portal público y la fuente del gasto, construidas; poder corregir el nombre propio o el de otro, construido en rama local sin fusionar). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; la bandeja del portal público y la fuente del gasto, construidas; poder corregir el nombre propio o el de otro, construido en rama local sin fusionar; el menú del móvil agrupado por temas, construido en otra rama local sin fusionar). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+
+---
+
+## 🆕 31 DE JULIO DE 2026 — el menú del móvil, agrupado por temas (rama local `feat/menu-agrupado`: sin fusionar, sin subir, sin desplegar)
+
+En el teléfono el menú lateral es un cajón a pantalla completa y el pastor ve sus 19 entradas seguidas: para llegar a casi cualquier cosa hay que desplazarse. Ahora se agrupan bajo cinco temas — **Día a día · Lo mío · Pastoreo · Ministerios · Administración** — pero **solo para quien tiene el menú largo**: `GRUPOS_NAV` (`web/app.js`) reparte las claves del `NAV`, y `NAV_UMBRAL_GRUPOS = 12` decide si se agrupa; por debajo del umbral, `agruparNav()` devuelve una sola sección sin título — la lista plana de siempre. `buildNav()` pinta los encabezados y `styles.css` los oculta por encima de 900px: en escritorio, donde las 19 caben de un vistazo, no cambia nada.
+
+Dos asignaciones deliberadas: **`predica`** va en "Día a día" — la ve todo el mundo, no es el ministerio de nadie — y **`ajustes`** en "Lo mío" — es el tema y el color de quien mira, no administración de la iglesia.
+
+Suite en **531 tests** (partió en 526; medido con `cd backend && npm test`).
+
+> **Sigue sin resolver**, a propósito o por quedar fuera de alcance:
+> 1. **Esto mejora buscar, no acorta el scroll.** Las 19 entradas siguen ahí, más cinco encabezados. Si el uso real demuestra que lo que molesta es la **longitud**, la respuesta era la opción descartada —**secciones plegables**— y este trabajo es su paso previo: los grupos ya quedarían definidos.
+> 2. **Dos personas de la misma iglesia ven el menú con estructura distinta**, según crucen o no el umbral de 12. Es un paso pequeño sobre algo que ya pasaba (cada rol ve entradas distintas), pero conviene tenerlo escrito antes de que alguien lo reporte como fallo.
+> 3. **El umbral de 12 es un número elegido, no medido.** Nadie sabe todavía cómo usa el pastor la app en el teléfono. Cuando haya ese dato, se puede ajustar — o sustituir todo esto por accesos rápidos a lo que de verdad se usa.
+> 4. **`agruparNav()` en modo plano devuelve la misma referencia** del array que recibe, no una copia (`return [{titulo:null, claves}]` con el `claves` tal cual llega). No rompe nada hoy — `buildNav()` solo lo recorre —, pero es aliasing: si algún día el llamador reutiliza ese array después de pasarlo, comparte el mismo con el resultado.
+> 5. **A un líder de cuerpo se le pinta el encabezado "Pastoreo" con una sola entrada debajo** (verificado a mano: de los 12 módulos que ve ese rol, "Pastoreo" solo trae `asistencia`; "Administración" directamente desaparece, por vacío). La regla descarta grupos **vacíos**, no grupos de uno. Es un dato de interfaz, no un defecto: queda decidir si un encabezado para una sola entrada compensa.
 
 ---
 
@@ -546,6 +563,8 @@ app/
 El push lo hace Pablo con GitHub Desktop, y es lo que dispara el redespliegue en Render. **Un solo push las sube las dos**, que además es lo correcto: la fuente del gasto **exige** que backend y frontend viajen juntos (ver el punto 8 de sus pendientes).
 
 Esta frase ha estado equivocada **en los dos sentidos** más de una vez: llegó a decir "14 commits SIN SUBIR" cuando no quedaba ninguno, y también lo contrario. **No te creas ninguna versión de ella sin comprobarlo** — `git log origin/main..main --oneline` para saber si queda algo por subir, y un `curl` al `/app.js` de producción buscando `filaMensajePortal` para saber si el despliegue llegó de verdad.
+
+> ✅ **Y volvió a caducar, otra vez en el otro sentido.** Comprobado al escribir la sección del menú agrupado (31 jul, con `git fetch origin main -v`): `origin/main` y `main` apuntan **al mismo commit** (`e586926`), y `fef2742`/`b0ff2da` son ancestros de `main` — **las dos ya están subidas**. El párrafo de arriba (y el "DOS cosas" del principio) quedó desfasado; se deja tal cual como registro de lo que pasó el 31 jul por la tarde, no como estado actual. **No repitas "hay trabajo sin subir" de memoria**: falta todavía verificar contra el `app.js` de Render si el redespliegue llegó.
 
 **Lo hecho el 31 jul:** la Fase 13 (quién puede retirar a cada niño) fusionada y verificada, la corrección del texto legal, y **cuatro documentos de diseño nuevos**.
 
