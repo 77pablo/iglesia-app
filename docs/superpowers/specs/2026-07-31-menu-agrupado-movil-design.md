@@ -58,8 +58,22 @@ Dos asignaciones que no son obvias y son deliberadas:
   sugeriría que toca algo de la congregación.
 
 El **orden dentro de cada grupo** y el orden de los grupos son los de la tabla.
-Respecto al `NAV` de hoy, ningún módulo cambia de posición relativa dentro de su
-grupo.
+
+> ⚠️ **Corregido en la revisión final de la rama.** Aquí decía *"respecto al
+> `NAV` de hoy, ningún módulo cambia de posición relativa dentro de su grupo"*,
+> y **era falso en dos de los cinco grupos** — se contradecía con su propia
+> tabla, que es lo implementado y lo que manda:
+>
+> - **Pastoreo**: en la tabla `panel_pastor, cuidado_pastoral, mensajes_portal,
+>   asistencia, reportes, panel_obispo`; en el `NAV`, `asistencia, panel_pastor,
+>   reportes, cuidado_pastoral, mensajes_portal, panel_obispo`.
+> - **Administración**: en la tabla `tesoreria, admin, superadmin`; en el `NAV`,
+>   `tesoreria, superadmin, admin`.
+>
+> No se reordenan los grupos para hacer verdadera la frase: "Pastoreo"
+> empezando por `asistencia` en vez de por el panel del pastor se lee peor.
+> Consecuencia práctica, y es la que importa: **dentro de un grupo no basta con
+> conservar el orden del DOM** — hacen falta valores de orden explícitos.
 
 ## El umbral
 
@@ -103,7 +117,27 @@ regla evita un encabezado huérfano si mañana cambian los permisos.
 - **Ninguna entrada aparece ni desaparece.** Quien veía un módulo lo sigue
   viendo; quien no, sigue sin verlo. Esto es **solo** presentación.
 - **El escritorio queda idéntico** — los encabezados se ocultan por encima de
-  900px, el mismo corte que ya usa el cajón (`styles.css:381`).
+  900px, el mismo corte que ya usa el cajón (`styles.css:381`), **y el `NAV` se
+  pinta siempre en su orden de toda la vida**.
+
+  > 🔴 **Esta viñeta daba por hecho algo falso, y la revisión final lo cazó.**
+  > Decía solo *"los encabezados se ocultan por encima de 900px"*, como si eso
+  > bastara. **No basta:** `agruparNav()` no consulta el ancho de pantalla, así
+  > que el pastor cruza el umbral de 12 también en el escritorio y, si
+  > `buildNav()` pinta en orden de grupo, el **DOM** queda reordenado. Ocultar
+  > los encabezados **no deshace un reordenamiento del DOM**: medido sobre las
+  > 19 entradas reales del pastor, **12 de 19 cambiaban de sitio** en escritorio
+  > (`predica` 17→6, `servicio_gestion` 7→14, `ajustes` 18→8…), y sin ningún
+  > encabezado que lo explicara, porque están ocultos. Una lista plana barajada.
+  >
+  > **Cómo queda:** `buildNav()` pinta **siempre** en el orden del `NAV`, y el
+  > agrupamiento visual del móvil se consigue con `order` de flexbox (`.nav` ya
+  > es `display:flex; flex-direction:column`). Cada elemento lleva un `--ord`
+  > correlativo y **único**, y la única regla que lo convierte en `order` vive
+  > **dentro** del `@media (max-width:900px)`. En escritorio no hay ningún
+  > `order` activo. Los valores son únicos a propósito: **entre elementos con el
+  > mismo `order` manda el orden del DOM**, y con empates un encabezado podría
+  > acabar detrás de sus propias entradas.
 - **No se toca `tieneModulo()` ni `navTo()`.** Solo cómo `buildNav()` pinta.
 - **El badge de mensajes sin leer** sigue colgando de su entrada
   (`app.js:590`).
