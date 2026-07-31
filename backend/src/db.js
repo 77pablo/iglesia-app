@@ -582,6 +582,13 @@ agregarColumna('evento_org_cosa', 'asignada_en', 'TEXT');
 // EVENTO_ORG_GASTO: quien puso el dinero. Sin esto, al final del almuerzo nadie
 // sabe a quien hay que devolverle cuanto (el lider puso la carne, otro las bebidas).
 agregarColumna('evento_org_gasto', 'pagado_por', 'INTEGER REFERENCES persona(id)');
+// EVENTO_ORG_GASTO: la fuente del gasto — la pago la caja de la iglesia, se
+// le devuelve a quien puso el dinero, o es un aporte que no se devuelve.
+// NULL = de antes de esta casilla, no se especifico (igual que ya se leia el
+// pagado_por historico). OJO: cuando fuente='caja', pagado_por tambien queda
+// NULL, pero el significado NO sale de pagado_por — sale de esta columna. No
+// es reciclar el hueco historico, es dejar de necesitar mirarlo solo.
+agregarColumna('evento_org_gasto', 'fuente', 'TEXT');
 // GRUPO: carpeta de Google Drive vinculada por el líder (compartir archivos/fotos)
 agregarColumna('grupo', 'drive_url', 'TEXT');
 // PERSONA: Directorio de miembros + cumpleaños — foto y toggles de privacidad
