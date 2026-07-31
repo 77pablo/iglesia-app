@@ -4,9 +4,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from './db.js';
-// Sin `auditar`: lo unico que se auditaba en este modulo era la asistencia, que
-// ya no existe. Crear clase / inscribir nino / subir leccion nunca se auditaron.
-import { authMiddleware, esLiderEdOPastor, esLiderEdEstricto, esObispo } from './auth.js';
+import { authMiddleware, esLiderEdOPastor, esLiderEdEstricto, esObispo, auditar } from './auth.js';
 import { validar, zRutaSubidaOpcional } from './seguridad.js';
 
 const r = Router();
@@ -16,7 +14,7 @@ r.use((req, res, next) => {
   if (!esLiderEdOPastor(req.user.persona_id) && !esObispo(req.user.persona_id)) return res.status(403).json({ error: 'Solo Escuela Dominical o el pastor' });
   next();
 });
-// Editar (crear clases, niños, material, asistencia): SOLO el encargado; el pastor solo observa.
+// Editar (crear clases, niños, material): SOLO el encargado; el pastor solo observa.
 function soloEncargado(req, res, next) {
   if (!esLiderEdEstricto(req.user.persona_id))
     return res.status(403).json({ error: 'Solo el encargado de Escuela Dominical puede editar (el pastor solo observa).' });
@@ -56,13 +54,67 @@ const ninoSchema = z.object({
   edad: z.string().trim().optional(),
   familia: z.string().trim().optional(),
   alergias: z.string().trim().optional(),
-  autorizados: z.string().trim().optional()
+  autorizados: z.string().trim().max(300, 'la lista de quién puede retirarlo es muy larga (máximo 300 caracteres)').optional()
 });
 r.post('/ninos', soloEncargado, validar(ninoSchema), (req, res) => {
   const { clase_id, nombre, edad, familia, alergias, autorizados } = req.body;
   if (!claseDeIglesia(clase_id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
   db.prepare('INSERT INTO nino (iglesia_id, clase_id, nombre, edad, familia, alergias, autorizados) VALUES (?,?,?,?,?,?,?)')
     .run(req.user.iglesia_id, clase_id, nombre, edad || null, familia || null, alergias || null, autorizados || null);
+  res.json({ ok: true });
+});
+
+// Corregir la ficha. Nace con esta fase: el modulo solo sabia crear, asi que la
+// lista de autorizados no se podia cambiar nunca — y es justo el dato que cambia.
+const editarNinoSchema = z.object({
+  nombre: z.string().trim().min(1, 'falta el nombre').optional(),
+  edad: z.string().trim().optional(),
+  familia: z.string().trim().optional(),
+  alergias: z.string().trim().optional(),
+  autorizados: z.string().trim().max(300, 'la lista de quién puede retirarlo es muy larga (máximo 300 caracteres)').optional()
+});
+r.patch('/ninos/:id', soloEncargado, validar(editarNinoSchema), (req, res) => {
+  // Acotado por iglesia en la MISMA consulta. Resolver primero y comprobar
+  // despues es como se colo el borrado que cruzaba iglesias en musica.js.
+  const nino = db.prepare('SELECT id, nombre FROM nino WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, req.user.iglesia_id);
+  if (!nino) return res.status(404).json({ error: 'Niño no encontrado' });
+
+  // Solo se tocan los campos que vinieron: un PATCH no debe borrar lo que no menciona.
+  const PERMITIDOS = ['nombre', 'edad', 'familia', 'alergias', 'autorizados'];
+  const campos = PERMITIDOS.filter(c => c in req.body);
+  if (!campos.length) return res.status(400).json({ error: 'Datos inválidos: no mandaste nada que cambiar' });
+  const sets = campos.map(c => `${c} = ?`).join(', ');
+  const vals = campos.map(c => (req.body[c] === '' ? null : req.body[c]));
+  db.prepare(`UPDATE nino SET ${sets} WHERE id = ?`).run(...vals, nino.id);
+
+  auditar(req.user.iglesia_id, req.user.persona_id, 'editar_nino', 'ninos', nino.nombre);
+  res.json({ ok: true });
+});
+
+// Borrar la ficha, y con ella su historial de asistencia. La asistencia de
+// ninos se retiro de la app el 30 jul: ese historial ya no lo muestra ninguna
+// pantalla, asi que conservarlo seria guardar datos de un menor que nadie
+// puede consultar. Decision explicita del dueno.
+r.delete('/ninos/:id', soloEncargado, (req, res) => {
+  // Acotado por iglesia en la MISMA consulta (ver comentario en el PATCH de arriba).
+  const nino = db.prepare('SELECT id, nombre FROM nino WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, req.user.iglesia_id);
+  if (!nino) return res.status(404).json({ error: 'Niño no encontrado' });
+
+  // Las asistencias van PRIMERO: asistencia_nino.nino_id referencia nino(id), y
+  // al reves salta FOREIGN KEY constraint failed. En transaccion, para no dejar
+  // asistencias huerfanas si algo falla a medias.
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM asistencia_nino WHERE nino_id = ?').run(nino.id);
+    db.prepare('DELETE FROM nino WHERE id = ?').run(nino.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo eliminar al niño' });
+  }
+  auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_nino', 'ninos', nino.nombre);
   res.json({ ok: true });
 });
 

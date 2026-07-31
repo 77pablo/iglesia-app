@@ -178,12 +178,20 @@ módulo de tesorería).
 | Dato | Detalle |
 |---|---|
 | Nombre del niño o niña | Identificación dentro del programa de Escuela Dominical |
-| Asistencia | Registro de asistencia a las actividades infantiles |
+| Edad y familia | Datos básicos para organizar los grupos y ubicar al niño o niña |
 | **Alergias y datos de salud relevantes** | Información necesaria para el cuidado y seguridad del niño o niña durante las actividades |
+| **Personas autorizadas para retirarlo** | Nombre y parentesco de quienes el padre, madre o apoderado autoriza a retirar al niño o niña al terminar la actividad. Se recogen **únicamente nombre y parentesco**: no se solicita RUT, domicilio ni teléfono de estas personas |
 | Datos del padre, madre o apoderado | Nombre y contacto de quien autoriza e inscribe al niño o niña |
 
 Estos datos constituyen **datos de menores de edad**, tratados conforme a la sección 9 de esta
-Política.
+Política. Los **datos de las personas autorizadas para retirar** al niño o niña son datos de
+terceros que el padre, madre o apoderado aporta bajo su responsabilidad al autorizarlas; se usan
+exclusivamente para verificar la entrega del menor y son visibles solo para el encargado de
+Escuela Dominical y el pastor.
+
+> La aplicación **dejó de registrar la asistencia a las actividades infantiles** en julio de 2026.
+> Los registros anteriores a esa fecha se conservan asociados a la ficha del niño o niña y se
+> eliminan junto con ella.
 
 ### 4.6 Datos de cuidado pastoral
 
@@ -265,9 +273,9 @@ finalidades:
    entre los miembros y líderes de la iglesia.
 5. **Administración financiera interna**: registrar ingresos, gastos, campañas y comprobantes para
    la transparencia y correcta administración de los recursos de la iglesia.
-6. **Cuidado y seguridad de los niños**: gestionar la inscripción, asistencia y necesidades
-   especiales (como alergias) de los niños que participan en Escuela Dominical, con el fin de
-   resguardar su bienestar durante las actividades.
+6. **Cuidado y seguridad de los niños**: gestionar la inscripción, las necesidades especiales
+   (como alergias) y las personas autorizadas para retirarlos, respecto de los niños que
+   participan en Escuela Dominical, con el fin de resguardar su bienestar durante las actividades.
 7. **Acompañamiento y cuidado pastoral**: permitir al equipo pastoral autorizado dar seguimiento a
    situaciones personales o familiares que requieran apoyo, dentro de un marco de confidencialidad
    reforzada.
