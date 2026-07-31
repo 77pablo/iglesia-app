@@ -64,6 +64,17 @@ function puedeEditarOrg(personaId, org) {
   return org.creado_por === personaId || esPastor(personaId);
 }
 
+// Los montos del detalle de auditoria se guardan ya formateados, porque ese
+// texto se le va a MOSTRAR a la gente en la hoja (ver la Task 6): "$12.000" y
+// no "$12000", igual que money() en el frontend.
+//
+// A mano y no con toLocaleString('es-CL'): no se usa en ningun sitio del
+// backend hoy (cero coincidencias en backend/src/), y haria que el texto ya
+// guardado dependiera de la configuracion regional del servidor.
+function montoTxt(n) {
+  return '$' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 // Arma la hoja completa (cosas + gastos + total + evento) a partir de su row.
 // total_gastado NUNCA se persiste: se recalcula al leer, asi no queda descuadrado.
 function armarHoja(org) {
@@ -370,6 +381,70 @@ r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
   const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por, fuente) VALUES (?,?,?,?,?)')
     .run(org.id, req.body.concepto, req.body.monto, quienPago, req.body.fuente || null);
   res.json({ ok: true, id: Number(info.lastInsertRowid) });
+});
+
+// Corregir un gasto (monto mal tecleado, fuente equivocada). A diferencia
+// del resto de los items de la hoja (que nunca dejaron rastro de nada), esta
+// SI se audita: es la condicion explicita del dueño para poder corregir.
+const editarGastoSchema = z.object({
+  concepto: z.string().trim().min(1, 'falta el concepto').optional(),
+  monto: z.coerce.number().positive('el monto debe ser mayor a 0').optional(),
+  pagado_por: z.coerce.number().int().positive().nullable().optional(),
+  // MISMO mensaje que gastoSchema (Task 2): no puede contener la palabra
+  // "fuente", que es el nombre tecnico del campo. validar() compone
+  // "Datos invalidos: " + este texto y se lo suelta tal cual a la persona.
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
+});
+r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
+  // Acotado por iglesia en la MISMA consulta: es el fallo que ya se colo una
+  // vez en musica.js (borrado que cruzaba congregaciones). El resto de las
+  // rutas de cosas/gastos de este archivo resuelven sin ese acotador y
+  // filtran despues via hojaEditable (que si filtra) — sigue siendo seguro,
+  // pero esta ruta nueva no repite ese patron.
+  const gasto = db.prepare(
+    `SELECT g.* FROM evento_org_gasto g JOIN evento_org o ON o.id = g.org_id
+      WHERE g.id = ? AND o.iglesia_id = ?`
+  ).get(Number(req.params.gastoId), req.user.iglesia_id);
+  if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' });
+  const org = hojaEditable(req, res, gasto.org_id);   // valida permiso (403); iglesia ya validada arriba
+  if (!org) return;
+
+  const concepto = req.body.concepto ?? gasto.concepto;
+  const monto = req.body.monto ?? gasto.monto;
+
+  // fuente y pagado_por se corrigen juntos, pero SOLO se exige coherencia
+  // cuando el PATCH toca alguno de los dos. Un gasto historico (fuente y
+  // pagado_por ambos NULL, "no se sabe quien puso") tiene que poder corregir
+  // su concepto o su monto SIN verse obligado a inventarle un pagador: si no,
+  // arreglar una falta de ortografia le adjudicaria a alguien una deuda que
+  // nadie contrajo.
+  const tocaFuente = req.body.fuente !== undefined;
+  const tocaPagador = req.body.pagado_por !== undefined;
+  const fuente = tocaFuente ? req.body.fuente : gasto.fuente;
+  let pagadoPor = tocaPagador ? req.body.pagado_por : gasto.pagado_por;
+
+  if (fuente === 'caja') {
+    // Pago la caja: no hay persona, pase lo que pase se haya mandado.
+    pagadoPor = null;
+  } else if (tocaFuente || tocaPagador) {
+    // Solo aqui se exige que haya alguien: el PATCH esta cambiando de verdad
+    // quien puso el dinero. Si no toca ninguno de los dos, se conserva lo que
+    // hubiera -- incluido "no se sabe".
+    if (pagadoPor == null) return res.status(400).json({ error: 'Elige quien puso el dinero, o marca que pago la caja' });
+  }
+  if (pagadoPor != null) {
+    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?').get(pagadoPor, req.user.iglesia_id);
+    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+  }
+
+  db.prepare('UPDATE evento_org_gasto SET concepto=?, monto=?, pagado_por=?, fuente=? WHERE id=?')
+    .run(concepto, monto, pagadoPor, fuente, gasto.id);
+
+  // El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo
+  // (actor_id y fecha son columnas propias de la tabla auditoria).
+  auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
+    `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}`);
+  res.json({ ok: true });
 });
 
 r.delete('/gastos/:gastoId', (req, res) => {
