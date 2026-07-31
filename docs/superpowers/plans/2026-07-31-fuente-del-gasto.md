@@ -307,7 +307,12 @@ const gastoSchema = z.object({
   // Opcional para no romper llamadas viejas: sin ella, el gasto queda "no
   // especificado" (fuente NULL), igual que antes de que esta casilla
   // existiera. El frontend (Task 5) la manda siempre.
-  fuente: z.enum(FUENTES_GASTO, { error: 'la fuente del gasto no es valida' }).optional()
+  // ⚠️ El mensaje NO puede contener la palabra "fuente": es el nombre tecnico
+  // del campo, y validar() compone "Datos invalidos: " + este texto y se lo
+  // suelta tal cual a la persona. La prueba de mas arriba lo exige
+  // (assert.doesNotMatch(error, /fuente/)). El plan traia aqui "la fuente del
+  // gasto no es valida", que se contradecia con su propia prueba.
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
 });
 r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
   const org = hojaEditable(req, res, Number(req.params.id));
@@ -753,7 +758,10 @@ const editarGastoSchema = z.object({
   concepto: z.string().trim().min(1, 'falta el concepto').optional(),
   monto: z.coerce.number().positive('el monto debe ser mayor a 0').optional(),
   pagado_por: z.coerce.number().int().positive().nullable().optional(),
-  fuente: z.enum(FUENTES_GASTO, { error: 'la fuente del gasto no es valida' }).optional()
+  // MISMO mensaje que gastoSchema (Task 2): no puede contener la palabra
+  // "fuente", que es el nombre tecnico del campo. validar() compone
+  // "Datos invalidos: " + este texto y se lo suelta tal cual a la persona.
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
 });
 r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // Acotado por iglesia en la MISMA consulta: es el fallo que ya se colo una
