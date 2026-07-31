@@ -120,6 +120,26 @@ test('una lista de autorizados larguisima -> 400 en castellano', async () => {
   assert.doesNotMatch(error, /autorizados/, 'no debe soltarle al usuario el nombre tecnico del campo');
 });
 
+// El mismo tope tiene que valer al CREAR, no solo al corregir: si no, un nino
+// se puede dar de alta con una lista larguisima que despues nadie puede editar
+// (guardarNino manda siempre los cinco campos, asi que el PATCH lo rechazaria
+// aunque la maestra solo quisiera corregir otra cosa).
+test('una lista de autorizados larguisima al crear -> 400 en castellano', async () => {
+  conEncargada();
+  const claseId = Number(db.prepare("INSERT INTO clase_ed (iglesia_id, nombre) VALUES (?, 'Parvulos')")
+    .run(SEM.iglesiaId).lastInsertRowid);
+
+  const res = await fetch(base + '/api/ninos/ninos', {
+    method: 'POST', headers: H(SEM.lider),
+    body: JSON.stringify({ clase_id: claseId, nombre: 'Sofia', autorizados: 'x'.repeat(301) })
+  });
+  assert.equal(res.status, 400);
+  const { error } = await res.json();
+  assert.doesNotMatch(error, /autorizados/, 'no debe soltarle al usuario el nombre tecnico del campo');
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM nino').get().n, 0, 'y no debe haber creado nada');
+});
+
 // ------------------------------------------------------------
 //  Borrar la ficha, y con ella su historial de asistencia.
 //  Ese historial ya no lo muestra ninguna pantalla (la asistencia de ninos se

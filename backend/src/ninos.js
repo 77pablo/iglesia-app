@@ -54,7 +54,7 @@ const ninoSchema = z.object({
   edad: z.string().trim().optional(),
   familia: z.string().trim().optional(),
   alergias: z.string().trim().optional(),
-  autorizados: z.string().trim().optional()
+  autorizados: z.string().trim().max(300, 'la lista de quién puede retirarlo es muy larga (máximo 300 caracteres)').optional()
 });
 r.post('/ninos', soloEncargado, validar(ninoSchema), (req, res) => {
   const { clase_id, nombre, edad, familia, alergias, autorizados } = req.body;
