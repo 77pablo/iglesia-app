@@ -128,3 +128,53 @@ test('la bandeja pagina de 50 en 50 y avisa que hay mas', async () => {
   assert.equal(p2.items.length, 1);
   assert.equal(p2.hayMas, false);
 });
+
+// ---------- Marcar atendido ----------
+
+const atender = (persona, id, iglesiaId) => fetch(base + '/api/publico/mensajes/' + id + '/atender', {
+  method: 'PATCH', headers: H(persona, iglesiaId)
+});
+
+test('el pastor marca un mensaje como atendido y baja en el orden', async () => {
+  const viejo = mensaje('Primero');
+  const nuevo = mensaje('Segundo');
+
+  const res = await atender(SEM.pastor, viejo);
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(viejo).estado, 'atendido');
+
+  const d = await (await fetch(base + '/api/publico/mensajes', { headers: H(SEM.pastor) })).json();
+  assert.equal(d.items[0].id, nuevo, 'lo que falta por atender va primero');
+  assert.equal(d.items[1].id, viejo);
+});
+
+test('marcar atendido un "previo" lo saca de la seccion plegada y baja su numero', async () => {
+  const previo = mensaje('De hace meses', SEM.iglesiaId, 'previo');
+
+  await atender(SEM.pastor, previo);
+
+  const d = await (await fetch(base + '/api/publico/mensajes', { headers: H(SEM.pastor) })).json();
+  assert.equal(d.previos, 0, 'ya no es un mensaje que la app escondio: es uno que el pastor resolvio');
+  assert.equal(d.items.length, 1);
+  assert.equal(d.items[0].estado, 'atendido');
+});
+
+test('el pastor de OTRA iglesia recibe 404 y el mensaje no cambia', async () => {
+  const otraIg = Number(db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRAPATCH')").run().lastInsertRowid);
+  const pastor2 = { id: Number(db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, es_pastor, activo) VALUES (?,'p2','Pastor Dos','x',1,1)"
+  ).run(otraIg).lastInsertRowid) };
+  const mio = mensaje('Mio');
+
+  const res = await atender(pastor2, mio, otraIg);
+  assert.equal(res.status, 404, 'un 403 confirmaria que ese id existe en alguna parte');
+  assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(mio).estado,
+    'nuevo', 'que no cambie es parte de la prueba, no solo el codigo de error');
+});
+
+test('un lider que no es pastor recibe 403 al marcar atendido', async () => {
+  const id = mensaje('Algo');
+  const res = await atender(SEM.lider, id);
+  assert.equal(res.status, 403);
+  assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(id).estado, 'nuevo');
+});

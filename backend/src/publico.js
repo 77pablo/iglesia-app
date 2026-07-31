@@ -118,6 +118,24 @@ r.get('/mensajes', authMiddleware, soloPastorBandeja, (req, res) => {
   res.json({ items, hayMas, offset, previos });
 });
 
+// Marcar un mensaje como atendido. Vale igual para uno 'nuevo' que para uno
+// 'previo': un previo atendido deja de ser "un mensaje que la app escondio" y
+// pasa a ser "uno que el pastor resolvio".
+//
+// No hay camino de vuelta a 'nuevo' a proposito (ver "Fuera de alcance" del
+// spec): marcar atendido es una afirmacion del pastor, no un filtro.
+r.patch('/mensajes/:id/atender', authMiddleware, soloPastorBandeja, (req, res) => {
+  // Acotado por iglesia en la MISMA consulta, no en una comprobacion posterior:
+  // es el fallo que ya se colo una vez en musica.js (borrado que cruzaba
+  // congregaciones).
+  const info = db.prepare(
+    "UPDATE contacto_publico SET estado = 'atendido' WHERE id = ? AND iglesia_id = ?"
+  ).run(Number(req.params.id), req.user.iglesia_id);
+  // 404 y no 403: un 403 confirmaria que ese id existe en otra iglesia.
+  if (info.changes === 0) return res.status(404).json({ error: 'Mensaje no encontrado' });
+  res.json({ ok: true });
+});
+
 // La fecha local vive ahora en ./fechas.js, porque la comparte con
 // persistencia.js (la clave diaria del aviso del respaldo). Se re-exporta desde
 // aqui porque este era su sitio original y hay tests que la piden por esta
