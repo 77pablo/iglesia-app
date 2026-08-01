@@ -935,9 +935,8 @@ function renderCalendario(){
     const esHoy=mesActual && hoy.getDate()===dia;
     const sel=_calDiaSel===fecha;
     const chips=delDia.slice(0,3).map(e=>{
-      const col=safeColor(e.grupo_color);
       const pend=e.estado && e.estado!=='aprobado';
-      return `<div class="cal-ev${pend?' pend':''}" style="border-left-color:${col}"
+      return `<div class="cal-ev${pend?' pend':''}" style="border-left-color:${safeColor(e.grupo_color)}"
         title="${escHtml(e.titulo)}${e.grupo?' · '+escHtml(e.grupo):''}${e.hora_inicio?' · '+escHtml(e.hora_inicio):''}"
         onclick="event.stopPropagation();abrirEvento(${e.id})">${e.hora_inicio?'<b>'+e.hora_inicio+'</b> ':''}${escHtml(e.titulo)}</div>`;
     }).join('');
@@ -1016,7 +1015,6 @@ function pedirFecha(fecha){
 function toggleFormEvento(ev){
   const z=$('form-zona'); if(z.innerHTML && !ev){ z.innerHTML=''; return; }
   window._editEvId = ev ? ev.id : null;
-  const v=(x)=>x?String(x).replace(/"/g,'&quot;'):'';
   const opts=(window._grupos||[]).map(g=>`<option value="${g.id}" ${ev&&ev.grupo_id===g.id?'selected':''}>${escHtml(g.nombre)}</option>`).join('');
   // Fecha como tres listas: día / mes / año (en vez del input nativo)
   const fBase = ev&&ev.fecha ? ev.fecha : (_calDiaSel||'');
@@ -1025,12 +1023,12 @@ function toggleFormEvento(ev){
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:4px">${titulo}</h3>
     ${(!ev && !esPastorUI)?'<p class="muted small" style="margin-bottom:8px">Tu solicitud se enviará al pastor para aprobación.</p>':''}
     <label for="ev-grupo">Grupo</label><select id="ev-grupo">${opts}</select>
-    <label for="ev-titulo">Nombre del evento</label><input id="ev-titulo" value="${ev?v(ev.titulo):''}" placeholder="Ej. Noche de Jóvenes" />
+    <label for="ev-titulo">Nombre del evento</label><input id="ev-titulo" value="${ev?escHtml(ev.titulo):''}" placeholder="Ej. Noche de Jóvenes" />
     <label>Fecha</label>
     <div>${fechaSelectHTML('ev', fBase)}</div>
-    <div class="row" style="margin-top:10px"><div style="flex:1"><label for="ev-ini">Hora inicio</label><input id="ev-ini" type="time" value="${ev&&ev.hora_inicio?ev.hora_inicio:''}" /></div>
-      <div style="flex:1"><label for="ev-fin">Hora fin</label><input id="ev-fin" type="time" value="${ev&&ev.hora_fin?ev.hora_fin:''}" /></div></div>
-    <label for="ev-lugar">Lugar</label><input id="ev-lugar" value="${ev?v(ev.lugar):''}" placeholder="Ej. Salón principal" />
+    <div class="row" style="margin-top:10px"><div style="flex:1"><label for="ev-ini">Hora inicio</label><input id="ev-ini" type="time" value="${ev&&ev.hora_inicio?escHtml(ev.hora_inicio):''}" /></div>
+      <div style="flex:1"><label for="ev-fin">Hora fin</label><input id="ev-fin" type="time" value="${ev&&ev.hora_fin?escHtml(ev.hora_fin):''}" /></div></div>
+    <label for="ev-lugar">Lugar</label><input id="ev-lugar" value="${ev?escHtml(ev.lugar):''}" placeholder="Ej. Salón principal" />
     <p id="ev-error" class="error"></p>
     <button class="btn" style="margin-top:14px" onclick="guardarEvento()">${ev?'Guardar cambios':(esPastorUI?'Crear evento':'📩 Enviar al pastor')}</button></div>`;
 }
@@ -1083,7 +1081,6 @@ const ROL_LABEL = { admin:'Líderes de cuerpo', lider_musica:'Líderes de músic
 async function toggleFormAnuncio(a){
   const z=$('form-zona'); if(z.innerHTML && !a){ z.innerHTML=''; return; }
   window._editAnId = a ? a.id : null;
-  const v=(x)=>x?String(x).replace(/"/g,'&quot;'):'';
   // Cargar segmentos disponibles (grupos + roles) para dirigir el aviso (Fase 4.1)
   let segHtml='';
   if(!a){
@@ -1096,7 +1093,7 @@ async function toggleFormAnuncio(a){
     }catch{ segHtml=''; }
   }
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${a?'Editar anuncio':'Nuevo anuncio'}</h3>
-    <label for="an-titulo">Título</label><input id="an-titulo" value="${a?v(a.titulo):''}" placeholder="Título" />
+    <label for="an-titulo">Título</label><input id="an-titulo" value="${a?escHtml(a.titulo):''}" placeholder="Título" />
     <label for="an-texto">Mensaje</label><textarea id="an-texto" rows="3" placeholder="Mensaje (opcional)">${escHtml(a&&a.texto?a.texto:'')}</textarea>
     ${segHtml}
     <label class="check"><input type="checkbox" id="an-urgente" ${a&&a.urgente?'checked':''}/> 🔴 Marcar como urgente</label>
@@ -1861,7 +1858,7 @@ async function cargarPlan(eventoId){
       ? `<div class="row" style="flex-wrap:wrap;gap:8px">
           ${fechaSelectHTML('en', en.fecha||'', {opcional:true})}
           <input id="en-hora" type="time" value="${escHtml(en.hora||'')}" style="max-width:120px"/>
-          <input id="en-lugar" placeholder="Lugar" value="${(en.lugar||'').replace(/"/g,'&quot;')}" style="max-width:180px"/>
+          <input id="en-lugar" placeholder="Lugar" value="${escHtml(en.lugar||'')}" style="max-width:180px"/>
           <button class="btn small-btn" onclick="guardarEnsayo()">Guardar ensayo</button></div>`
       : (en.fecha? `<div class="muted small">🗓️ ${fechaTxt(en.fecha)}${en.hora?' · '+escHtml(en.hora):''}${en.lugar?' · 📍 '+escHtml(en.lugar):''}</div>`
                  : '<div class="muted small">Ensayo sin agendar.</div>');
@@ -2134,7 +2131,7 @@ function editarLetraCancion(id){
   const c=(window._canciones||[]).find(x=>x.id===id); if(!c) return;
   const v=$('vc-ver'); if(!v) return;
   v.innerHTML=`<label for="vc-tono">Tono base</label>
-    <input id="vc-tono" value="${(c.tono||'').replace(/"/g,'&quot;')}" placeholder="ej. SOL, G" style="max-width:140px"/>
+    <input id="vc-tono" value="${escHtml(c.tono||'')}" placeholder="ej. SOL, G" style="max-width:140px"/>
     <label for="vc-letra" style="margin-top:10px">Acordes / letra</label>
     <textarea id="vc-letra" rows="14" style="width:100%;font-family:monospace;white-space:pre">${escHtml(c.letra||'')}</textarea>
     <div class="row" style="margin-top:10px">
@@ -2951,11 +2948,10 @@ async function formPredica(id){
   const z=$('form-predica'); if(!z) return;
   if(z.innerHTML){ z.innerHTML=''; return; }
   let p={}; if(id){ try{ p=await api('/predica/'+id); }catch{} }
-  const v=(x)=>x?String(x).replace(/"/g,'&quot;'):'';
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${id?'Editar prédica':'Nueva prédica'}</h3>
-    <label for="pp-titulo">Nombre de la prédica</label><input id="pp-titulo" value="${v(p.titulo)}" placeholder="Ej. El amor de Dios"/>
+    <label for="pp-titulo">Nombre de la prédica</label><input id="pp-titulo" value="${escHtml(p.titulo||'')}" placeholder="Ej. El amor de Dios"/>
     <label>Fecha</label><div>${fechaSelectHTML('pp', p.fecha||'')}</div>
-    <label for="pp-predicador">Predicador</label><input id="pp-predicador" value="${v(p.predicador)}" placeholder="Quién predicó"/>
+    <label for="pp-predicador">Predicador</label><input id="pp-predicador" value="${escHtml(p.predicador||'')}" placeholder="Quién predicó"/>
     <label for="pp-notas">Notas / bosquejo</label><textarea id="pp-notas" style="min-height:150px">${escHtml(p.notas||'')}</textarea>
     <p id="pp-error" class="error"></p>
     <button class="btn" style="margin-top:12px" onclick="guardarPredica(${id||0})">${id?'Guardar cambios':'Crear prédica'}</button></div>`;
@@ -3057,7 +3053,7 @@ async function verIglesiaObispo(id, mes){
     <div class="head-row" style="margin:16px 0;gap:10px;flex-wrap:wrap;align-items:center">
       <span class="muted small">Iglesia:</span> ${selIglesia}
       <span class="muted small" style="margin-left:8px">Mes:</span>
-      <input type="month" value="${d.mes}" onchange="verIglesiaObispo(${id}, this.value)" style="max-width:170px"/>
+      <input type="month" value="${escHtml(d.mes)}" onchange="verIglesiaObispo(${id}, this.value)" style="max-width:170px"/>
     </div>
     <div class="widgets" style="margin-bottom:18px">
       <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${d.miembros}</div></div>
@@ -3201,9 +3197,9 @@ async function vistaPerfilDirectorio(){
     <label for="dp-nombre">Nombre</label>
     <input id="dp-nombre" value="${escHtml(p.nombre||'')}" maxlength="120"/>
     <label for="dp-tel">Teléfono</label>
-    <input id="dp-tel" type="tel" value="${p.telefono?String(p.telefono).replace(/"/g,'&quot;'):''}" placeholder="Ej. +56 9 1234 5678"/>
+    <input id="dp-tel" type="tel" value="${escHtml(p.telefono||'')}" placeholder="Ej. +56 9 1234 5678"/>
     <label for="dp-email" style="margin-top:10px">Correo</label>
-    <input id="dp-email" type="email" value="${p.email?String(p.email).replace(/"/g,'&quot;'):''}" placeholder="tucorreo@ejemplo.com"/>
+    <input id="dp-email" type="email" value="${escHtml(p.email||'')}" placeholder="tucorreo@ejemplo.com"/>
     <label style="margin-top:10px">Fecha de cumpleaños</label>
     <div>${fechaSelectHTML('dp-cumple', p.cumple||'', {opcional:true, desde:new Date().getFullYear()-100, hasta:new Date().getFullYear()})}</div>
     <label class="check" style="margin-top:16px"><input type="checkbox" id="dp-mostrar-tel" ${p.mostrar_telefono?'checked':''}/> Mostrar mi teléfono en el directorio</label>
@@ -3546,8 +3542,8 @@ function adminFormGrupo(id){
   z.dataset.id=String(id);
   z.innerHTML=`<div class="form-panel">
     <div class="row" style="gap:8px">
-      <input id="ag-nombre" placeholder="Nombre del grupo" value="${(g.nombre||'').replace(/"/g,'&quot;')}"/>
-      <input id="ag-color" type="color" value="${g.color||'#1C61A6'}" style="max-width:60px;padding:4px"/></div>
+      <input id="ag-nombre" placeholder="Nombre del grupo" value="${escHtml(g.nombre||'')}"/>
+      <input id="ag-color" type="color" value="${safeColor(g.color,'#1C61A6')}" style="max-width:60px;padding:4px"/></div>
     <p id="ag-err" class="error"></p>
     <button class="btn small-btn" style="margin-top:8px" onclick="adminGuardarGrupo(${id})">${id?'Guardar':'Crear'}</button></div>`;
 }
@@ -4036,7 +4032,7 @@ async function recConfirmar(){
 
 function vistaAjustes(){
   const a=ajustes(), acSel=a.acento||'cielo', temaSel=a.tema||'light', txtSel=a.texto||'md';
-  const emailActual=(ME.persona&&ME.persona.email)?String(ME.persona.email).replace(/"/g,'&quot;'):'';
+  const emailActual=(ME.persona&&ME.persona.email)||'';
   const opt=(g,val,act,label)=>`<button class="ajuste-opt ${val===act?'sel':''}" aria-pressed="${val===act}" onclick="setAjuste('${g}','${val}')">${label}</button>`;
   $('content').innerHTML=`
     <div class="card" style="max-width:560px">
@@ -4060,7 +4056,7 @@ function vistaAjustes(){
       <p class="muted small" style="margin-bottom:14px">Tu correo y contraseña.</p>
       <label>Correo (Gmail)</label>
       <div class="row" style="gap:8px">
-        <input id="cta-email" type="email" value="${emailActual}" placeholder="tucorreo@gmail.com"/>
+        <input id="cta-email" type="email" value="${escHtml(emailActual)}" placeholder="tucorreo@gmail.com"/>
         <button class="btn small-btn" onclick="guardarEmailCuenta()">Guardar</button>
       </div>
       <p class="muted small" style="margin:6px 0 0">Sirve para recuperar tu contraseña si la olvidas.</p>
@@ -4501,7 +4497,7 @@ const Org = {
         <!-- org-hora: la rendicion la oculta. Al tesorero la hora de llegada no
              le dice nada, y comparte card con el contexto, que si sale. -->
         <div class="org-hora" style="margin-top:10px"><b>🕐 Hora de llegada:</b>
-          ${ed?`<input id="org-hora" type="time" value="${h.hora_llegada||''}" onchange="Org.guardarHora(this.value)" style="max-width:130px;display:inline-block">`
+          ${ed?`<input id="org-hora" type="time" value="${escHtml(h.hora_llegada||'')}" onchange="Org.guardarHora(this.value)" style="max-width:130px;display:inline-block">`
               :`<span>${escHtml(h.hora_llegada||'—')}</span>`}</div>
       </div>
       <div class="card card-cosas" style="margin-top:14px"><h3 style="font-size:16px">📦 Cosas a llevar</h3>
