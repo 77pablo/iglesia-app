@@ -401,8 +401,13 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
     text-transform:uppercase;color:rgba(255,255,255,.45);
     padding:14px 12px 6px;}
   /* El primero VISUALMENTE (el del grupo 1), que ya no tiene por que ser el
-     primero del DOM: por eso una clase que pone buildNav y no `:first-child`. */
-  .nav-sec-primero{padding-top:4px;}
+     primero del DOM: por eso una clase que pone buildNav y no `:first-child`.
+     `.nav-sec.nav-sec-primero` y no `.nav-sec-primero` a secas: con la misma
+     especificidad que `.nav-sec`, este padding-top solo gana hoy porque esta
+     regla aparece DESPUES en el archivo — si alguien reordena las reglas, deja
+     de aplicarse sin ningun aviso. Con las dos clases juntas la especificidad
+     es mayor y gana siempre, en cualquier orden. */
+  .nav-sec.nav-sec-primero{padding-top:4px;}
 }
 @media (max-width:820px){
   .auth{grid-template-columns:1fr;}
