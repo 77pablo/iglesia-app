@@ -9,6 +9,8 @@ En el teléfono el menú lateral es un cajón a pantalla completa y el pastor ve
 
 **El mecanismo real (no "el CSS oculta los encabezados"):** `buildNav()` pinta el `<nav>` **siempre en el orden del `NAV`**, agrupe o no — nunca recorre las secciones agrupadas para construir el DOM. El agrupamiento visual del móvil se consigue aparte, con `order` de flexbox: cada elemento lleva una variable `--ord` correlativa, y la única regla de toda la hoja que la convierte en `order` vive **dentro** de `@media (max-width:900px)`. Un CSS que solo oculta un `<div>` con `display:none` no puede deshacer un reordenamiento ya hecho en el DOM — esa fue justo la explicación insuficiente que un fallo real dejó en evidencia durante la revisión final de esta rama (`.superpowers/sdd/revision-final-arreglos.md`): `buildNav()` pintaba en orden de grupo sin mirar el ancho, y en escritorio 12 de las 19 entradas del pastor cambiaban de sitio con los encabezados simplemente invisibles, no neutralizados.
 
+⚠️ **Si una prueba lee código fuente con un regex, ponle `\r?` antes de cada `\n`.** En JavaScript el `.` no casa con `\r`, y git deja los archivos en disco con finales de línea de Windows (`git ls-files --eol web/app.js` → `i/lf  w/crlf`). La prueba que ejecuta `buildNav()` de verdad —la única que sujeta lo del párrafo anterior— recortaba `const _ic=` con `/const _ic=.*\n/` y **no encontraba nada**: pasaba en la rama solo porque allí git había materializado el archivo con finales de línea Unix, y se cayó sola al fusionar. Una prueba rota es como no tenerla, y además apunta al sitio equivocado: quien la viera roja creería que el fallo está en el menú. Arreglado en `8130087`; barridas las otras 12 pruebas que leen fuente, ninguna más tenía el mismo agujero.
+
 Dos asignaciones deliberadas: **`predica`** va en "Día a día" — la ve todo el mundo, no es el ministerio de nadie — y **`ajustes`** en "Lo mío" — es el tema y el color de quien mira, no administración de la iglesia.
 
 Suite en **536 tests** (partió en 526; medido con `cd backend && npm test`).
@@ -557,9 +559,12 @@ app/
 
 ### 👉 POR DÓNDE RETOMAR (estado de `main` al 31 jul 2026 — compruébalo con los comandos de abajo antes de creerlo, incluida esta cabecera)
 
-> ✅ **NO queda nada sin subir.** Comprobado el 31 jul al cerrar la revisión final del menú agrupado: `main` y `origin/main` apuntan **al mismo commit** (`e586926`, *"merge: corregir el nombre de una persona"*), `git log origin/main..main --oneline` sale **vacío**, y `fef2742` / `b0ff2da` son **ancestros de `main`** — o sea, la bandeja del portal, la fuente del gasto y la corrección del nombre están **fusionadas Y subidas**.
-> Lo único sin fusionar hoy es **esta rama**, `feat/menu-agrupado`.
-> **Lo que sí falta comprobar** es el despliegue: `curl` al `/app.js` de producción buscando `filaMensajePortal` dice si el redespliegue de Render llegó de verdad. Fusionado y subido **no** es lo mismo que desplegado.
+> ⬆️ **Queda trabajo sin subir, y es tarea de Pablo.** `feat/menu-agrupado` ya está **fusionada a `main` y la rama borrada**, así que hoy no queda nada sin fusionar; lo que queda es **empujar `main` a GitHub**. Cuántos commits son, míralo tú — no te fíes de ningún número escrito aquí:
+> ```
+> git log origin/main..main --oneline
+> ```
+> Antes de esta fusión sí estaba todo subido (`main` y `origin/main` en `e586926`); el push que falta es el de la fusión del menú y su arreglo posterior.
+> **Y falta comprobar el despliegue**, que es otra cosa: `curl` al `/app.js` de producción buscando `filaMensajePortal` dice si el redespliegue de Render llegó de verdad. Fusionado y subido **no** es lo mismo que desplegado.
 >
 > Y la lección de fondo, que es la razón de conservar lo de abajo: esta frase ha estado equivocada **en los dos sentidos** más de una vez — llegó a decir "14 commits SIN SUBIR" cuando no quedaba ninguno, y también lo contrario. **No te creas ninguna versión de ella, tampoco esta, sin comprobarlo** con `git log origin/main..main --oneline`.
 
