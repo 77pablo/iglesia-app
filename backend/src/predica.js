@@ -26,7 +26,7 @@ r.get('/predicadores', (req, res) => {
   if (!esPastor(req.user.persona_id)) return res.status(403).json({ error: 'Solo el pastor' });
   res.json(db.prepare(
     `SELECT rt.id, rt.persona_id, rt.desde, rt.hasta, p.nombre,
-            (date('now') BETWEEN rt.desde AND rt.hasta) AS vigente
+            (date('now','localtime') BETWEEN rt.desde AND rt.hasta) AS vigente
        FROM rol_temporal rt JOIN persona p ON p.id = rt.persona_id
       WHERE rt.iglesia_id = ? AND rt.rol = 'predicador' ORDER BY rt.hasta DESC`
   ).all(req.user.iglesia_id).map(x => ({ ...x, vigente: !!x.vigente })));

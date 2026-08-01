@@ -55,6 +55,106 @@ test('render.yaml declara la misma zona horaria', () => {
   );
 });
 
+// ============================================================
+//  Parte A: el rol 'predicador' se activaba/apagaba con el DIA UTC.
+//
+//  rol_temporal.desde/.hasta son fechas de calendario que elige el pastor
+//  ('YYYY-MM-DD', sin hora). Compararlas contra date('now') SIN 'localtime'
+//  usa el dia UTC: en Chile (UTC-4) el rol se activaba la noche anterior y se
+//  apagaba unas 4 horas antes de lo que decia la pantalla.
+//
+//  El problema de probar esto con datos reales: una prueba que inserte un
+//  rol_temporal y pregunte "¿esta vigente ahora?" solo distingue el codigo
+//  bueno del malo durante esas ~4 horas al dia en que el dia UTC y el dia de
+//  Chile no coinciden. El resto del dia pasa en verde con el fallo puesto:
+//  da una seguridad que no tiene.
+//
+//  Salida: SQLite no permite "congelar" el reloj de date('now') (a diferencia
+//  de Date en JS, que otros tests de este proyecto si mockean con
+//  t.mock.timers -- ver persistencia-fecha.test.js). Asi que en vez de dejar
+//  que la consulta real use 'now', se EXTRAE el texto de la consulta tal cual
+//  vive hoy en auth.js/predica.js (si alguien cambia la consulta, esta prueba
+//  se entera) y se sustituye 'now' por un instante de calendario FIJO antes de
+//  ejecutarla contra una base de datos real. El resultado es una prueba de
+//  COMPORTAMIENTO (ejecuta SQL de verdad) que a la vez es DETERMINISTA (no
+//  depende en absoluto de a que hora del dia corra la suite).
+// ============================================================
+test('auth.js: la consulta de esPredicador compara contra el dia LOCAL, no el UTC', () => {
+  const src = leer('backend/src/auth.js');
+  const m = src.match(/SELECT 1 FROM rol_temporal WHERE persona_id = \? AND rol = 'predicador' AND date\(([^)]*)\) BETWEEN desde AND hasta/);
+  assert.ok(m, 'no se encontro la consulta de esPredicador en auth.js (¿cambio de forma?)');
+  assert.equal(m[1], "'now','localtime'",
+    "esPredicador tiene que usar date('now','localtime'): sin 'localtime' compara la fecha de calendario contra el dia UTC.");
+});
+
+test('predica.js: la etiqueta "vigente" compara contra el dia LOCAL, no el UTC', () => {
+  const src = leer('backend/src/predica.js');
+  const m = src.match(/\(date\(([^)]*)\) BETWEEN rt\.desde AND rt\.hasta\) AS vigente/);
+  assert.ok(m, 'no se encontro la consulta de /predicadores en predica.js (¿cambio de forma?)');
+  assert.equal(m[1], "'now','localtime'",
+    "\"vigente\" tiene que usar date('now','localtime'): sin 'localtime' compara la fecha de calendario contra el dia UTC.");
+});
+
+test('Parte A, comportamiento: el rol de predicador se activa y se apaga segun el dia de Chile (instantes FIJOS, no "now")', async () => {
+  const { cargarDb } = await import('./helpers.js');
+  const db = await cargarDb();
+
+  const ig = db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('TZ Test','TZTEST')").run();
+  const iglesiaId = Number(ig.lastInsertRowid);
+  const pRow = db.prepare(
+    'INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, activo) VALUES (?,?,?,?,1)'
+  ).run(iglesiaId, 'predicador_tz', 'Predicador TZ', 'x');
+  const personaId = Number(pRow.lastInsertRowid);
+
+  // El pastor le da el rol del 5 al 7 de julio de 2026 (fechas de calendario,
+  // el mismo ejemplo del informe: se activaba la noche del 4 y se apagaba la
+  // noche del 6, unas 4 horas antes de lo debido).
+  db.prepare(
+    "INSERT INTO rol_temporal (iglesia_id, persona_id, rol, desde, hasta) VALUES (?,?,'predicador','2026-07-05','2026-07-07')"
+  ).run(iglesiaId, personaId);
+
+  const authQuery = leer('backend/src/auth.js').match(/"SELECT 1 FROM rol_temporal[^"]*"/)[0].slice(1, -1);
+  const predicaQuery = leer('backend/src/predica.js').match(/`SELECT rt\.id[\s\S]*?ORDER BY rt\.hasta DESC`/)[0].slice(1, -1);
+  assert.ok(authQuery.includes("date('now'") && authQuery.includes('BETWEEN desde AND hasta'), 'no se pudo extraer la consulta de esPredicador');
+  assert.ok(predicaQuery.includes("date('now'") && predicaQuery.includes('AS vigente'), 'no se pudo extraer la consulta de /predicadores');
+
+  // Sustituye 'now' por un instante fijo (formato que SQLite acepta igual que
+  // el 'now' real) y ejecuta las dos consultas reales contra la BD de prueba.
+  const vigentePor = (instanteUTC) => {
+    const auth = authQuery.replace("'now'", `'${instanteUTC}'`);
+    const predica = predicaQuery.replace("'now'", `'${instanteUTC}'`);
+    const porAuth = !!db.prepare(auth).get(personaId);
+    const fila = db.prepare(predica).all(iglesiaId).find(x => x.persona_id === personaId);
+    return { auth: porAuth, predica: !!(fila && fila.vigente) };
+  };
+
+  // 2026-07-05 01:00 UTC = 2026-07-04 21:00 en Chile: en Chile TODAVIA es el
+  // dia 4, el rol no deberia estar activo aun. Con el fallo, aqui ya daria
+  // vigente=true (se activaba 4h antes de tiempo).
+  let r = vigentePor('2026-07-05 01:00:00');
+  assert.equal(r.auth, false, 'esPredicador: la noche del 4 en Chile el rol aun NO deberia estar activo');
+  assert.equal(r.predica, false, '"vigente": igual, la noche del 4 en Chile');
+
+  // 2026-07-06 12:00 UTC = 2026-07-06 08:00 en Chile: de lleno en el rango, en
+  // ambas zonas. Sirve de control (con o sin el fallo da vigente=true).
+  r = vigentePor('2026-07-06 12:00:00');
+  assert.equal(r.auth, true, 'esPredicador: pleno dia 6, el rol tiene que estar activo');
+  assert.equal(r.predica, true, '"vigente": igual, pleno dia 6');
+
+  // 2026-07-08 01:00 UTC = 2026-07-07 21:00 en Chile: en Chile TODAVIA es el
+  // dia 7 (el ultimo del rol). Con el fallo, aqui ya daria vigente=false (se
+  // apagaba 4h antes de tiempo).
+  r = vigentePor('2026-07-08 01:00:00');
+  assert.equal(r.auth, true, 'esPredicador: la noche del 7 en Chile el rol TODAVIA deberia estar activo');
+  assert.equal(r.predica, true, '"vigente": igual, la noche del 7 en Chile');
+
+  // 2026-07-08 05:00 UTC = 2026-07-08 01:00 en Chile: ya paso el dia 7 en
+  // Chile, el rol tiene que estar apagado en ambas zonas.
+  r = vigentePor('2026-07-08 05:00:00');
+  assert.equal(r.auth, false, 'esPredicador: pasada la medianoche del 8 en Chile, el rol tiene que estar apagado');
+  assert.equal(r.predica, false, '"vigente": igual, pasada la medianoche del 8 en Chile');
+});
+
 test('fechaLocal responde a la zona horaria del proceso (por eso hay que fijarla)', async () => {
   // Demuestra el mecanismo del fallo: el mismo instante da dos dias distintos
   // segun TZ. Es lo que convierte "declarar TZ" en un arreglo y no en un adorno.
