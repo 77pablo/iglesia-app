@@ -30,7 +30,9 @@ r.get('/clases', (req, res) => {
 });
 const claseSchema = z.object({
   nombre: z.string().trim().min(1, 'falta el nombre'),
-  edad: z.string().trim().optional()
+  // Texto libre (ej. "6-8 años"): sin formato fijo, solo un limite generoso
+  // para que no se pueda meter un bloque de texto entero en un campo de edad.
+  edad: z.string().trim().max(60, 'edad demasiado larga').optional()
 });
 r.post('/clases', soloEncargado, validar(claseSchema), (req, res) => {
   const { nombre, edad } = req.body;

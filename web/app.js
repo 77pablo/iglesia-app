@@ -1860,7 +1860,7 @@ async function cargarPlan(eventoId){
     let ensayoHtml = lider
       ? `<div class="row" style="flex-wrap:wrap;gap:8px">
           ${fechaSelectHTML('en', en.fecha||'', {opcional:true})}
-          <input id="en-hora" type="time" value="${en.hora||''}" style="max-width:120px"/>
+          <input id="en-hora" type="time" value="${escHtml(en.hora||'')}" style="max-width:120px"/>
           <input id="en-lugar" placeholder="Lugar" value="${(en.lugar||'').replace(/"/g,'&quot;')}" style="max-width:180px"/>
           <button class="btn small-btn" onclick="guardarEnsayo()">Guardar ensayo</button></div>`
       : (en.fecha? `<div class="muted small">🗓️ ${fechaTxt(en.fecha)}${en.hora?' · '+escHtml(en.hora):''}${en.lugar?' · 📍 '+escHtml(en.lugar):''}</div>`
@@ -2456,7 +2456,7 @@ async function vistaTesoreria(){
 }
 function filaMov(m){
   return `<div class="item-card flex">
-    <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${cap(m.categoria||m.tipo)}</b>
+    <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${escHtml(cap(m.categoria||m.tipo))}</b>
     <div class="muted small">${escHtml(m.descripcion||'')} · ${escHtml(m.fecha)}${m.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(m.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div>
     <b style="color:${m.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
 }
@@ -2520,7 +2520,7 @@ async function cargarClases(){
     c.className='grid';
     c.innerHTML=cl.map(x=>`<div class="module-card" onclick="vistaClase(${x.id},${escJsAttr(x.nombre||'')})">
       <div class="icon">📚</div><div class="label">${escHtml(x.nombre)}</div>
-      <div class="muted small">${x.edad||''} · ${x.ninos} niños</div></div>`).join('');
+      <div class="muted small">${escHtml(x.edad||'')} · ${x.ninos} niños</div></div>`).join('');
   }catch(e){ $('clases').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
 function formClase(){ const z=$('form-clase'); if(z.innerHTML){z.innerHTML='';return;}
@@ -3089,7 +3089,7 @@ async function obTesoreria(id){
   try{ const m=await api('/obispo/iglesia/'+id+'/tesoreria'+_qmes());
     const ing=m.filter(x=>x.tipo==='ingreso').reduce((a,b)=>a+b.monto,0), gas=m.filter(x=>x.tipo==='gasto').reduce((a,b)=>a+b.monto,0);
     modalDetalle('💰 Movimientos · '+_obMes, m.length
-      ? `<div class="muted small" style="margin-bottom:10px">↑ ${money(ing)} · ↓ ${money(gas)} · balance ${money(ing-gas)}</div><div class="list">`+m.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.tipo==='ingreso'?'↑':'↓'} ${cap(x.categoria||x.tipo)}</b><div class="muted small">${escHtml(x.descripcion||'')} · ${escHtml(x.fecha)}${x.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(x.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div><b style="color:${x.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${x.tipo==='ingreso'?'+':'−'}${money(x.monto)}</b></div>`).join('')+'</div>'
+      ? `<div class="muted small" style="margin-bottom:10px">↑ ${money(ing)} · ↓ ${money(gas)} · balance ${money(ing-gas)}</div><div class="list">`+m.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.tipo==='ingreso'?'↑':'↓'} ${escHtml(cap(x.categoria||x.tipo))}</b><div class="muted small">${escHtml(x.descripcion||'')} · ${escHtml(x.fecha)}${x.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(x.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div><b style="color:${x.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${x.tipo==='ingreso'?'+':'−'}${money(x.monto)}</b></div>`).join('')+'</div>'
       : '<p class="muted small">Sin movimientos este mes.</p>');
   }catch(e){ toast(e.message); }
 }
