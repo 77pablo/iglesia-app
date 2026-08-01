@@ -3,7 +3,7 @@
 
 ---
 
-## 🆕 31 DE JULIO DE 2026 — el menú del móvil, agrupado por temas (rama local `feat/menu-agrupado`: sin fusionar, sin subir, sin desplegar)
+## 🆕 31 DE JULIO DE 2026 — el menú del móvil, agrupado por temas (fusionado, subido y **desplegado**)
 
 En el teléfono el menú lateral es un cajón a pantalla completa y el pastor ve sus 19 entradas seguidas: para llegar a casi cualquier cosa hay que desplazarse. Ahora se agrupan bajo cinco temas — **Día a día · Lo mío · Pastoreo · Ministerios · Administración** — pero **solo para quien tiene el menú largo**: `GRUPOS_NAV` (`web/app.js`) reparte las claves del `NAV`, y `NAV_UMBRAL_GRUPOS = 12` decide si se agrupa; por debajo del umbral, `agruparNav()` devuelve una sola sección sin título — la lista plana de siempre.
 
@@ -14,6 +14,8 @@ En el teléfono el menú lateral es un cajón a pantalla completa y el pastor ve
 Dos asignaciones deliberadas: **`predica`** va en "Día a día" — la ve todo el mundo, no es el ministerio de nadie — y **`ajustes`** en "Lo mío" — es el tema y el color de quien mira, no administración de la iglesia.
 
 Suite en **536 tests** (partió en 526; medido con `cd backend && npm test`).
+
+**Desplegado y comprobado en producción** (1 ago 2026, 02:32 UTC): el `app.js` que sirve Render trae `GRUPOS_NAV`, `NAV_UMBRAL_GRUPOS` y `setProperty('--ord')`, y su `styles.css` tiene **exactamente una** regla `order:var(--ord)` — ninguna suelta fuera del `@media`, que sería el fallo del reordenamiento en escritorio. Lo que **no** comprueba ese `curl`: cómo se ve. Falta mirarlo en un teléfono de verdad y confirmar en escritorio que las 19 entradas siguen donde estaban.
 
 > **Sigue sin resolver**, a propósito o por quedar fuera de alcance:
 > 1. **Esto mejora buscar, no acorta el scroll.** Las 19 entradas siguen ahí, más cinco encabezados. Si el uso real demuestra que lo que molesta es la **longitud**, la respuesta era la opción descartada —**secciones plegables**— y este trabajo es su paso previo: los grupos ya quedarían definidos.
