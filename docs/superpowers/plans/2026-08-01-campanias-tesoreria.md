@@ -213,16 +213,16 @@ test('el total de la campania sale de los movimientos, no de la columna recaudad
   assert.equal(c.aportes[0].monto, 30000);
 });
 
-test('la columna muerta recaudado no viaja al frontend', async () => {
-  // Si viajara, alguien la pintaria tarde o temprano y volveriamos a tener dos
-  // numeros distintos para lo mismo.
+test('la columna muerta recaudado NO es lo que se devuelve', async () => {
+  // Se ensucia la columna a mano con un valor imposible. Si el codigo la
+  // leyera, ese numero saldria por la respuesta; como el total se calcula
+  // desde los movimientos (y no hay ninguno), tiene que salir 0.
   const { campaniaId } = await crearCampania({ nombre: 'Viaje', meta: 100000 });
-  const camps = await get('/api/tesoreria/campanias');
-  const c = camps.find(x => x.id === campaniaId);
-  assert.ok(!('recaudado' in c) || typeof c.recaudado === 'number',
-    'recaudado solo puede existir como total calculado');
-  // El calculado vale 0 aqui; lo que no puede es venir de la columna.
-  assert.equal(c.recaudado, 0);
+  dbDirecta.prepare('UPDATE campania SET recaudado = 999999 WHERE id = ?').run(campaniaId);
+
+  const c = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId);
+  assert.equal(c.recaudado, 0,
+    'se esta devolviendo la columna recaudado en vez del total calculado: vuelven los dos numeros distintos');
 });
 
 test('una campania de OTRA iglesia no aparece', async () => {
