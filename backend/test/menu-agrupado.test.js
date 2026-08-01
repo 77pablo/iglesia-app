@@ -259,3 +259,122 @@ test('el orden por temas se aplica SOLO en el movil', () => {
   assert.ok(!resto.includes('--ord'),
     'hay un --ord fuera del @media de 900px: el escritorio quedaria reordenado, que es justo el fallo');
 });
+
+// --- el orden REAL que buildNav pinta en el DOM --------------------------------
+//
+// Todo lo de arriba mira el TEXTO de buildNav: que llame a agruparNav, que
+// marque --ord, que solo el @media lo convierta en order. Ninguna de esas
+// pruebas EJECUTA buildNav. Eso deja un hueco exacto: alguien podria volver a
+// recorrer las SECCIONES agrupadas (en vez de `visibles`, que esta en orden
+// NAV) al construir el DOM, conservando intacto todo el mecanismo de --ord.
+// Las pruebas de arriba seguirian en verde —siguen viendo `--ord`, siguen
+// viendo el @media— y el escritorio volveria a quedar reordenado: es la MISMA
+// regresion que ya paso una vez en esta rama, sin nada que la sujete.
+//
+// Por eso esto ejecuta el buildNav REAL de web/app.js contra un DOM de
+// juguete y afirma lo unico que ve una persona en el escritorio: que los
+// `.nav-item` salen en el mismo orden que el `NAV`.
+
+// Recorta `const NOMBRE={ ... };` balanceando llaves (para NAV_ICON, que es un
+// objeto y no una lista).
+function recortarObjeto(nombre) {
+  const i = fuente.indexOf(`const ${nombre}={`);
+  assert.ok(i >= 0, `no se encontro ${nombre} en web/app.js`);
+  let saldo = 0, fin = -1;
+  for (let j = fuente.indexOf('{', i); j < fuente.length; j++) {
+    if (fuente[j] === '{') saldo++;
+    else if (fuente[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
+  }
+  assert.ok(fin > 0, `no se pudo cerrar el objeto de ${nombre}`);
+  return fuente.slice(fuente.indexOf('{', i), fin);
+}
+
+// Recorta `function nombre(...){ ... }` balanceando llaves. Generico: ya hay
+// dos copias de esta misma idea mas arriba (para agruparNav y para buildNav),
+// cada una atada a su propio proposito; esta se queda aparte para no volver a
+// tocar esas.
+function recortarFuncion(nombre) {
+  const i = fuente.indexOf(`function ${nombre}(`);
+  assert.ok(i >= 0, `no se encontro ${nombre} en web/app.js`);
+  let saldo = 0, fin = -1;
+  for (let j = fuente.indexOf('{', i); j < fuente.length; j++) {
+    if (fuente[j] === '{') saldo++;
+    else if (fuente[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
+  }
+  assert.ok(fin > 0, `no se pudo cerrar ${nombre}`);
+  return fuente.slice(i, fin);
+}
+
+// Un elemento de DOM de juguete: lo minimo que buildNav toca (className,
+// dataset, style.setProperty, setAttribute, innerHTML, onclick).
+function crearElementoDeJuguete() {
+  return {
+    className: '', dataset: {}, innerHTML: '', onclick: null,
+    style: { _props: {}, setProperty(k, v) { this._props[k] = v; } },
+    setAttribute(k, v) { this[`attr_${k}`] = v; },
+  };
+}
+
+// Ejecuta el buildNav REAL (no una copia) contra ese DOM de juguete.
+//
+// NAV, GRUPOS_NAV, NAV_UMBRAL_GRUPOS, NAV_ICON y agruparNav son los reales,
+// recortados de web/app.js. Lo unico sustituido es lo que buildNav recibe
+// como dependencia externa y no le importa a ESTA prueba:
+//  - tieneModulo siempre devuelve true: es el caso del pastor, que ve las 19
+//    entradas (el caso donde el fallo original se notaba). Que filtre bien
+//    segun el rol ya lo cubren otras pruebas de este archivo (via CLAVES_NAV)
+//    y del backend; aqui filtrar de mas o de menos no cambiaria el orden.
+//  - labelDe/iconDe/navTo no participan del orden en que se recorren las
+//    claves; se dejan en lo minimo que no revienta.
+function ejecutarBuildNavReal() {
+  const nav = { innerHTML: '', children: [], appendChild(el) { this.children.push(el); } };
+  const doc = { createElement: () => crearElementoDeJuguete() };
+  // NAV_ICON llama a _ic(...) para cada entrada: sin esa arrow function
+  // definida, evaluar el objeto revienta con "_ic is not defined".
+  const lineaIc = fuente.match(/const _ic=.*\n/);
+  assert.ok(lineaIc, 'no se encontro la definicion de _ic en web/app.js');
+
+  const cuerpo = `
+    ${lineaIc[0]}
+    const NAV = ${recortarLista('NAV')};
+    const GRUPOS_NAV = ${recortarLista('GRUPOS_NAV')};
+    const NAV_UMBRAL_GRUPOS = ${fuente.match(/const NAV_UMBRAL_GRUPOS\s*=\s*(\d+)\s*;/)[1]};
+    const NAV_ICON = ${recortarObjeto('NAV_ICON')};
+    ${recortarFuncion('agruparNav')}
+    ${recortarFuncion('buildNav')}
+    return buildNav;
+  `;
+  const buildNav = new Function('$', 'document', 'tieneModulo', 'labelDe', 'iconDe', 'navTo', cuerpo)(
+    (id) => (id === 'nav' ? nav : null),
+    doc,
+    () => true,
+    (k) => k,
+    () => '',
+    () => {},
+  );
+  buildNav();
+  return nav;
+}
+
+test('buildNav pinta el DOM SIEMPRE en el orden del NAV, agrupado o no (ejecutado de verdad)', () => {
+  const nav = ejecutarBuildNavReal();
+  const clavesPintadas = nav.children
+    .filter(el => el.className === 'nav-item')
+    .map(el => el.dataset.key);
+
+  // El caso del pastor: 19 entradas, por encima del umbral, se agrupa de
+  // verdad. Si buildNav recorriera las secciones agrupadas en vez del NAV
+  // (la regresion real), esto saldria en el orden de GRUPOS_NAV y esta
+  // asercion caeria.
+  assert.deepEqual(clavesPintadas, CLAVES_NAV,
+    'buildNav pinto los .nav-item en un orden distinto al del NAV. En escritorio --ord no se ' +
+    'convierte en order (eso solo pasa dentro del @media de 900px), asi que manda el orden del DOM: ' +
+    'esto es el menu reordenado de verdad, el mismo fallo que ya paso una vez en esta rama');
+
+  // Y los encabezados: cada uno queda oculto al lector de pantalla, a
+  // proposito (ver el comentario en buildNav).
+  const encabezados = nav.children.filter(el => el.className.startsWith('nav-sec'));
+  assert.ok(encabezados.length > 1, 'con 19 entradas por encima del umbral tiene que haber encabezados');
+  assert.ok(encabezados.every(h => h['attr_aria-hidden'] === 'true'),
+    'un encabezado sin aria-hidden se anunciaria con la clave equivocada al lector de pantalla');
+});
