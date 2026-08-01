@@ -258,7 +258,7 @@ export const veServicioGestion = rolOPastor('admin');
 export function esPredicador(personaId) {
   if (esPastor(personaId)) return true;
   const row = db.prepare(
-    "SELECT 1 FROM rol_temporal WHERE persona_id = ? AND rol = 'predicador' AND date('now') BETWEEN desde AND hasta"
+    "SELECT 1 FROM rol_temporal WHERE persona_id = ? AND rol = 'predicador' AND date('now','localtime') BETWEEN desde AND hasta"
   ).get(personaId);
   return !!row;
 }
