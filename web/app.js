@@ -2430,11 +2430,16 @@ async function vistaTesoreria(){
         : `<p class="muted small" style="margin-bottom:14px">👁️ Solo lectura — solo el tesorero registra movimientos.</p>`}
       <div id="mov-form"></div>
       <div class="card" style="margin-bottom:18px"><div class="widget-head">🎯 Campañas</div>
-        ${camps.length? camps.map(c=>{const pct=c.meta?Math.min(100,Math.round(c.recaudado/c.meta*100)):0;
-          return `<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:14px">
-            <b>${escHtml(c.nombre)}</b><span class="muted">${money(c.recaudado)} / ${money(c.meta)}</span></div>
-            <div class="trend-track" style="margin-top:6px"><div class="trend-bar" style="width:${pct}%">${pct}%</div></div></div>`;}).join('')
+        ${esTesoreroUI()?`<div class="row" style="margin:10px 0">
+          <button class="btn small-btn" onclick="formCampania()">+ Campaña</button></div>
+          <div id="camp-form"></div>`:''}
+        ${camps.filter(c=>!c.cerrada_en).length
+          ? camps.filter(c=>!c.cerrada_en).map(filaCampania).join('')
           : `<p class="muted small">Todavía no hay campañas.${esTesoreroUI()?' Una campaña sirve para juntar para algo concreto —el techo, un viaje misionero— y ver cuánto falta.':''}</p>`}
+        ${camps.some(c=>c.cerrada_en)
+          ? `<div class="widget-head" style="margin-top:20px">Cerradas</div>
+             ${camps.filter(c=>c.cerrada_en).map(filaCampaniaCerrada).join('')}`
+          : ''}
       </div>
       <div class="card" style="margin-bottom:18px"><div class="widget-head">🔓 Transparencia</div>
         <p class="small" style="margin:6px 0 14px">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
@@ -2456,6 +2461,36 @@ function filaMov(m){
     <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${m.campania_nombre?escHtml(m.campania_nombre):escHtml(cap(m.categoria||m.tipo))}</b>
     <div class="muted small">${escHtml(m.descripcion||'')} · ${escHtml(m.fecha)}${m.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(m.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div>
     <b style="color:${m.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
+}
+// Una campania activa. Sin meta NO se pinta barra: con el codigo anterior
+// saldria "$50.000 / $0" y una barra al 0%, que se lee como un error.
+function filaCampania(c){
+  const pct = c.meta ? Math.min(100, Math.round(c.recaudado/c.meta*100)) : null;
+  return `<div style="margin:14px 0">
+    <div style="display:flex;justify-content:space-between;font-size:14px">
+      <b>${escHtml(c.nombre)}</b>
+      <span class="muted">${money(c.recaudado)}${c.meta?' / '+money(c.meta):''}</span></div>
+    ${pct===null?'':`<div class="trend-track" style="margin-top:6px"><div class="trend-bar" style="width:${pct}%">${pct}%</div></div>`}
+    ${esTesoreroUI()?`<div class="row" style="margin-top:8px">
+      <button class="btn ghost small-btn" onclick="formAporte(${c.id})">+ Aporte</button>
+      <button class="btn ghost small-btn" onclick="cerrarCampania(${c.id})">Cerrar campaña</button></div>
+      <div id="aporte-form-${c.id}"></div>`:''}
+    ${c.aportes.length?`<div class="list" style="margin-top:8px">${c.aportes.map(a=>`
+      <div class="item-card flex">
+        <span class="muted small">${escHtml(fechaTxt(a.fecha))}</span>
+        <b style="flex:1;text-align:right">${money(a.monto)}</b>
+        ${esTesoreroUI()?`<button class="btn-ico" title="Borrar este aporte" onclick="borrarAporte(${c.id},${a.id})">🗑️</button>`:''}
+      </div>`).join('')}</div>`:''}
+  </div>`;
+}
+// Una campania cerrada: se consulta, no se toca. Ningun boton.
+function filaCampaniaCerrada(c){
+  return `<div style="margin:12px 0;opacity:.75">
+    <div style="display:flex;justify-content:space-between;font-size:14px">
+      <b>${escHtml(c.nombre)}</b>
+      <span class="muted">${money(c.recaudado)}${c.meta?' / '+money(c.meta):''}</span></div>
+    <div class="muted small">Cerrada el ${escHtml(fechaDeUTC(c.cerrada_en))}</div>
+  </div>`;
 }
 async function cargarMasMovimientos(){
   const btn=$('mov-mas');
@@ -2497,6 +2532,73 @@ async function guardarMov(tipo){
       await api('/tesoreria/movimientos',{method:'POST',body:JSON.stringify(body)}); toast('💰 Registrado'); vistaTesoreria();
     }catch(e){ $('mv-error').textContent=e.message; }
   });
+}
+
+// Crear campaña: la meta es OPCIONAL (una campaña puede juntar "lo que se
+// pueda" sin un tope fijado de antemano).
+function formCampania(){
+  const z=$('camp-form'); if(z.innerHTML){ z.innerHTML=''; return; }
+  z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>Nueva campaña</h3>
+    <label for="cp-nombre">Nombre</label><input id="cp-nombre" placeholder="Ej. Techo nuevo" />
+    <label for="cp-meta">Meta (opcional)</label><input id="cp-meta" type="number" min="0.01" step="0.01" placeholder="$0" />
+    <p id="cp-error" class="error"></p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn small-btn" onclick="guardarCampania()">Crear</button>
+      <button class="btn ghost small-btn" onclick="$('camp-form').innerHTML=''">Cancelar</button></div></div>`;
+}
+async function guardarCampania(){
+  const nombre=$('cp-nombre').value.trim();
+  if(!nombre){ $('cp-error').textContent='Ponle un nombre a la campaña'; return; }
+  const metaTxt=$('cp-meta').value;
+  await conBoton(botonActual(), async()=>{
+    try{
+      const body={nombre};
+      if(metaTxt) body.meta=metaTxt;
+      await api('/tesoreria/campanias',{method:'POST',body:JSON.stringify(body)});
+      toast('🎯 Campaña creada'); vistaTesoreria();
+    }catch(e){ $('cp-error').textContent=e.message; }
+  });
+}
+// Aportar: el formulario vive DENTRO de la tarjeta de la campaña (un
+// contenedor por campaña), no uno solo compartido, porque puede haber varias
+// campañas activas a la vez.
+function formAporte(id){
+  const z=$('aporte-form-'+id); if(!z) return;
+  if(z.innerHTML){ z.innerHTML=''; return; }
+  z.innerHTML=`<div class="card" style="margin:10px 0"><h3>Nuevo aporte</h3>
+    <label for="ap-monto-${id}">Monto</label><input id="ap-monto-${id}" type="number" min="0.01" step="0.01" placeholder="0" />
+    <p id="ap-error-${id}" class="error"></p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn small-btn" onclick="guardarAporte(${id})">Guardar</button>
+      <button class="btn ghost small-btn" onclick="$('aporte-form-${id}').innerHTML=''">Cancelar</button></div></div>`;
+}
+async function guardarAporte(id){
+  const monto=$('ap-monto-'+id).value;
+  if(!(Number(monto)>0)){ $('ap-error-'+id).textContent='Monto inválido'; return; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      await api('/tesoreria/campanias/'+id+'/aportar',{method:'PATCH',body:JSON.stringify({monto})});
+      toast('💰 Aporte registrado'); vistaTesoreria();
+    }catch(e){ $('ap-error-'+id).textContent=e.message; }
+  });
+}
+// Borrar un aporte: se está borrando dinero, así que pide confirmación.
+function borrarAporte(campaniaId, movId){
+  modalConfirm('¿Borrar este aporte? El monto se descuenta de la campaña y de los movimientos. No se puede deshacer.', async()=>{
+    try{
+      await api('/tesoreria/campanias/'+campaniaId+'/aportes/'+movId,{method:'DELETE'});
+      toast('Aporte borrado'); vistaTesoreria();
+    }catch(e){ toast(e.message); }
+  }, {okLabel:'Sí, borrar', danger:true});
+}
+// Cerrar una campaña: no se puede reabrir, así que pide confirmación.
+function cerrarCampania(id){
+  modalConfirm('¿Cerrar esta campaña? Ya no admitirá más aportes y no se puede reabrir.', async()=>{
+    try{
+      await api('/tesoreria/campanias/'+id+'/cerrar',{method:'PATCH'});
+      toast('🎯 Campaña cerrada'); vistaTesoreria();
+    }catch(e){ toast(e.message); }
+  }, {okLabel:'Sí, cerrar', danger:true});
 }
 
 // ============================================================

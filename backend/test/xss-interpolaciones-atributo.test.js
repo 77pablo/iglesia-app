@@ -480,6 +480,18 @@ const EXCEPCIONES = [
   {
     firma: 'class::estado-chip estado-${a.estado}',
     motivo: 'a.estado es asignacion.estado: backend/src/asignaciones.js linea 84 lo fija siempre a los literales \'aceptado\' o \'rechazado\' (o el default \'pendiente\' del esquema); el endpoint nunca escribe el texto que manda la persona.'
+  },
+  {
+    firma: 'for::ap-monto-${id}',
+    motivo: 'formAporte(id): la única llamada del archivo es formAporte(${c.id}) desde filaCampania(), un id numérico de la tabla campania.'
+  },
+  {
+    firma: 'id::ap-monto-${id}',
+    motivo: 'mismo id de formAporte() explicado arriba: siempre c.id, un entero de la tabla campania.'
+  },
+  {
+    firma: 'id::ap-error-${id}',
+    motivo: 'mismo id de formAporte() explicado arriba: siempre c.id, un entero de la tabla campania.'
   }
 ];
 
