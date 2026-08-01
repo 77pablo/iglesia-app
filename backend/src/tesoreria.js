@@ -43,8 +43,15 @@ r.get('/resumen', (req, res) => {
 r.get('/movimientos', (req, res) => {
   const LIMIT = 50;
   const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
-  const rows = db.prepare('SELECT * FROM movimiento WHERE iglesia_id = ? ORDER BY fecha DESC, id DESC LIMIT ? OFFSET ?')
-    .all(req.user.iglesia_id, LIMIT + 1, offset);
+  // LEFT JOIN, no una copia del nombre en el movimiento: una copia habria que
+  // mantenerla sincronizada, y eso es exactamente el problema que este trabajo
+  // viene a quitar de la tesoreria.
+  const rows = db.prepare(
+    `SELECT m.*, c.nombre AS campania_nombre
+       FROM movimiento m LEFT JOIN campania c ON c.id = m.campania_id
+      WHERE m.iglesia_id = ?
+      ORDER BY m.fecha DESC, m.id DESC LIMIT ? OFFSET ?`
+  ).all(req.user.iglesia_id, LIMIT + 1, offset);
   const hayMas = rows.length > LIMIT;
   res.json({ items: hayMas ? rows.slice(0, LIMIT) : rows, hayMas, offset });
 });
@@ -79,19 +86,46 @@ r.post('/movimientos', soloTesorero, limiterSensible, validar(movimientoSchema),
 });
 
 // --- Campañas ---
+// Los aportes de una campania son movimientos: no hay tabla aparte.
+const aportesDe = (campaniaId, ig) => db.prepare(
+  `SELECT id, monto, fecha FROM movimiento
+    WHERE campania_id = ? AND iglesia_id = ? AND tipo = 'ingreso'
+    ORDER BY fecha DESC, id DESC`
+).all(campaniaId, ig);
+
+// ⚠️ El SELECT NO trae `recaudado`: esa columna esta muerta (ver
+// migrarCampaniaAMovimientos en db.js). El total que se devuelve se CALCULA
+// aqui sumando los aportes, para que la barra de la campania y los libros no
+// puedan decir cosas distintas.
 r.get('/campanias', (req, res) => {
-  res.json(db.prepare('SELECT * FROM campania WHERE iglesia_id = ?').all(req.user.iglesia_id));
+  const ig = req.user.iglesia_id;
+  const filas = db.prepare(
+    `SELECT id, nombre, meta, cerrada_en FROM campania
+      WHERE iglesia_id = ?
+      ORDER BY (cerrada_en IS NOT NULL), id DESC`
+  ).all(ig);
+  res.json(filas.map(c => {
+    const aportes = aportesDe(c.id, ig);
+    return { ...c, aportes, recaudado: aportes.reduce((a, x) => a + x.monto, 0) };
+  }));
 });
+
 const campaniaSchema = z.object({
-  nombre: z.string().trim().min(1, 'falta el nombre'),
+  // .max(100) como el resto de los textos cortos del archivo: sin tope, un
+  // nombre enorme entra en la base y luego rompe la pantalla que lo pinta.
+  nombre: z.string().trim().min(1, 'falta el nombre').max(100, 'el nombre es demasiado largo'),
   meta: z.coerce.number().optional()
 });
 r.post('/campanias', soloTesorero, limiterSensible, validar(campaniaSchema), (req, res) => {
   const { nombre, meta } = req.body;
   const metaNum = meta;
-  db.prepare('INSERT INTO campania (iglesia_id, nombre, meta, recaudado) VALUES (?,?,?,0)')
+  // recaudado se sigue insertando a 0 solo porque la columna es NOT NULL DEFAULT
+  // 0 y sigue existiendo; nadie la vuelve a leer.
+  const info = db.prepare('INSERT INTO campania (iglesia_id, nombre, meta, recaudado) VALUES (?,?,?,0)')
     .run(req.user.iglesia_id, nombre, (Number.isFinite(metaNum) && metaNum > 0) ? metaNum : 0);
-  res.json({ ok: true });
+  auditar(req.user.iglesia_id, req.user.persona_id, 'campania_crear', 'tesoreria', nombre,
+    { tabla: 'campania', id: info.lastInsertRowid });
+  res.json({ ok: true, id: info.lastInsertRowid });
 });
 const aportarSchema = z.object({
   monto: z.coerce.number().positive('el aporte debe ser un numero mayor que cero')

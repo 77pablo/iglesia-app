@@ -2453,7 +2453,7 @@ async function vistaTesoreria(){
 }
 function filaMov(m){
   return `<div class="item-card flex">
-    <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${escHtml(cap(m.categoria||m.tipo))}</b>
+    <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${m.campania_nombre?escHtml(m.campania_nombre):escHtml(cap(m.categoria||m.tipo))}</b>
     <div class="muted small">${escHtml(m.descripcion||'')} · ${escHtml(m.fecha)}${m.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(m.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div>
     <b style="color:${m.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
 }
