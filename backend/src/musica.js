@@ -225,9 +225,12 @@ r.delete('/plan/equipo/:id', (req, res) => {
 });
 
 // --- Agendar / actualizar el ensayo ---
+// La hora tiene forma conocida (HH:MM): mismo patron que horaSchema en
+// eventos.js y organizacion.js, no hay razon para aceptar texto libre aqui.
+const horaSchema = z.string().trim().regex(/^\d{2}:\d{2}$/, 'hora invalida (usa HH:MM)').optional().or(z.literal(''));
 const ensayoSchema = z.object({
   fecha: z.string().trim().optional(),
-  hora: z.string().trim().optional(),
+  hora: horaSchema,
   lugar: z.string().trim().optional(),
   nota: z.string().trim().optional()
 });
