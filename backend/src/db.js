@@ -636,6 +636,38 @@ export function migrarEstadoContactoPublico(conexion = db) {
 }
 migrarEstadoContactoPublico();
 
+// PERSONA: marca explicita de que la cuenta fue anonimizada por su propio
+// titular ejerciendo su derecho ARCO a eliminarla (ver cuenta.js POST
+// /cuenta/eliminar). NO se detecta por el patron del campo 'usuario'
+// ('eliminado_<id>'): ese campo se valida sin restriccion de formato
+// (z.string().trim().min(1) en registro.js y admin.js), asi que una persona
+// real podria llamarse exactamente asi y quedaria bloqueada como si se
+// hubiera borrado. anonimizada_en guarda CUANDO paso (NULL en toda cuenta
+// normal); cuenta.js la rellena dentro de la MISMA transaccion en que
+// anonimiza.
+//
+// El relleno de las filas que YA estaban anonimizadas antes de que existiera
+// esta columna va DENTRO de la guarda de existencia, igual que
+// migrarEstadoContactoPublico de aqui arriba y por la misma razon: fuera de
+// la guarda correria en cada arranque y podria pisar datos. Para identificar
+// esas filas sin falsos positivos se exigen las TRES senales a la vez con las
+// que cuenta.js deja una cuenta eliminada (usuario 'eliminado_<id>', activo=0
+// Y nombre='Usuario eliminado'): una persona real jamas junta las tres.
+//
+// Exportada (mismo patron que migrarEstadoContactoPublico) para que una
+// prueba pueda llamarla dos veces y demostrar que la segunda no toca nada.
+export function migrarAnonimizadaEn(conexion = db) {
+  const yaExiste = conexion.prepare("PRAGMA table_info(persona)").all()
+    .some(c => c.name === 'anonimizada_en');
+  if (yaExiste) return;
+  conexion.exec('ALTER TABLE persona ADD COLUMN anonimizada_en TEXT');
+  conexion.exec(
+    `UPDATE persona SET anonimizada_en = datetime('now')
+       WHERE usuario LIKE 'eliminado\\_%' ESCAPE '\\' AND activo = 0 AND nombre = 'Usuario eliminado'`
+  );
+}
+migrarAnonimizadaEn();
+
 // --- Índices: aceleran los filtros más usados (por iglesia, persona, evento, grupo) ---
 // Sin esto, cada consulta hace un escaneo completo; se nota al crecer los datos.
 db.exec(`
