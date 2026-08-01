@@ -3,6 +3,24 @@
 
 ---
 
+## 🆕 1 DE AGOSTO DE 2026 — 🔴 XSS en categoría, edad y hora (fusionado y subido)
+
+Tres datos que escribe una persona llegaban al HTML **sin escapar**. El peor estaba en el **panel del obispo** (`web/app.js:3092`), que ve **todas las iglesias**: un tesorero de cualquier iglesia guardaba una categoría con `<script>` y le ejecutaba código al obispo al abrir su panel. Eso **saltaba el aislamiento entre iglesias**, que es la garantía de fondo de la app. Los otros dos: la edad de una clase de Escuela Dominical (`:2523`) y la hora del ensayo (`:1863`), esta última dentro de un `value="..."`, donde basta una comilla doble para salirse del atributo.
+
+**No fue por no saber:** en la misma línea del panel del obispo ya se escapaban la descripción, la fecha y la URL del comprobante. Se saltó uno. `cap()` (`:209`) no escapa nada, solo pone la primera letra en mayúscula.
+
+La hora del ensayo ahora además **exige formato**, con el mismo `horaSchema` que ya usaban `eventos.js` y `organizacion.js` — la incoherencia estaba ahí desde antes.
+
+**⚠️ Lo que importa más que el arreglo:** había una suite de XSS **en verde al lado** todo este tiempo (`backend/test/xss-atributos.test.js`). Miraba un patrón de comillas hecho a mano **dentro de un `onclick`**, y estos tres estaban en el cuerpo de un `innerHTML`: no los rozaba. Una red con el agujero justo en la forma del fallo.
+
+Ahora hay un barrido (`backend/test/xss-interpolaciones-atributo.test.js`) que recorre las interpolaciones que arman el valor de un atributo y exige que pasen por un ayudante seguro, que sean un dato que no viene de una persona, o que tengan una **excepción con motivo escrito**. Las excepciones se validan por el **texto completo del atributo**, no por el nombre de la variable: así una interpolación futura que use `n` o `c` por casualidad no queda blanqueada.
+
+**Hasta dónde llega ese barrido, para que nadie se confíe:** cubre **137 de las 908** interpolaciones del archivo — las de valor de atributo. **Quedan fuera 95 dentro de manejadores de evento (`onclick`, `href="javascript:`) y 676 del cuerpo de texto.** Está a propósito y es lo siguiente que habría que barrer.
+
+Suite: 536 → **549**.
+
+---
+
 ## 🆕 31 DE JULIO DE 2026 — el menú del móvil, agrupado por temas (fusionado, subido y **desplegado**)
 
 En el teléfono el menú lateral es un cajón a pantalla completa y el pastor ve sus 19 entradas seguidas: para llegar a casi cualquier cosa hay que desplazarse. Ahora se agrupan bajo cinco temas — **Día a día · Lo mío · Pastoreo · Ministerios · Administración** — pero **solo para quien tiene el menú largo**: `GRUPOS_NAV` (`web/app.js`) reparte las claves del `NAV`, y `NAV_UMBRAL_GRUPOS = 12` decide si se agrupa; por debajo del umbral, `agruparNav()` devuelve una sola sección sin título — la lista plana de siempre.
