@@ -542,6 +542,21 @@ test('accionesBtns: editFn/delFn solo se llaman con literales, nunca con datos',
   }
 });
 
+test('formAporte: solo se llama con un id (algo.id), nunca con un dato de persona', () => {
+  // Verificación real de las tres excepciones de arriba (for::ap-monto-${id},
+  // id::ap-monto-${id}, id::ap-error-${id}): su motivo dice que la única
+  // llamada del archivo es formAporte(${c.id}). Sin esta prueba, si mañana
+  // alguien agrega formAporte(persona.nombre) las excepciones seguirían
+  // blanqueando esa interpolación sin que nada se entere.
+  const llamadas = [...fuente.matchAll(/onclick="formAporte\(\$\{([^)]+)\}\)"/g)];
+  assert.ok(llamadas.length > 0, 'no se encontró ninguna llamada a formAporte(); si se renombró, esta prueba hay que actualizarla, no borrarla');
+  const formaSegura = /^\s*[A-Za-z_$][\w$]*\.id\s*$/;
+  for (const m of llamadas) {
+    const [, arg] = m;
+    assert.ok(formaSegura.test(arg), `formAporte: argumento no es un id numérico de la forma algo.id: ${arg}`);
+  }
+});
+
 // --- Cuántas interpolaciones hay en total, cuántas son de atributo, y qué
 //     queda pendiente fuera de esta prueba. Ver el informe de esta tarea
 //     para la decisión sobre ese resto. ---
