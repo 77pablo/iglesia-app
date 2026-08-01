@@ -180,6 +180,30 @@ r.patch('/campanias/:id/cerrar', soloTesorero, limiterSensible, (req, res) => {
   res.json({ ok: true });
 });
 
+// Borrar un aporte: la unica forma de deshacer un error de tecleo en toda la
+// tesoreria. Acotado A PROPOSITO a los aportes de campania — que ningun otro
+// movimiento se pueda corregir es un problema mas amplio y es otro trabajo.
+//
+// ⚠️ `campania_id = ?` es lo que impide que esta ruta alcance un movimiento
+// normal: los normales tienen campania_id NULL, y en SQL `NULL = cualquier
+// cosa` NUNCA es cierto. Sin esa condicion, esto seria una forma de borrar la
+// contabilidad entera de la iglesia pasando cualquier id.
+r.delete('/campanias/:id/aportes/:movId', soloTesorero, limiterSensible, (req, res) => {
+  const ig = req.user.iglesia_id;
+  const m = db.prepare(
+    `SELECT id, monto FROM movimiento
+      WHERE id = ? AND iglesia_id = ? AND campania_id = ?`
+  ).get(req.params.movId, ig, req.params.id);
+  if (!m) return res.status(404).json({ error: 'Aporte no encontrado' });
+
+  db.prepare('DELETE FROM movimiento WHERE id = ? AND iglesia_id = ?').run(m.id, ig);
+  // Se audita SIEMPRE: borrar dinero sin dejar rastro de quien fue no es
+  // aceptable en la pantalla de la tesoreria.
+  auditar(ig, req.user.persona_id, 'campania_aporte_borrar', 'tesoreria', String(m.monto),
+    { tabla: 'campania', id: Number(req.params.id) });
+  res.json({ ok: true });
+});
+
 // --- Transparencia (resumen sin datos personales) ---
 r.get('/transparencia', (req, res) => {
   const ig = req.user.iglesia_id;

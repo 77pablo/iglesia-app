@@ -59,6 +59,14 @@ const patch = async (ruta, cuerpo) => {
   return cuerpoRes;
 };
 const patchComoPastor = (ruta, cuerpo) => fetch(base + ruta, { method: 'PATCH', headers: H(SEM.pastor), body: JSON.stringify(cuerpo) });
+const delRaw = (ruta) => fetch(base + ruta, { method: 'DELETE', headers: H(tesorero) });
+const del = async (ruta) => {
+  const res = await delRaw(ruta);
+  const cuerpoRes = await res.json();
+  assert.equal(res.status, 200, `DELETE ${ruta} fallo: ${JSON.stringify(cuerpoRes)}`);
+  return cuerpoRes;
+};
+const delComoPastor = (ruta) => fetch(base + ruta, { method: 'DELETE', headers: H(SEM.pastor) });
 
 async function crearCampania({ nombre, meta }) {
   const res = await post('/api/tesoreria/campanias', { nombre, meta });
@@ -75,6 +83,17 @@ function insertarIngresoDirecto({ campaniaId, monto, iglesiaId = SEM.iglesiaId }
     `INSERT INTO movimiento (iglesia_id, tipo, categoria, monto, descripcion, creado_por, campania_id)
      VALUES (?, 'ingreso', NULL, ?, NULL, NULL, ?)`
   ).run(iglesiaId, monto, campaniaId);
+}
+
+// Inserta un movimiento SIN campania (campania_id NULL), como cualquier
+// ingreso o gasto normal de la tesoreria: sirve para probar que la ruta de
+// borrar aportes no lo puede alcanzar.
+function crearMovimientoNormal({ tipo, monto, iglesiaId = SEM.iglesiaId }) {
+  const info = dbDirecta.prepare(
+    `INSERT INTO movimiento (iglesia_id, tipo, monto, descripcion, creado_por, campania_id)
+     VALUES (?, ?, ?, NULL, NULL, NULL)`
+  ).run(iglesiaId, tipo, monto);
+  return Number(info.lastInsertRowid);
 }
 
 function crearCampaniaEnOtraIglesia({ nombre }) {
@@ -284,4 +303,53 @@ test('el pastor no puede aportar ni cerrar', async () => {
   const { campaniaId } = await crearCampania({ nombre: 'Techo' });
   assert.equal((await patchComoPastor(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 1 })).status, 403);
   assert.equal((await patchComoPastor(`/api/tesoreria/campanias/${campaniaId}/cerrar`, {})).status, 403);
+});
+
+// ---------- DELETE /api/tesoreria/campanias/:id/aportes/:movId ----------
+
+test('borrar un aporte lo quita de la campania Y de los libros', async () => {
+  const { campaniaId } = await crearCampania({ nombre: 'Techo', meta: 500000 });
+  await patch(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 500000 });  // el error de tecleo
+  const c = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId);
+  const aporteId = c.aportes[0].id;
+
+  await del(`/api/tesoreria/campanias/${campaniaId}/aportes/${aporteId}`);
+
+  const c2 = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId);
+  assert.equal(c2.recaudado, 0, 'el aporte sigue contando en la campania');
+  const trans = await get('/api/tesoreria/transparencia');
+  assert.equal(trans.recaudado, 0, 'el ingreso sigue en los libros: la correccion no sirvio de nada');
+});
+
+test('esta ruta NO puede borrar un movimiento normal', async () => {
+  // El agujero que hay que cerrar: si alcanzara movimientos sin campania,
+  // seria una forma de borrar la contabilidad entera de la iglesia.
+  const { campaniaId } = await crearCampania({ nombre: 'Techo' });
+  const movId = crearMovimientoNormal({ tipo: 'ingreso', monto: 90000 });
+
+  const res = await delRaw(`/api/tesoreria/campanias/${campaniaId}/aportes/${movId}`);
+  assert.equal(res.status, 404);
+
+  const movs = await get('/api/tesoreria/movimientos');
+  assert.ok(movs.items.some(m => m.id === movId), 'se borro un movimiento que no era un aporte');
+});
+
+test('no se puede borrar un aporte de otra campania ni de otra iglesia', async () => {
+  const { campaniaId: a } = await crearCampania({ nombre: 'Techo' });
+  const { campaniaId: b } = await crearCampania({ nombre: 'Viaje' });
+  await patch(`/api/tesoreria/campanias/${a}/aportar`, { monto: 1000 });
+  const aporteDeA = (await get('/api/tesoreria/campanias')).find(x => x.id === a).aportes[0].id;
+
+  // Pidiendolo por la campania equivocada.
+  assert.equal((await delRaw(`/api/tesoreria/campanias/${b}/aportes/${aporteDeA}`)).status, 404);
+
+  const c = (await get('/api/tesoreria/campanias')).find(x => x.id === a);
+  assert.equal(c.recaudado, 1000, 'se borro pidiendolo por otra campania');
+});
+
+test('el pastor no puede borrar un aporte', async () => {
+  const { campaniaId } = await crearCampania({ nombre: 'Techo' });
+  await patch(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 1000 });
+  const aporteId = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId).aportes[0].id;
+  assert.equal((await delComoPastor(`/api/tesoreria/campanias/${campaniaId}/aportes/${aporteId}`)).status, 403);
 });
