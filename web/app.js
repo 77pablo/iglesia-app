@@ -678,6 +678,17 @@ function buildNav(){
       // para abrir esa puerta en el menu.
       h.textContent=titulo;
       h.style.setProperty('--ord', ordenTitulo.get(titulo));
+      // aria-hidden, deliberado: `order` separa el orden VISUAL del orden del
+      // DOM, y el DOM es lo que lee un lector de pantalla. Un encabezado en su
+      // sitio del DOM (justo antes de su primera entrada visual) puede acabar
+      // leyendose delante de entradas de OTRO grupo (en el menu real del
+      // pastor, 6 de 19 quedan asi). Un encabezado equivocado es peor que
+      // ninguno. Estos <div> no son headings, no reciben foco y su posicion en
+      // el DOM es puramente un ancla para el `order` visual: ocultarlos al
+      // lector de pantalla no quita informacion, deja las 19 entradas en el
+      // orden del NAV sin ninguna etiqueta enganosa — exactamente como estaban
+      // antes de agrupar el menu.
+      h.setAttribute('aria-hidden','true');
       nav.appendChild(h);
     }
     const el=document.createElement('div');
