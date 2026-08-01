@@ -3,6 +3,22 @@
 
 ---
 
+## 🆕 1 DE AGOSTO DE 2026 — ⚖️ una cuenta eliminada por su titular ya no se puede resucitar (fusionado y subido)
+
+Al ejercer el derecho a eliminar la cuenta (ARCO), la fila **no se borra: se anonimiza** (`backend/src/cuenta.js`). Pero seguía apareciendo en el panel del pastor **con sus botones operativos**, así que el pastor podía reactivarla, **devolverle su nombre real** —lo que deshace la anonimización y además lo propaga a `aprobacion_log`— o marcarla como pastor.
+
+**Revisando el panel entero resultaron ser SEIS acciones, no las tres que se habían visto**: también restablecer la contraseña (`POST /admin/usuarios/:id/clave`) y asignar un rol nuevo (`POST /admin/usuarios/:id/rol`). Se bloquean cinco. **Quitar un rol** (`DELETE /admin/rol/:id`) se deja a propósito: solo borra datos, no reactiva nada ni devuelve información, y va en la misma dirección que el borrado. Está documentado en el código y tiene su prueba.
+
+**La marca es una columna explícita, `anonimizada_en`, y NO el patrón `usuario LIKE 'eliminado_%'`.** El campo `usuario` se valida con `z.string().trim().min(1)`, sin restricción de formato (`registro.js:19`, `admin.js:60`): una persona real podría llamarse `eliminado_7` y habría quedado bloqueada sin motivo. El relleno de las filas ya anonimizadas exige las **tres señales a la vez** (usuario, `activo = 0` y `nombre = 'Usuario eliminado'`) y vive **dentro de la guarda de existencia de la columna**, igual que `migrarEstadoContactoPublico`.
+
+**El candado está en el servidor.** Los botones ocultos son el acompañamiento: la ruta se puede llamar directamente.
+
+**Queda un hueco aparte, no tocado:** `pertenencia` (las membresías de grupo) **no se limpia** cuando alguien ejerce ARCO en `cuenta.js`. La fila ya está anonimizada, así que no identifica a nadie, pero es un cabo suelto del borrado.
+
+Suite: 554 → **566**.
+
+---
+
 ## 🆕 1 DE AGOSTO DE 2026 — las fechas en hora de Chile, no en UTC (fusionado y subido)
 
 `date('now')` y `datetime('now')` de SQLite son **siempre UTC**, aunque el proceso corra con `TZ=America/Santiago`: esa variable solo afecta al lado JavaScript. Chile va 3 o 4 horas por detrás, así que **desde las 20:00 o 21:00 hora de Chile, para SQLite ya es el día siguiente**.
