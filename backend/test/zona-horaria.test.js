@@ -155,6 +155,44 @@ test('Parte A, comportamiento: el rol de predicador se activa y se apaga segun e
   assert.equal(r.predica, false, '"vigente": igual, pasada la medianoche del 8 en Chile');
 });
 
+// ============================================================
+//  Parte B: tres pantallas mostraban el dia UTC (el dia siguiente, por la
+//  tarde/noche en Chile) en vez del dia en que la persona realmente actuo.
+//
+//  contacto_cuidado.fecha, aprobacion_log.creado_en y mensaje.creado_en se
+//  guardan con datetime('now') (instantes UTC). Cortar el texto con
+//  .slice(0,10) se quedaba con el dia UTC. El arreglo usa fechaDeUTC(), el
+//  ayudante que ya existia y ya se aplicaba bien en otros dos sitios del mismo
+//  archivo (web/app.js:2259 y :4465): se amplio su uso a los tres sitios que
+//  faltaban en vez de escribir la conversion de nuevo.
+// ============================================================
+test('web/app.js: fechaDeUTC() convierte el instante UTC guardado al dia de Chile', () => {
+  const src = leer('web/app.js');
+  const mesesM = src.match(/const MESES = \[[^\]]*\];/);
+  const fnM = src.match(/function fechaDeUTC\(s\)\{[\s\S]*?\n\}/);
+  assert.ok(mesesM, 'no se encontro la constante MESES en web/app.js');
+  assert.ok(fnM, 'no se encontro function fechaDeUTC en web/app.js');
+  // eslint-disable-next-line no-new-func
+  const fechaDeUTC = new Function(`${mesesM[0]}\n${fnM[0]}\nreturn fechaDeUTC;`)();
+
+  // 21:00 del lunes 27 de julio en Chile = 01:00 UTC del martes 28: no puede
+  // aparecer fechado el martes.
+  assert.equal(fechaDeUTC('2026-07-28 01:00:00'), '27 Jul 2026',
+    'un registro guardado a las 21:00 en Chile no puede mostrarse fechado al dia siguiente');
+  // Control: a mediodia UTC y Chile ya coinciden en el mismo dia.
+  assert.equal(fechaDeUTC('2026-07-28 15:00:00'), '28 Jul 2026');
+});
+
+test('web/app.js: las tres pantallas de la Parte B usan fechaDeUTC en vez de recortar el texto UTC', () => {
+  const src = leer('web/app.js');
+  assert.ok(src.includes('<span class="muted small">${escHtml(fechaDeUTC(x.fecha))}</span>'),
+    'el historial de cuidado pastoral tiene que mostrar la fecha en hora de Chile (fechaDeUTC), no el dia UTC recortado');
+  assert.ok(src.includes('${escHtml(fechaDeUTC(x.creado_en))}</span></div>`).join(\'\')}</div></div>`;'),
+    'el historial de aprobaciones tiene que mostrar la fecha en hora de Chile (fechaDeUTC), no el dia UTC recortado');
+  assert.ok(src.includes("m.creado_en?' · '+escHtml(fechaDeUTC(m.creado_en)):''"),
+    'la fecha del adjunto de material tiene que mostrarse en hora de Chile (fechaDeUTC), no el dia UTC recortado');
+});
+
 test('fechaLocal responde a la zona horaria del proceso (por eso hay que fijarla)', async () => {
   // Demuestra el mecanismo del fallo: el mismo instante da dos dias distintos
   // segun TZ. Es lo que convierte "declarar TZ" en un arreglo y no en un adorno.

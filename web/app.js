@@ -1494,7 +1494,7 @@ async function cargarHistorialAprob(){
         <div style="flex:1"><b>${escHtml(x.evento_titulo||'')}</b>
           ${x.accion==='aprobado'?'<span class="estado-chip estado-aceptado">Aprobado</span>':'<span class="estado-chip estado-rechazado">Rechazado</span>'}
           <div class="muted small">${x.grupo?escHtml(x.grupo)+' · ':''}${escHtml(x.fecha_evento||'')}${x.motivo?' · '+escHtml(x.motivo):''}</div></div>
-        <span class="muted small">${(x.creado_en||'').slice(0,10)}</span></div>`).join('')}</div></div>`;
+        <span class="muted small">${escHtml(fechaDeUTC(x.creado_en))}</span></div>`).join('')}</div></div>`;
   }catch{
     z.innerHTML='<p class="error small" style="margin-top:16px">No se pudo cargar el historial de aprobaciones · <a href="javascript:cargarHistorialAprob()" class="link" style="display:inline;padding:0">Reintentar</a></p>';
   }
@@ -1926,7 +1926,7 @@ async function cargarMaterialMusica(){
         : `<b>${escHtml(m.titulo)}</b>`;
       const sub = esHimnario
         ? `<div class="muted small"><a href="javascript:abrirHimnario()">🔎 Abrir cancionero (buscar y transponer)</a> · <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">descargar PDF</a></div>`
-        : `<div class="muted small">📎 <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">Ver / descargar</a>${m.creado_en?' · '+fechaTxt(m.creado_en.slice(0,10)):''}</div>`;
+        : `<div class="muted small">📎 <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">Ver / descargar</a>${m.creado_en?' · '+escHtml(fechaDeUTC(m.creado_en)):''}</div>`;
       return `<div class="item-card flex">
       <div style="flex:1">${titulo}${permanente?' <span class="estado-chip">📌 Fijo</span>':''}${sub}</div>
       ${puedeBorrar?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar material" onclick="borrarMaterialMus(${m.id})">🗑️</button>`:''}</div>`;
@@ -2202,7 +2202,7 @@ async function verCaso(id){
       ${d.caso.telefono?`<div class="muted small" style="margin-top:4px">📞 ${escHtml(d.caso.telefono)}</div>`:''}
       <div style="margin-top:16px;font-weight:700">Historial de cuidado</div>
       <div class="list" style="margin-top:8px">${d.contactos.length? d.contactos.map(x=>`<div class="item-card">
-        <b>${CT_LABEL[x.tipo]||escHtml(x.tipo)}</b> <span class="muted small">${(x.fecha||'').slice(0,10)}</span>
+        <b>${CT_LABEL[x.tipo]||escHtml(x.tipo)}</b> <span class="muted small">${escHtml(fechaDeUTC(x.fecha))}</span>
         ${x.nota?`<div class="muted small">${escHtml(x.nota)}</div>`:''}</div>`).join('') : '<p class="muted small">Sin contactos aún.</p>'}</div>
       <label for="ct-tipo">Registrar contacto</label>
       <select id="ct-tipo"><option value="llamada">📞 Llamada</option><option value="visita">🏠 Visita</option>
