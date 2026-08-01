@@ -331,7 +331,15 @@ function ejecutarBuildNavReal() {
   const doc = { createElement: () => crearElementoDeJuguete() };
   // NAV_ICON llama a _ic(...) para cada entrada: sin esa arrow function
   // definida, evaluar el objeto revienta con "_ic is not defined".
-  const lineaIc = fuente.match(/const _ic=.*\n/);
+  //
+  // ⚠️ El `\r?` no es adorno. En JavaScript `.` NO casa con `\r`, y git deja el
+  // archivo en disco con finales de linea de Windows (`git ls-files --eol` dice
+  // `i/lf  w/crlf`). Sin el `\r?` esta prueba revienta con "no se encontro la
+  // definicion de _ic" en cualquier copia normal del repo — y eso es peor que
+  // no tenerla: la prueba que sujeta la regresion del orden se caeria sola, y
+  // quien la viera roja creeria que el fallo esta en el menu. Paso de verdad al
+  // fusionar la rama.
+  const lineaIc = fuente.match(/const _ic=.*\r?\n/);
   assert.ok(lineaIc, 'no se encontro la definicion de _ic en web/app.js');
 
   const cuerpo = `
