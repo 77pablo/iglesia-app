@@ -130,11 +130,53 @@ r.post('/campanias', soloTesorero, limiterSensible, validar(campaniaSchema), (re
 const aportarSchema = z.object({
   monto: z.coerce.number().positive('el aporte debe ser un numero mayor que cero')
 });
+// Aportar CREA UN INGRESO de verdad. Antes solo sumaba a campania.recaudado, y
+// esa plata no aparecia en ningun libro.
+//
+// Un solo INSERT: no hace falta transaccion. Con el total calculado ya no hay
+// dos escrituras que puedan quedar a medias — ese problema lo elimino el
+// diseno, no un BEGIN/COMMIT.
 r.patch('/campanias/:id/aportar', soloTesorero, limiterSensible, validar(aportarSchema), (req, res) => {
+  const ig = req.user.iglesia_id;
+  // La iglesia va en la MISMA consulta: a una campania de otra iglesia se le
+  // responde 404, no 403 (no se confirma que exista).
+  const c = db.prepare('SELECT id, nombre, cerrada_en FROM campania WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, ig);
+  if (!c) return res.status(404).json({ error: 'Campaña no encontrada' });
+  if (c.cerrada_en)
+    return res.status(409).json({ error: 'Esta campaña está cerrada: ya no admite aportes' });
+
   const { monto } = req.body;
-  const info = db.prepare('UPDATE campania SET recaudado = recaudado + ? WHERE id = ? AND iglesia_id = ?')
-    .run(monto, req.params.id, req.user.iglesia_id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Campaña no encontrada' });
+  // ⚠️ La descripcion NO lleva el nombre de la campania. Copiarlo aqui seria
+  // denormalizarlo, que es justo lo que este trabajo viene a evitar: el nombre
+  // se saca con un JOIN al listar los movimientos (ver Task 2). Hoy no se puede
+  // renombrar una campania, asi que copiarlo "funcionaria" — pero el dia que
+  // alguien anada esa funcion, las copias quedarian mintiendo en silencio.
+  const info = db.prepare(
+    `INSERT INTO movimiento (iglesia_id, tipo, monto, descripcion, creado_por, campania_id)
+     VALUES (?, 'ingreso', ?, ?, ?, ?)`
+  ).run(ig, monto, 'Aporte a campaña', req.user.persona_id, c.id);
+
+  auditar(ig, req.user.persona_id, 'campania_aporte', 'tesoreria', `${c.nombre}: ${monto}`,
+    { tabla: 'movimiento', id: info.lastInsertRowid });
+  res.json({ ok: true });
+});
+
+// Cerrar: la campania deja de admitir aportes pero SIGUE consultable. No se
+// borra, para no perder el historial de para que se junto.
+//
+// `cerrada_en IS NULL` en el WHERE: cerrar dos veces no reescribe la fecha del
+// primer cierre.
+r.patch('/campanias/:id/cerrar', soloTesorero, limiterSensible, (req, res) => {
+  const ig = req.user.iglesia_id;
+  const c = db.prepare('SELECT id, nombre FROM campania WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, ig);
+  if (!c) return res.status(404).json({ error: 'Campaña no encontrada' });
+  // datetime('now') es UTC: el frontend lo pinta con fechaDeUTC().
+  db.prepare("UPDATE campania SET cerrada_en = datetime('now') WHERE id = ? AND iglesia_id = ? AND cerrada_en IS NULL")
+    .run(c.id, ig);
+  auditar(ig, req.user.persona_id, 'campania_cerrar', 'tesoreria', c.nombre,
+    { tabla: 'campania', id: c.id });
   res.json({ ok: true });
 });
 

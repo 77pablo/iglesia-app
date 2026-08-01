@@ -51,6 +51,14 @@ const H = (p, iglesiaId = SEM.iglesiaId) => ({
 const get = async (ruta) => (await fetch(base + ruta, { headers: H(tesorero) })).json();
 const post = (ruta, cuerpo) => fetch(base + ruta, { method: 'POST', headers: H(tesorero), body: JSON.stringify(cuerpo) });
 const postComoPastor = (ruta, cuerpo) => fetch(base + ruta, { method: 'POST', headers: H(SEM.pastor), body: JSON.stringify(cuerpo) });
+const patchRaw = (ruta, cuerpo) => fetch(base + ruta, { method: 'PATCH', headers: H(tesorero), body: JSON.stringify(cuerpo) });
+const patch = async (ruta, cuerpo) => {
+  const res = await patchRaw(ruta, cuerpo);
+  const cuerpoRes = await res.json();
+  assert.equal(res.status, 200, `PATCH ${ruta} fallo: ${JSON.stringify(cuerpoRes)}`);
+  return cuerpoRes;
+};
+const patchComoPastor = (ruta, cuerpo) => fetch(base + ruta, { method: 'PATCH', headers: H(SEM.pastor), body: JSON.stringify(cuerpo) });
 
 async function crearCampania({ nombre, meta }) {
   const res = await post('/api/tesoreria/campanias', { nombre, meta });
@@ -224,4 +232,56 @@ test('un ingreso de campania dice de que campania es, sin copiar el nombre', asy
   const m = movs.items.find(x => x.campania_id === campaniaId);
   assert.equal(m.campania_nombre, 'Techo',
     'el listado no trae el nombre de la campania: la persona ve un ingreso suelto sin saber de que es');
+});
+
+// ---------- PATCH /api/tesoreria/campanias/:id/aportar y /cerrar ----------
+
+test('un aporte aparece en los libros, no solo en la barra de la campania', async () => {
+  // Esta es LA prueba de este trabajo. Sin ella volveriamos a tener plata que
+  // sube en la campania y no existe en ningun libro.
+  const { campaniaId } = await crearCampania({ nombre: 'Techo', meta: 500000 });
+  await patch(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 50000 });
+
+  const movs = await get('/api/tesoreria/movimientos');
+  assert.ok(movs.items.some(m => m.monto === 50000 && m.tipo === 'ingreso'),
+    'el aporte no aparece en Movimientos: la plata estaria solo en la barra');
+
+  const trans = await get('/api/tesoreria/transparencia');
+  assert.equal(trans.recaudado, 50000,
+    'el aporte no cuenta en Transparencia: los libros y la campania dirian cosas distintas');
+});
+
+test('aportar a una campania CERRADA se rechaza en el servidor', async () => {
+  // Esconder el boton no basta: la ruta se puede llamar directamente.
+  const { campaniaId } = await crearCampania({ nombre: 'Techo' });
+  await patch(`/api/tesoreria/campanias/${campaniaId}/cerrar`, {});
+  const res = await patchRaw(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 1000 });
+  assert.equal(res.status, 409);
+
+  const camps = await get('/api/tesoreria/campanias');
+  assert.equal(camps.find(c => c.id === campaniaId).recaudado, 0,
+    'entro plata en una campania cerrada');
+});
+
+test('cerrar deja la campania consultable, no la borra', async () => {
+  const { campaniaId } = await crearCampania({ nombre: 'Techo' });
+  await patch(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 50000 });
+  await patch(`/api/tesoreria/campanias/${campaniaId}/cerrar`, {});
+
+  const c = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId);
+  assert.ok(c, 'la campania desaparecio al cerrarla');
+  assert.ok(c.cerrada_en, 'no quedo constancia de cuando se cerro');
+  assert.equal(c.recaudado, 50000, 'se perdio lo que se habia juntado');
+});
+
+test('no se puede aportar ni cerrar una campania de otra iglesia', async () => {
+  const { campaniaId } = crearCampaniaEnOtraIglesia({ nombre: 'Ajena' });
+  assert.equal((await patchRaw(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 1 })).status, 404);
+  assert.equal((await patchRaw(`/api/tesoreria/campanias/${campaniaId}/cerrar`, {})).status, 404);
+});
+
+test('el pastor no puede aportar ni cerrar', async () => {
+  const { campaniaId } = await crearCampania({ nombre: 'Techo' });
+  assert.equal((await patchComoPastor(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 1 })).status, 403);
+  assert.equal((await patchComoPastor(`/api/tesoreria/campanias/${campaniaId}/cerrar`, {})).status, 403);
 });
