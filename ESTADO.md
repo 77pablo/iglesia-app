@@ -3,6 +3,30 @@
 
 ---
 
+## 🆕 1 DE AGOSTO DE 2026 — 🎯 las campañas de tesorería por fin se pueden usar
+
+La pantalla anunciaba la función —*"una campaña sirve para juntar para algo concreto —el techo, un viaje misionero— y ver cuánto falta"*— y **no tenía ni un solo botón**. El backend sí existía: `POST /campanias` y `PATCH /campanias/:id/aportar` estaban escritos, validados y protegidos, y nadie los llamaba nunca.
+
+**Pero conectarlo tal cual habría creado algo peor.** `aportar` hacía `UPDATE campania SET recaudado = recaudado + ?` y **no creaba ningún movimiento**: la plata subía en la barra de la campaña **sin aparecer en Movimientos ni en Transparencia**. Dos contabilidades que no cuadraban entre sí, en la pantalla del dinero.
+
+**El total de una campaña ahora se CALCULA** sumando los ingresos que llevan su `campania_id`. Es lo que hace imposible que la barra y los libros discrepen: no hay dos números que mantener sincronizados, hay uno derivado del otro.
+
+⚠️ **`campania.recaudado` sigue en la tabla y NO dice la verdad.** Ningún código la lee ni la escribe; la única excepción es la migración, una sola vez, que convierte un saldo anterior en su ingreso para que esa plata no desaparezca de la barra. Hay una prueba que ensucia esa columna con un valor imposible y exige que la respuesta la ignore.
+
+**Un aporte se puede borrar**, y al borrarlo desaparece del libro también. Es la **única** cosa que se puede deshacer en toda la tesorería: **ningún otro movimiento se puede corregir ni borrar**. Alguien va a preguntar por qué se puede borrar un aporte de campaña y no una ofrenda mal tecleada — la respuesta es que fue una decisión de alcance del dueño, no un olvido, y que lo otro sigue pendiente.
+
+⚠️ **La ruta de borrar no puede alcanzar un movimiento normal**, y eso descansa en una sola condición del `WHERE`: `campania_id = ?`. Los movimientos normales tienen `campania_id` NULL y en SQL `NULL = cualquier cosa` **nunca** es cierto. Comprobado quitándola: sin esa condición, la ruta borraba un movimiento cualquiera pasando un id de campaña — era un borrador general de la contabilidad de la iglesia.
+
+**Una campaña se cierra, no se borra:** deja de admitir aportes —rechazados **en el servidor**, no escondiendo el botón— y baja a una sección de cerradas, para no perder el historial de para qué se juntó.
+
+⚠️ **En la misma tarjeta hay dos fechas que se pintan con funciones distintas, y no es un descuido:** la del aporte con `fechaTxt()` (`movimiento.fecha` es una fecha de calendario pura) y la del cierre con `fechaDeUTC()` (`campania.cerrada_en` es una marca de tiempo UTC). Unificarlas desplaza una de las dos un día. Ver `backend/src/reportes.js:21-29`.
+
+**Nada va envuelto en transacciones, a propósito:** al calcularse el total, aportar es un solo `INSERT` y borrar un solo `DELETE`. El diseño eliminó el problema de las dos escrituras en vez de obligar a envolverlo.
+
+Suite: 566 → **584**.
+
+---
+
 ## 🆕 1 DE AGOSTO DE 2026 — ⚖️ una cuenta eliminada por su titular ya no se puede resucitar (fusionado y subido)
 
 Al ejercer el derecho a eliminar la cuenta (ARCO), la fila **no se borra: se anonimiza** (`backend/src/cuenta.js`). Pero seguía apareciendo en el panel del pastor **con sus botones operativos**, así que el pastor podía reactivarla, **devolverle su nombre real** —lo que deshace la anonimización y además lo propaga a `aprobacion_log`— o marcarla como pastor.
