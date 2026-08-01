@@ -43,8 +43,15 @@ r.get('/resumen', (req, res) => {
 r.get('/movimientos', (req, res) => {
   const LIMIT = 50;
   const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
-  const rows = db.prepare('SELECT * FROM movimiento WHERE iglesia_id = ? ORDER BY fecha DESC, id DESC LIMIT ? OFFSET ?')
-    .all(req.user.iglesia_id, LIMIT + 1, offset);
+  // LEFT JOIN, no una copia del nombre en el movimiento: una copia habria que
+  // mantenerla sincronizada, y eso es exactamente el problema que este trabajo
+  // viene a quitar de la tesoreria.
+  const rows = db.prepare(
+    `SELECT m.*, c.nombre AS campania_nombre
+       FROM movimiento m LEFT JOIN campania c ON c.id = m.campania_id
+      WHERE m.iglesia_id = ?
+      ORDER BY m.fecha DESC, m.id DESC LIMIT ? OFFSET ?`
+  ).all(req.user.iglesia_id, LIMIT + 1, offset);
   const hayMas = rows.length > LIMIT;
   res.json({ items: hayMas ? rows.slice(0, LIMIT) : rows, hayMas, offset });
 });
@@ -79,28 +86,121 @@ r.post('/movimientos', soloTesorero, limiterSensible, validar(movimientoSchema),
 });
 
 // --- Campañas ---
+// Los aportes de una campania son movimientos: no hay tabla aparte.
+const aportesDe = (campaniaId, ig) => db.prepare(
+  `SELECT id, monto, fecha FROM movimiento
+    WHERE campania_id = ? AND iglesia_id = ? AND tipo = 'ingreso'
+    ORDER BY fecha DESC, id DESC`
+).all(campaniaId, ig);
+
+// ⚠️ El SELECT NO trae `recaudado`: esa columna esta muerta (ver
+// migrarCampaniaAMovimientos en db.js). El total que se devuelve se CALCULA
+// aqui sumando los aportes, para que la barra de la campania y los libros no
+// puedan decir cosas distintas.
 r.get('/campanias', (req, res) => {
-  res.json(db.prepare('SELECT * FROM campania WHERE iglesia_id = ?').all(req.user.iglesia_id));
+  const ig = req.user.iglesia_id;
+  const filas = db.prepare(
+    `SELECT id, nombre, meta, cerrada_en FROM campania
+      WHERE iglesia_id = ?
+      ORDER BY (cerrada_en IS NOT NULL), id DESC`
+  ).all(ig);
+  res.json(filas.map(c => {
+    const aportes = aportesDe(c.id, ig);
+    return { ...c, aportes, recaudado: aportes.reduce((a, x) => a + x.monto, 0) };
+  }));
 });
+
 const campaniaSchema = z.object({
-  nombre: z.string().trim().min(1, 'falta el nombre'),
+  // .max(100) como el resto de los textos cortos del archivo: sin tope, un
+  // nombre enorme entra en la base y luego rompe la pantalla que lo pinta.
+  nombre: z.string().trim().min(1, 'falta el nombre').max(100, 'el nombre es demasiado largo'),
   meta: z.coerce.number().optional()
 });
 r.post('/campanias', soloTesorero, limiterSensible, validar(campaniaSchema), (req, res) => {
   const { nombre, meta } = req.body;
   const metaNum = meta;
-  db.prepare('INSERT INTO campania (iglesia_id, nombre, meta, recaudado) VALUES (?,?,?,0)')
+  // recaudado se sigue insertando a 0 solo porque la columna es NOT NULL DEFAULT
+  // 0 y sigue existiendo; nadie la vuelve a leer.
+  const info = db.prepare('INSERT INTO campania (iglesia_id, nombre, meta, recaudado) VALUES (?,?,?,0)')
     .run(req.user.iglesia_id, nombre, (Number.isFinite(metaNum) && metaNum > 0) ? metaNum : 0);
-  res.json({ ok: true });
+  auditar(req.user.iglesia_id, req.user.persona_id, 'campania_crear', 'tesoreria', nombre,
+    { tabla: 'campania', id: info.lastInsertRowid });
+  res.json({ ok: true, id: info.lastInsertRowid });
 });
 const aportarSchema = z.object({
   monto: z.coerce.number().positive('el aporte debe ser un numero mayor que cero')
 });
+// Aportar CREA UN INGRESO de verdad. Antes solo sumaba a campania.recaudado, y
+// esa plata no aparecia en ningun libro.
+//
+// Un solo INSERT: no hace falta transaccion. Con el total calculado ya no hay
+// dos escrituras que puedan quedar a medias — ese problema lo elimino el
+// diseno, no un BEGIN/COMMIT.
 r.patch('/campanias/:id/aportar', soloTesorero, limiterSensible, validar(aportarSchema), (req, res) => {
+  const ig = req.user.iglesia_id;
+  // La iglesia va en la MISMA consulta: a una campania de otra iglesia se le
+  // responde 404, no 403 (no se confirma que exista).
+  const c = db.prepare('SELECT id, nombre, cerrada_en FROM campania WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, ig);
+  if (!c) return res.status(404).json({ error: 'Campaña no encontrada' });
+  if (c.cerrada_en)
+    return res.status(409).json({ error: 'Esta campaña está cerrada: ya no admite aportes' });
+
   const { monto } = req.body;
-  const info = db.prepare('UPDATE campania SET recaudado = recaudado + ? WHERE id = ? AND iglesia_id = ?')
-    .run(monto, req.params.id, req.user.iglesia_id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Campaña no encontrada' });
+  // ⚠️ La descripcion NO lleva el nombre de la campania. Copiarlo aqui seria
+  // denormalizarlo, que es justo lo que este trabajo viene a evitar: el nombre
+  // se saca con un JOIN al listar los movimientos (ver Task 2). Hoy no se puede
+  // renombrar una campania, asi que copiarlo "funcionaria" — pero el dia que
+  // alguien anada esa funcion, las copias quedarian mintiendo en silencio.
+  const info = db.prepare(
+    `INSERT INTO movimiento (iglesia_id, tipo, monto, descripcion, creado_por, campania_id)
+     VALUES (?, 'ingreso', ?, ?, ?, ?)`
+  ).run(ig, monto, 'Aporte a campaña', req.user.persona_id, c.id);
+
+  auditar(ig, req.user.persona_id, 'campania_aporte', 'tesoreria', `${c.nombre}: ${monto}`,
+    { tabla: 'movimiento', id: info.lastInsertRowid });
+  res.json({ ok: true });
+});
+
+// Cerrar: la campania deja de admitir aportes pero SIGUE consultable. No se
+// borra, para no perder el historial de para que se junto.
+//
+// `cerrada_en IS NULL` en el WHERE: cerrar dos veces no reescribe la fecha del
+// primer cierre.
+r.patch('/campanias/:id/cerrar', soloTesorero, limiterSensible, (req, res) => {
+  const ig = req.user.iglesia_id;
+  const c = db.prepare('SELECT id, nombre FROM campania WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, ig);
+  if (!c) return res.status(404).json({ error: 'Campaña no encontrada' });
+  // datetime('now') es UTC: el frontend lo pinta con fechaDeUTC().
+  db.prepare("UPDATE campania SET cerrada_en = datetime('now') WHERE id = ? AND iglesia_id = ? AND cerrada_en IS NULL")
+    .run(c.id, ig);
+  auditar(ig, req.user.persona_id, 'campania_cerrar', 'tesoreria', c.nombre,
+    { tabla: 'campania', id: c.id });
+  res.json({ ok: true });
+});
+
+// Borrar un aporte: la unica forma de deshacer un error de tecleo en toda la
+// tesoreria. Acotado A PROPOSITO a los aportes de campania — que ningun otro
+// movimiento se pueda corregir es un problema mas amplio y es otro trabajo.
+//
+// ⚠️ `campania_id = ?` es lo que impide que esta ruta alcance un movimiento
+// normal: los normales tienen campania_id NULL, y en SQL `NULL = cualquier
+// cosa` NUNCA es cierto. Sin esa condicion, esto seria una forma de borrar la
+// contabilidad entera de la iglesia pasando cualquier id.
+r.delete('/campanias/:id/aportes/:movId', soloTesorero, limiterSensible, (req, res) => {
+  const ig = req.user.iglesia_id;
+  const m = db.prepare(
+    `SELECT id, monto FROM movimiento
+      WHERE id = ? AND iglesia_id = ? AND campania_id = ?`
+  ).get(req.params.movId, ig, req.params.id);
+  if (!m) return res.status(404).json({ error: 'Aporte no encontrado' });
+
+  db.prepare('DELETE FROM movimiento WHERE id = ? AND iglesia_id = ?').run(m.id, ig);
+  // Se audita SIEMPRE: borrar dinero sin dejar rastro de quien fue no es
+  // aceptable en la pantalla de la tesoreria.
+  auditar(ig, req.user.persona_id, 'campania_aporte_borrar', 'tesoreria', String(m.monto),
+    { tabla: 'campania', id: Number(req.params.id) });
   res.json({ ok: true });
 });
 

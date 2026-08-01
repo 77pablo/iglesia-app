@@ -480,6 +480,18 @@ const EXCEPCIONES = [
   {
     firma: 'class::estado-chip estado-${a.estado}',
     motivo: 'a.estado es asignacion.estado: backend/src/asignaciones.js linea 84 lo fija siempre a los literales \'aceptado\' o \'rechazado\' (o el default \'pendiente\' del esquema); el endpoint nunca escribe el texto que manda la persona.'
+  },
+  {
+    firma: 'for::ap-monto-${id}',
+    motivo: 'formAporte(id): la única llamada del archivo es formAporte(${c.id}) desde filaCampania(), un id numérico de la tabla campania.'
+  },
+  {
+    firma: 'id::ap-monto-${id}',
+    motivo: 'mismo id de formAporte() explicado arriba: siempre c.id, un entero de la tabla campania.'
+  },
+  {
+    firma: 'id::ap-error-${id}',
+    motivo: 'mismo id de formAporte() explicado arriba: siempre c.id, un entero de la tabla campania.'
   }
 ];
 
@@ -527,6 +539,21 @@ test('accionesBtns: editFn/delFn solo se llaman con literales, nunca con datos',
     const [, arg1, arg2] = m;
     assert.ok(literalOIdentificador.test(arg1), `accionesBtns: primer argumento no es un identificador/literal fijo: ${arg1}`);
     assert.ok(literalOIdentificador.test(arg2), `accionesBtns: segundo argumento no es un identificador/literal fijo: ${arg2}`);
+  }
+});
+
+test('formAporte: solo se llama con un id (algo.id), nunca con un dato de persona', () => {
+  // Verificación real de las tres excepciones de arriba (for::ap-monto-${id},
+  // id::ap-monto-${id}, id::ap-error-${id}): su motivo dice que la única
+  // llamada del archivo es formAporte(${c.id}). Sin esta prueba, si mañana
+  // alguien agrega formAporte(persona.nombre) las excepciones seguirían
+  // blanqueando esa interpolación sin que nada se entere.
+  const llamadas = [...fuente.matchAll(/onclick="formAporte\(\$\{([^)]+)\}\)"/g)];
+  assert.ok(llamadas.length > 0, 'no se encontró ninguna llamada a formAporte(); si se renombró, esta prueba hay que actualizarla, no borrarla');
+  const formaSegura = /^\s*[A-Za-z_$][\w$]*\.id\s*$/;
+  for (const m of llamadas) {
+    const [, arg] = m;
+    assert.ok(formaSegura.test(arg), `formAporte: argumento no es un id numérico de la forma algo.id: ${arg}`);
   }
 });
 

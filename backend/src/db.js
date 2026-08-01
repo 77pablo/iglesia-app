@@ -668,6 +668,40 @@ export function migrarAnonimizadaEn(conexion = db) {
 }
 migrarAnonimizadaEn();
 
+// CAMPANIA: el total recaudado pasa a CALCULARSE sumando los ingresos que
+// llevan campania_id, en vez de guardarse en campania.recaudado.
+//
+// El motivo: la ruta de aportar solo sumaba a esa columna y no creaba ningun
+// movimiento, asi que la barra de la campania subia SIN que la plata apareciera
+// en Movimientos ni en Transparencia. Dos contabilidades que no cuadraban, en
+// la pantalla del dinero. Con un numero derivado del otro no pueden discrepar.
+//
+// ⚠️ campania.recaudado queda MUERTA: ningun codigo de la app la lee ni la
+// escribe. La unica excepcion es esta migracion, una sola vez.
+export function migrarCampaniaAMovimientos(conexion = db) {
+  const yaExiste = conexion.prepare('PRAGMA table_info(movimiento)').all()
+    .some(c => c.name === 'campania_id');
+  if (yaExiste) return;
+  conexion.exec('ALTER TABLE movimiento ADD COLUMN campania_id INTEGER');
+
+  // ⚠️ El relleno va DENTRO de la guarda, igual que migrarAnonimizadaEn y
+  // migrarEstadoContactoPublico. Fuera, correria en CADA arranque y duplicaria
+  // el dinero de todas las campanias en cada reinicio.
+  //
+  // La fecha sale del default de la tabla: el dia de la migracion, no el del
+  // dinero real (esa fecha no se guardo nunca). Por eso la descripcion lo dice.
+  conexion.prepare(
+    `INSERT INTO movimiento (iglesia_id, tipo, categoria, monto, descripcion, creado_por, campania_id)
+     SELECT iglesia_id, 'ingreso', NULL, recaudado, 'Saldo anterior de la campaña', NULL, id
+       FROM campania WHERE recaudado > 0`
+  ).run();
+}
+migrarCampaniaAMovimientos();
+
+// Cuando se cerro la campania (NULL = activa). Una campania cerrada ya no
+// admite aportes; no se borra, para no perder el historial de para que se junto.
+agregarColumna('campania', 'cerrada_en', 'TEXT');
+
 // --- Índices: aceleran los filtros más usados (por iglesia, persona, evento, grupo) ---
 // Sin esto, cada consulta hace un escaneo completo; se nota al crecer los datos.
 db.exec(`

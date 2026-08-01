@@ -83,7 +83,11 @@ test('Tesoreria sin datos explica que hacer en vez de dejar el hueco en blanco',
   // propio length: sin eso, un .map() sobre un array vacio pinta cadena vacia.
   assert.match(vista, /movs\.length\s*\n?\s*\?/, '"Movimientos" necesita su estado vacio');
   assert.match(vista, /trans\.porCategoria\.length/, '"Transparencia" necesita su estado vacio');
-  assert.match(vista, /camps\.length\s*\?/, '"Campañas" ya lo tenia, no se puede perder');
+  // Tras la Task 5 el guardado ya no mira camps.length a secas: distingue
+  // activas de cerradas, y el hueco vacio solo se pinta cuando NO HAY
+  // campanias activas (una iglesia con solo campanias cerradas si tiene
+  // contenido que mostrar, en la seccion "Cerradas").
+  assert.match(vista, /camps\.filter\(c=>!c\.cerrada_en\)\.length/, '"Campañas" ya lo tenia, no se puede perder');
 
   for (const texto of ['Todavía no hay movimientos', 'aquí se verá en qué se fue el dinero', 'Todavía no hay campañas'])
     assert.ok(vista.includes(texto), `falta el texto "${texto}"`);
