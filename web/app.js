@@ -29,6 +29,42 @@ const NAV = [
   ['ajustes','🎨','Ajustes'],
   ['admin','⚙️','Administración'],
 ];
+// Los cinco temas del menu. Cada clave del NAV pertenece a EXACTAMENTE uno; hay
+// una prueba que lo fija, porque una clave sin grupo desapareceria del menu
+// agrupado sin dar ningun error.
+//
+// Dos asignaciones que no son obvias y son deliberadas:
+//  - 'predica' va en "Dia a dia", no en "Ministerios": la ve TODO el mundo
+//    (tieneModulo la deja pasar siempre), no es el ministerio de nadie.
+//  - 'ajustes' va en "Lo mio", no en "Administracion": es el tema y el color de
+//    quien mira, no administracion de la iglesia.
+const GRUPOS_NAV = [
+  { titulo: 'Día a día',      claves: ['inicio','calendario','anuncios','mensajes','directorio','predica'] },
+  { titulo: 'Lo mío',         claves: ['mi_servicio','mi_grupo','ajustes'] },
+  { titulo: 'Pastoreo',       claves: ['panel_pastor','cuidado_pastoral','mensajes_portal','asistencia','reportes','panel_obispo'] },
+  { titulo: 'Ministerios',    claves: ['servicio_gestion','musicos','ninos','organizacion'] },
+  { titulo: 'Administración', claves: ['tesoreria','admin','superadmin'] },
+];
+
+// A partir de cuantas entradas VISIBLES se agrupa. Es un numero elegido, no una
+// verdad: los encabezados existen para resolver un problema de LARGO, asi que
+// solo aparecen donde hay largo. Por debajo cuestan mas de lo que ahorran — a un
+// feligres (9 entradas) le convertirian 9 lineas en 13.
+const NAV_UMBRAL_GRUPOS = 12;
+
+// Reparte las claves YA filtradas por tieneModulo(). Devuelve secciones:
+// titulo === null significa "sin encabezado" (modo plano, como siempre).
+// Funcion pura a proposito: buildNav toca el DOM y no se puede probar sin
+// navegador; esto si.
+function agruparNav(claves){
+  // [...claves] y no `claves` a secas: devolver la MISMA referencia que se
+  // recibio invita a que quien la use la ordene o la recorte y le cambie el
+  // array a quien llamo, sin enterarse.
+  if(claves.length < NAV_UMBRAL_GRUPOS) return [{titulo:null, claves:[...claves]}];
+  return GRUPOS_NAV
+    .map(g=>({titulo:g.titulo, claves:g.claves.filter(k=>claves.includes(k))}))
+    .filter(g=>g.claves.length);   // un encabezado sin nada debajo es ruido
+}
 // Render minimalista de un auditorio/iglesia moderno (líneas rectas, luz difusa) para Anuncios.
 const IMG_AUDITORIO=`<svg viewBox="0 0 400 180" preserveAspectRatio="xMidYMid slice" style="width:100%;height:150px;display:block">
   <defs>
@@ -591,12 +627,74 @@ function iniciarIconos(){
   window._emojiObs.observe(document.body,{childList:true,subtree:true,characterData:true});
 }
 
+// Pinta el menu lateral.
+//
+// ⚠️ El DOM sale SIEMPRE en el orden del NAV, agrupado o no. Es deliberado: el
+// agrupamiento por temas es SOLO del movil, y agruparNav() no sabe nada del
+// ancho de pantalla — si aqui pintaramos en orden de grupo, el escritorio
+// tambien quedaria reordenado, y ocultar los encabezados por CSS no deshace un
+// reordenamiento hecho en el DOM: el pastor se encontraria una lista plana
+// barajada (12 de sus 19 entradas cambiaban de sitio).
+//
+// El orden visual del movil se consigue con `order` de flexbox: cada elemento
+// lleva un `--ord` correlativo y UNICO, y el @media de 900px de styles.css es el
+// unico sitio donde ese numero se convierte en `order`. En escritorio no hay
+// ningun `order` activo, asi que manda el orden del DOM = el del NAV de siempre.
+//
+// Los valores son unicos a proposito: entre elementos con el MISMO `order` manda
+// el orden del DOM, y ahi un encabezado podria acabar detras de sus propias
+// entradas.
 function buildNav(){
   const nav=$('nav'); nav.innerHTML='';
-  NAV.filter(n=>tieneModulo(n[0])).forEach(([key,ic,label])=>{
+  const visibles=NAV.filter(n=>tieneModulo(n[0])).map(n=>n[0]);
+  const secciones=agruparNav(visibles);
+  // titulo null = modo plano: ni encabezados ni `--ord` (por debajo del umbral
+  // no se agrupa nada, tampoco en el movil).
+  const agrupado=secciones.some(s=>s.titulo);
+
+  const grupoDe=new Map();     // clave del NAV -> titulo de su grupo
+  const ordenDe=new Map();     // clave del NAV -> su sitio en el orden del movil
+  const ordenTitulo=new Map(); // titulo de grupo -> su sitio en el orden del movil
+  if(agrupado){
+    let n=0;   // arranca en 1: `order:0` es el valor por defecto, no lo pisamos
+    secciones.forEach(seccion=>{
+      ordenTitulo.set(seccion.titulo, ++n);
+      seccion.claves.forEach(k=>{ grupoDe.set(k, seccion.titulo); ordenDe.set(k, ++n); });
+    });
+  }
+
+  const pendientes=new Set(ordenTitulo.keys());   // encabezados aun sin pintar
+  visibles.forEach(key=>{
+    // El encabezado se cuela justo antes de la primera entrada suya que aparece,
+    // para que el DOM tampoco quede absurdo para quien lo lea en orden.
+    const titulo=grupoDe.get(key);
+    if(titulo && pendientes.has(titulo)){
+      pendientes.delete(titulo);
+      const h=document.createElement('div');
+      // "primero" es el primero VISUALMENTE (el del grupo 1), que no tiene por
+      // que ser el primero del DOM: por eso una clase y no `:first-child`.
+      h.className='nav-sec'+(ordenTitulo.get(titulo)===1?' nav-sec-primero':'');
+      // textContent, no innerHTML: los titulos son fijos, pero no hay motivo
+      // para abrir esa puerta en el menu.
+      h.textContent=titulo;
+      h.style.setProperty('--ord', ordenTitulo.get(titulo));
+      // aria-hidden, deliberado: `order` separa el orden VISUAL del orden del
+      // DOM, y el DOM es lo que lee un lector de pantalla. Un encabezado en su
+      // sitio del DOM (justo antes de su primera entrada visual) puede acabar
+      // leyendose delante de entradas de OTRO grupo (en el menu real del
+      // pastor, 6 de 19 quedan asi). Un encabezado equivocado es peor que
+      // ninguno. Estos <div> no son headings, no reciben foco y su posicion en
+      // el DOM es puramente un ancla para el `order` visual: ocultarlos al
+      // lector de pantalla no quita informacion, deja las 19 entradas en el
+      // orden del NAV sin ninguna etiqueta enganosa — exactamente como estaban
+      // antes de agrupar el menu.
+      h.setAttribute('aria-hidden','true');
+      nav.appendChild(h);
+    }
     const el=document.createElement('div');
     el.className='nav-item'; el.dataset.key=key;
-    el.innerHTML=`<span class="ic">${NAV_ICON[key]||ic}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
+    if(agrupado) el.style.setProperty('--ord', ordenDe.get(key));
+    el.innerHTML=`<span class="ic">${NAV_ICON[key]||iconDe(key)}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
     el.onclick=()=>navTo(key);
     nav.appendChild(el);
   });
