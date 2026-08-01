@@ -181,7 +181,7 @@ r.post('/eliminar', (req, res) => {
     db.prepare(
       `UPDATE persona SET nombre = 'Usuario eliminado', usuario = ?, email = NULL, telefono = NULL,
          foto_url = NULL, cumple = NULL, mostrar_telefono = 0, mostrar_email = 0,
-         activo = 0, password_hash = ? WHERE id = ?`
+         activo = 0, password_hash = ?, anonimizada_en = datetime('now') WHERE id = ?`
     ).run('eliminado_' + pid, claveMuerta, pid);
     registrarConsentimiento(pid, iid, 'revocado', req);
 

@@ -3363,7 +3363,13 @@ function renderAdmin(){
       ? u.roles.map(r=>`<span class="estado-chip" style="margin:2px 4px 2px 0">${escHtml(r.grupo)} · ${escHtml(rolLabel(r.rol))}
           <a href="javascript:adminQuitarRol(${r.pertenencia_id})" style="color:var(--red-tx);margin-left:4px" title="Quitar">✕</a></span>`).join('')
       : '<span class="muted small">Sin roles</span>';
-    const badges=`${u.es_pastor?'<span class="estado-chip estado-aceptado">⛪ Pastor</span> ':''}${!u.activo?'<span class="estado-chip estado-rechazado">Inactivo</span>':''}`;
+    // anonimizada: la persona ejercio su derecho ARCO a eliminar su cuenta
+    // (cuenta.js). El dato lo manda el backend (u.anonimizada), no se adivina
+    // aqui del nombre o del usuario ('eliminado_<id>' es solo texto: una
+    // persona real podria llamarse asi). El candado de verdad esta en el
+    // servidor (admin.js responde 403 a las mismas acciones); esconder los
+    // botones aqui es solo el acompañamiento visual.
+    const badges=`${u.es_pastor?'<span class="estado-chip estado-aceptado">⛪ Pastor</span> ':''}${!u.activo?'<span class="estado-chip estado-rechazado">Inactivo</span>':''}${u.anonimizada?' <span class="estado-chip" style="opacity:.8">🔒 Eliminada por su titular</span>':''}`;
     // El super-admin y el obispo no son miembros de la congregación: el pastor
     // no los administra (el backend responde 403 en las tres acciones). Antes
     // solo se ocultaba "Restablecer contraseña", así que el botón "Desactivar"
@@ -3371,7 +3377,7 @@ function renderAdmin(){
     // TODAS las iglesias, no solo de esta.
     const yo = ME && ME.persona && ME.persona.id;
     const esCuentaDeSistema = u.rol_global==='super_admin' || u.rol_global==='obispo';
-    const puedeResetear = u.id!==yo && !esCuentaDeSistema;
+    const puedeResetear = u.id!==yo && !esCuentaDeSistema && !u.anonimizada;
     return `<div class="item-card" style="margin-top:10px">
       <div class="flex" style="align-items:flex-start">
         <div style="flex:1">
@@ -3380,7 +3386,8 @@ function renderAdmin(){
           <div style="margin-top:6px">${chips}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-          ${esCuentaDeSistema?'<span class="muted small">Cuenta de sistema</span>':`
+          ${esCuentaDeSistema?'<span class="muted small">Cuenta de sistema</span>':
+            u.anonimizada?'<span class="muted small">Eliminó su cuenta: no se puede modificar</span>':`
           <button class="btn ghost small-btn" onclick="adminFormRol(${u.id})">+ Rol</button>
           <button class="link" onclick="adminTogglePastor(${u.id},${u.es_pastor})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
           <button class="link" onclick="adminCorregirNombre(${u.id})">✏️ Corregir nombre</button>

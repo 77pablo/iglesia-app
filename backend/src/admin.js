@@ -39,7 +39,11 @@ r.get('/datos', (req, res) => {
   const usuarios = db.prepare(
     // rol_global viaja para que la vista sepa que cuentas NO administra el
     // pastor (super-admin / obispo): no les ofrece restablecer la contrasena.
-    'SELECT id, nombre, usuario, email, es_pastor, activo, rol_global FROM persona WHERE iglesia_id = ? ORDER BY nombre'
+    // anonimizada_en viaja para lo mismo pero con las cuentas que su propio
+    // titular elimino (ARCO, ver cuenta.js): la vista NO debe adivinarlo del
+    // nombre o del usuario ('eliminado_<id>' es solo un texto, una persona
+    // real podria llamarse asi).
+    'SELECT id, nombre, usuario, email, es_pastor, activo, rol_global, anonimizada_en FROM persona WHERE iglesia_id = ? ORDER BY nombre'
   ).all(ig);
   const roles = db.prepare(
     `SELECT pe.id AS pertenencia_id, pe.persona_id, pe.grupo_id, pe.rol, g.nombre AS grupo
@@ -49,7 +53,15 @@ r.get('/datos', (req, res) => {
   const grupos = db.prepare('SELECT id, nombre, color FROM grupo WHERE iglesia_id = ? ORDER BY nombre').all(ig);
   // Adjunta a cada usuario sus roles.
   const porPersona = new Map();
-  for (const u of usuarios) { u.es_pastor = !!u.es_pastor; u.activo = !!u.activo; u.roles = []; porPersona.set(u.id, u); }
+  for (const u of usuarios) {
+    u.es_pastor = !!u.es_pastor; u.activo = !!u.activo;
+    // Se manda un booleano, no la fecha: la vista solo necesita saber SI esta
+    // anonimizada, la fecha exacta no le aporta nada y es un dato de mas.
+    u.anonimizada = !!u.anonimizada_en;
+    delete u.anonimizada_en;
+    u.roles = [];
+    porPersona.set(u.id, u);
+  }
   for (const rl of roles) { const u = porPersona.get(rl.persona_id); if (u) u.roles.push(rl); }
   res.json({ usuarios, grupos, rolesDisponibles: ROLES_GRUPO });
 });
@@ -79,6 +91,24 @@ function personaDeIglesia(id, ig) {
   return db.prepare('SELECT * FROM persona WHERE id = ? AND iglesia_id = ?').get(id, ig);
 }
 
+// El candado de verdad contra "resucitar" una cuenta que su propio titular
+// elimino (ARCO, ver cuenta.js) va AQUI, en el servidor: esconder botones en
+// el frontend es solo acompañamiento, cualquiera puede llamar a la ruta
+// directamente con curl/Postman. Se usa en toda escritura que el panel del
+// pastor ofrece sobre una persona y que podria reactivarla, devolverle su
+// identidad o darle una capacidad nueva (activar, marcar pastor, corregir el
+// nombre, restablecer la clave, asignar un rol). Devuelve true (y ya
+// respondio) si hay que cortar aqui.
+function bloqueaSiAnonimizada(p, res) {
+  if (p.anonimizada_en) {
+    res.status(403).json({
+      error: 'Esta persona eliminó su propia cuenta ejerciendo su derecho a la privacidad. Esa decisión no se puede deshacer desde aquí.'
+    });
+    return true;
+  }
+  return false;
+}
+
 // --- Activar/desactivar, marcar/quitar pastor, o corregir el nombre ---
 const editarUsuarioSchema = z.object({
   activo: z.boolean().optional(),
@@ -94,6 +124,8 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   const p = personaDeIglesia(req.params.id, ig);
   if (!p) return res.status(404).json({ error: 'Usuario no encontrado' });
   const yo = req.user.persona_id;
+
+  if (bloqueaSiAnonimizada(p, res)) return;
 
   // Mismo guardia que el reset de clave de mas abajo, y por la misma razon: el
   // super-admin y el obispo no son miembros de la congregacion, sus cuentas
@@ -152,6 +184,8 @@ r.post('/usuarios/:id/clave', validar(idParamSchema, 'params'), (req, res) => {
   const p = personaDeIglesia(req.params.id, ig);
   if (!p) return res.status(404).json({ error: 'Usuario no encontrado' });
 
+  if (bloqueaSiAnonimizada(p, res)) return;
+
   // Para la propia clave esta "Cambiar mi contraseña" (cuenta.js), que exige la
   // actual. Si el pastor pudiera resetearse por aqui, cualquiera con su sesion
   // abierta (telefono desbloqueado) se la cambiaria sin conocer la anterior.
@@ -184,6 +218,7 @@ r.post('/usuarios/:id/rol', validar(asignarRolSchema), (req, res) => {
   const ig = req.user.iglesia_id;
   const p = personaDeIglesia(req.params.id, ig);
   if (!p) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (bloqueaSiAnonimizada(p, res)) return;
   const { grupo_id, rol } = req.body;
   const g = db.prepare('SELECT id, nombre FROM grupo WHERE id = ? AND iglesia_id = ?').get(grupo_id, ig);
   if (!g) return res.status(404).json({ error: 'Grupo no encontrado' });
@@ -200,6 +235,12 @@ r.post('/usuarios/:id/rol', validar(asignarRolSchema), (req, res) => {
 });
 
 // --- Quitar un rol (pertenencia) ---
+// Sin guardia de anonimizada a proposito: a diferencia de las rutas de arriba,
+// esta SOLO borra datos (nunca reactiva, renombra, ni concede nada nuevo), asi
+// que no puede "resucitar" una cuenta eliminada por su titular. Bloquearla
+// dejaria pertenencias huerfanas de una cuenta ya eliminada sin forma de
+// limpiarlas, que va en contra del mismo espiritu de minimizar datos que pide
+// el derecho ARCO.
 r.delete('/rol/:pertenenciaId', (req, res) => {
   const ig = req.user.iglesia_id;
   // Solo si la pertenencia es de un grupo de esta iglesia.
