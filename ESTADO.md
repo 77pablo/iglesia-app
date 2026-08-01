@@ -3,6 +3,22 @@
 
 ---
 
+## 🆕 1 DE AGOSTO DE 2026 — las fechas en hora de Chile, no en UTC (fusionado y subido)
+
+`date('now')` y `datetime('now')` de SQLite son **siempre UTC**, aunque el proceso corra con `TZ=America/Santiago`: esa variable solo afecta al lado JavaScript. Chile va 3 o 4 horas por detrás, así que **desde las 20:00 o 21:00 hora de Chile, para SQLite ya es el día siguiente**.
+
+**El rol de predicador se activaba y se apagaba en esa franja.** El pastor lo daba del 5 al 7 y la persona lo recibía la noche del 4 y lo perdía la noche del 6 (`backend/src/auth.js:261`, `backend/src/predica.js:29`). Arreglado con `date('now','localtime')`, el mismo patrón que ya usaba `directorio.js:172`.
+
+**Y tres pantallas mostraban el día siguiente por la tarde** (`web/app.js:1497`, `:1929`, `:2205`): un contacto de cuidado pastoral registrado un lunes a las 21:00 aparecía fechado el martes. Ahora usan `fechaDeUTC()`, que ya existía y ya se aplicaba bien en otros dos sitios del mismo archivo.
+
+⚠️ **Antes de tocar cualquier fecha, lee `backend/src/reportes.js:21-29`.** `'localtime'` es el arreglo sobre una **marca de tiempo** y es un **fallo nuevo** sobre una **fecha de calendario pura**, a la que le resta un día. Por eso ese archivo lo lleva en unos sitios y deliberadamente no en otros. No lo "unifiques".
+
+**Cómo se prueba sin mentir:** una prueba que inserte un rol y mire si está vigente solo distinguiría el código bueno del malo durante esas ~4 horas al día; el resto del día pasaría en verde con el fallo puesto. La prueba que hay saca la consulta **real** del código fuente y le sustituye `'now'` por un instante fijo: corre SQL de verdad y además no depende de la hora a la que se ejecute.
+
+Suite: 549 → **554**.
+
+---
+
 ## 🆕 1 DE AGOSTO DE 2026 — 🔴 XSS en categoría, edad y hora (fusionado y subido)
 
 Tres datos que escribe una persona llegaban al HTML **sin escapar**. El peor estaba en el **panel del obispo** (`web/app.js:3092`), que ve **todas las iglesias**: un tesorero de cualquier iglesia guardaba una categoría con `<script>` y le ejecutaba código al obispo al abrir su panel. Eso **saltaba el aislamiento entre iglesias**, que es la garantía de fondo de la app. Los otros dos: la edad de una clase de Escuela Dominical (`:2523`) y la hora del ensayo (`:1863`), esta última dentro de un `value="..."`, donde basta una comilla doble para salirse del atributo.
