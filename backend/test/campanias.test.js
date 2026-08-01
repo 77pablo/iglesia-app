@@ -103,7 +103,7 @@ function crearCampaniaEnOtraIglesia({ nombre }) {
   const campaniaId = Number(dbDirecta.prepare(
     'INSERT INTO campania (iglesia_id, nombre, meta, recaudado) VALUES (?,?,0,0)'
   ).run(otraIg, nombre).lastInsertRowid);
-  return { campaniaId };
+  return { campaniaId, iglesiaId: otraIg };
 }
 
 // Monta una conexion propia con el esquema ANTERIOR a la columna campania_id
@@ -282,6 +282,21 @@ test('aportar a una campania CERRADA se rechaza en el servidor', async () => {
     'entro plata en una campania cerrada');
 });
 
+test('aportar 0 o un monto negativo se rechaza en el servidor', async () => {
+  // aportarSchema exige .positive(): esta prueba comprueba de verdad que la
+  // ruta lo aplica, en vez de confiar solo en la lectura del schema.
+  const { campaniaId } = await crearCampania({ nombre: 'Techo' });
+
+  const cero = await patchRaw(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 0 });
+  assert.equal(cero.status, 400, 'un aporte de 0 no puede aceptarse');
+
+  const negativo = await patchRaw(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: -1000 });
+  assert.equal(negativo.status, 400, 'un aporte negativo no puede aceptarse');
+
+  const c = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId);
+  assert.equal(c.recaudado, 0, 'un aporte invalido no puede haber quedado registrado');
+});
+
 test('cerrar deja la campania consultable, no la borra', async () => {
   const { campaniaId } = await crearCampania({ nombre: 'Techo' });
   await patch(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 50000 });
@@ -291,6 +306,23 @@ test('cerrar deja la campania consultable, no la borra', async () => {
   assert.ok(c, 'la campania desaparecio al cerrarla');
   assert.ok(c.cerrada_en, 'no quedo constancia de cuando se cerro');
   assert.equal(c.recaudado, 50000, 'se perdio lo que se habia juntado');
+});
+
+test('cerrar la misma campania dos veces no reescribe la fecha del primer cierre', async () => {
+  const { campaniaId } = await crearCampania({ nombre: 'Techo' });
+  await patch(`/api/tesoreria/campanias/${campaniaId}/cerrar`, {});
+  const primeraFecha = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId).cerrada_en;
+  assert.ok(primeraFecha, 'no quedo constancia del primer cierre');
+
+  // datetime('now') en SQLite tiene resolucion de UN SEGUNDO: sin esta espera,
+  // los dos cierres caerian casi siempre dentro del mismo segundo y la fecha
+  // saldria igual aunque el guard `cerrada_en IS NULL` no existiera -- la
+  // prueba pasaria por casualidad, no porque de verdad comprobó nada.
+  await new Promise(res => setTimeout(res, 1100));
+  await patch(`/api/tesoreria/campanias/${campaniaId}/cerrar`, {});
+  const segundaFecha = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId).cerrada_en;
+
+  assert.equal(segundaFecha, primeraFecha, 'cerrar dos veces reescribio la fecha del primer cierre');
 });
 
 test('no se puede aportar ni cerrar una campania de otra iglesia', async () => {
@@ -321,6 +353,16 @@ test('borrar un aporte lo quita de la campania Y de los libros', async () => {
   assert.equal(trans.recaudado, 0, 'el ingreso sigue en los libros: la correccion no sirvio de nada');
 });
 
+test('borrar el mismo aporte dos veces: la segunda da 404', async () => {
+  const { campaniaId } = await crearCampania({ nombre: 'Techo', meta: 500000 });
+  await patch(`/api/tesoreria/campanias/${campaniaId}/aportar`, { monto: 500000 });
+  const aporteId = (await get('/api/tesoreria/campanias')).find(x => x.id === campaniaId).aportes[0].id;
+
+  await del(`/api/tesoreria/campanias/${campaniaId}/aportes/${aporteId}`);
+  const segunda = await delRaw(`/api/tesoreria/campanias/${campaniaId}/aportes/${aporteId}`);
+  assert.equal(segunda.status, 404, 'borrar un aporte que ya no existe tiene que dar 404, no 200');
+});
+
 test('esta ruta NO puede borrar un movimiento normal', async () => {
   // El agujero que hay que cerrar: si alcanzara movimientos sin campania,
   // seria una forma de borrar la contabilidad entera de la iglesia.
@@ -334,7 +376,7 @@ test('esta ruta NO puede borrar un movimiento normal', async () => {
   assert.ok(movs.items.some(m => m.id === movId), 'se borro un movimiento que no era un aporte');
 });
 
-test('no se puede borrar un aporte de otra campania ni de otra iglesia', async () => {
+test('no se puede borrar un aporte pidiendolo por otra campania (misma iglesia)', async () => {
   const { campaniaId: a } = await crearCampania({ nombre: 'Techo' });
   const { campaniaId: b } = await crearCampania({ nombre: 'Viaje' });
   await patch(`/api/tesoreria/campanias/${a}/aportar`, { monto: 1000 });
@@ -345,6 +387,23 @@ test('no se puede borrar un aporte de otra campania ni de otra iglesia', async (
 
   const c = (await get('/api/tesoreria/campanias')).find(x => x.id === a);
   assert.equal(c.recaudado, 1000, 'se borro pidiendolo por otra campania');
+});
+
+test('no se puede borrar un aporte de otra iglesia, ni con los ids exactos y correctos', async () => {
+  // A diferencia de la prueba de arriba (misma iglesia, campania equivocada),
+  // aqui la campania Y el aporte SI son el par correcto -- lo unico distinto
+  // es que ambos pertenecen a otra iglesia. El tesorero de SEM.iglesiaId no
+  // tiene por que poder tocarlos solo por acertar los ids.
+  const { campaniaId, iglesiaId: otraIg } = crearCampaniaEnOtraIglesia({ nombre: 'Ajena' });
+  insertarIngresoDirecto({ campaniaId, monto: 1000, iglesiaId: otraIg });
+  const aporteId = dbDirecta.prepare(
+    'SELECT id FROM movimiento WHERE campania_id = ? AND iglesia_id = ?'
+  ).get(campaniaId, otraIg).id;
+
+  assert.equal((await delRaw(`/api/tesoreria/campanias/${campaniaId}/aportes/${aporteId}`)).status, 404);
+
+  const sigueAhi = dbDirecta.prepare('SELECT id FROM movimiento WHERE id = ?').get(aporteId);
+  assert.ok(sigueAhi, 'se borro un aporte de otra iglesia usando los ids correctos');
 });
 
 test('el pastor no puede borrar un aporte', async () => {
