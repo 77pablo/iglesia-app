@@ -23,7 +23,7 @@ La pantalla anunciaba la función —*"una campaña sirve para juntar para algo 
 
 **Nada va envuelto en transacciones, a propósito:** al calcularse el total, aportar es un solo `INSERT` y borrar un solo `DELETE`. El diseño eliminó el problema de las dos escrituras en vez de obligar a envolverlo.
 
-Suite: 566 → **584**.
+Suite: 566 → **589**.
 
 ---
 
