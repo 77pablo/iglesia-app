@@ -506,3 +506,56 @@ test('toggleSidebar, al CERRAR el cajon, NO recalcula nada', () => {
   assert.deepEqual(grupos.map(g => g.hidden), [false, true, false, true, true],
     'al cerrar el cajon, toggleSidebar toco los grupos: solo tiene que tocarlos al abrir');
 });
+
+// --- el punto de mensajes sin leer -------------------------------------------
+
+// actualizarBadgeNav NO es `function nombre(...)`: es un metodo de un objeto
+// (`async actualizarBadgeNav(n){`), asi que recortarFuncion() no lo encuentra
+// —revienta con su propio assert— y hace falta un recorte propio.
+function recortarMetodo(nombre) {
+  const i = fuente.indexOf(`async ${nombre}(`);
+  assert.ok(i >= 0, `no se encontro el metodo ${nombre} en web/app.js`);
+  let saldo = 0, fin = -1;
+  for (let j = fuente.indexOf('{', i); j < fuente.length; j++) {
+    if (fuente[j] === '{') saldo++;
+    else if (fuente[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
+  }
+  assert.ok(fin > 0, `no se pudo cerrar el metodo ${nombre}`);
+  return fuente.slice(i, fin);
+}
+
+test('el punto sale del MISMO dato que el badge, no de una cuenta aparte', () => {
+  // Dos fuentes para el mismo numero se desincronizan: el badge diria 3 y el
+  // punto no estaria, o al reves. actualizarBadgeNav es el unico sitio por
+  // donde entra ese dato.
+  const cuerpo = recortarMetodo('actualizarBadgeNav');
+  assert.ok(cuerpo.includes('marcarGrupoConSinLeer'),
+    'actualizarBadgeNav no marca el tema: con su tema cerrado, tener mensajes sin leer dejaria de verse');
+});
+
+test('sin mensajes sin leer no se marca ningun tema', () => {
+  const { doc, encabezados } = documentoConGrupos(5, 'x');
+  const fn = new Function('document', `${recortarFuncion('marcarGrupoConSinLeer')}
+    return marcarGrupoConSinLeer;`)(doc);
+  encabezados.forEach(h => { h.classList = { _c: new Set(), add(c){this._c.add(c);}, remove(c){this._c.delete(c);} }; });
+  fn(null, 0);
+  assert.ok(encabezados.every(h => h.classList._c.size === 0),
+    'se marco un tema sin haber nada sin leer');
+});
+
+test('el CSS del punto vive dentro del @media y se calla con el tema abierto', () => {
+  const n = anchoMovilDelJs();
+  const i = hoja.indexOf(`@media (max-width:${n}px){`);
+  let saldo = 0, fin = -1;
+  for (let j = hoja.indexOf('{', i); j < hoja.length; j++) {
+    if (hoja[j] === '{') saldo++;
+    else if (hoja[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
+  }
+  const movil = hoja.slice(i, fin);
+  const resto = hoja.slice(0, i) + hoja.slice(fin);
+  assert.ok(movil.includes('con-sin-leer'), 'el punto no esta estilizado en el @media del movil');
+  assert.ok(!resto.includes('con-sin-leer'),
+    'hay una regla del punto fuera del @media: apareceria tambien en escritorio');
+  assert.ok(/aria-expanded="true"\][^{]*\.con-sin-leer|\.con-sin-leer[^{]*\[aria-expanded="true"\]/.test(movil),
+    'el punto no se oculta con el tema abierto: se veria a la vez que el badge, diciendo lo mismo dos veces');
+});

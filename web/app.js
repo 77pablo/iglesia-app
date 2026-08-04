@@ -723,7 +723,12 @@ function buildNav(){
   // ejecuta esta funcion contra un `document` de juguete que puede no tener
   // querySelector/querySelectorAll -- y grupoActivo() usa el primero antes de
   // que abrirGrupo() use el segundo, asi que el guardia tiene que cubrir los dos.
-  if(typeof document.querySelector==='function' && typeof document.querySelectorAll==='function') abrirGrupo(grupoActivo()||'nav-g-1');
+  if(typeof document.querySelector==='function' && typeof document.querySelectorAll==='function'){
+    abrirGrupo(grupoActivo()||'nav-g-1');
+    // El menu se acaba de repintar: el punto de sin-leer se perdio con el DOM
+    // anterior. Se reaplica con el ultimo dato conocido, sin volver a pedirlo.
+    if(typeof Chat!=='undefined'&&Chat._sinLeer) Chat.actualizarBadgeNav(Chat._sinLeer);
+  }
 }
 
 // Una entrada del menu. Es un <button> de verdad, no un <div onclick>: asi se
@@ -774,6 +779,21 @@ function alternarGrupo(id){
     if(h&&h.focus) h.focus();
   }
   abrirGrupo(seCierra?null:id);
+}
+
+// Un tema cerrado esconde el badge de su entrada. Sin esto, tener mensajes sin
+// leer dejaria de verse en cuanto su tema no fuera el abierto — una perdida real
+// respecto a como funcionaba antes de plegar el menu.
+//
+// El punto NO cuenta nada por su cuenta: sale del mismo numero que ya gobierna
+// el badge, para que no haya dos verdades que mantener.
+function marcarGrupoConSinLeer(entradaBadge, n){
+  document.querySelectorAll('#nav .nav-sec').forEach(h=>h.classList.remove('con-sin-leer'));
+  if(!n||!entradaBadge||!entradaBadge.closest) return;
+  const cont=entradaBadge.closest('.nav-grupo');
+  if(!cont) return;   // menu plano (escritorio o menu corto): el badge ya se ve
+  const h=document.querySelector(`.nav-sec[aria-controls="${cont.id}"]`);
+  if(h) h.classList.add('con-sin-leer');
 }
 
 function navTo(key){
@@ -4340,8 +4360,10 @@ const Chat = {
     this.conectarSSE();
   },
   async actualizarBadgeNav(n){
-    const b=$('nav-badge-mensajes'); if(!b) return;
-    b.classList.toggle('hidden', !n); b.textContent=n;
+    this._sinLeer=n;   // se reaplica si el menu se repinta al cambiar de ancho
+    const b=$('nav-badge-mensajes');
+    if(b){ b.classList.toggle('hidden', !n); b.textContent=n; }
+    marcarGrupoConSinLeer(b, n);
   },
   // Trae solo el total de no-leidos, sin tocar la vista (se llama desde abrirApp).
   async refrescarBadge(){
