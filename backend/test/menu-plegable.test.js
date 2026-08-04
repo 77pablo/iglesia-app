@@ -40,7 +40,7 @@ test('esMovil consulta el ancho de verdad, no lo adivina', () => {
   // Si alguien lo cambia por `window.innerWidth < X` deja de reaccionar a los
   // cambios de zoom y de orientacion igual que el CSS, y el menu se desincroniza
   // de sus propios estilos.
-  const m = fuente.match(/function esMovil\(\)\{[^}]*\}/);
+  const m = fuente.match(/function esMovil\(\)\{[^\r\n]*\}/);
   assert.ok(m, 'no se encontro esMovil() en web/app.js');
   assert.ok(m[0].includes('matchMedia'),
     'esMovil() ya no usa matchMedia: dejaria de coincidir con el @media del CSS');
@@ -99,6 +99,7 @@ function crearElementoDeJuguete(tag) {
     appendChild(el) { this.children.push(el); return el; },
     setAttribute(k, v) { this[`attr_${k}`] = v; },
     getAttribute(k) { return this[`attr_${k}`]; },
+    removeAttribute(k) { delete this[`attr_${k}`]; },
     style: { _props: {}, setProperty(k, v) { this._props[k] = v; } },
   };
 }
@@ -114,15 +115,28 @@ function crearElementoDeJuguete(tag) {
 // ninguna prueba lo ejercita de verdad. Los selectores que hacen falta son
 // solo los que grupoActivo()/abrirGrupo() usan de verdad -- ver el mismo
 // patron, mas completo, en documentoConGrupos() mas abajo.
-function ejecutarBuildNav(movil) {
+//
+// `claveActivaPrevia` simula el repintado por cambio de ancho: buildNav lee
+// '.nav-item.active' ANTES de borrar el DOM (linea :679) para restaurar esa
+// misma clave en la entrada nueva. Sin este parametro ese camino nunca se
+// ejercita -- toda esta suite corre como si fuera siempre el primer pintado.
+function ejecutarBuildNav(movil, claveActivaPrevia) {
   const nav = { innerHTML: '', children: [], appendChild(el) { this.children.push(el); return el; } };
   const doc = {
     createElement: (tag) => crearElementoDeJuguete(tag),
-    // Ninguna entrada empieza con .active en este arnes (es el primer
-    // pintado): no hace falta rastrear una de verdad para que grupoActivo()
-    // funcione, el null es la respuesta correcta.
+    // Sin claveActivaPrevia, ninguna entrada empieza con .active en este
+    // arnes (es el primer pintado): no hace falta rastrear una de verdad
+    // para que grupoActivo() funcione, el null es la respuesta correcta. Con
+    // claveActivaPrevia se devuelve un stub minimo -- buildNav solo le lee
+    // dataset.key, nunca lo toca de otra forma.
     querySelector(sel) {
-      if (sel === '.nav-item.active') return null;
+      // closest() de juguete: grupoActivo() lo llama tambien sobre esta misma
+      // entrada (la del DOM VIEJO, antes del repintado) para decidir que tema
+      // abrir. Aqui no hace falta resolver a un grupo real -- null hace que
+      // grupoActivo() caiga al 'nav-g-1' por defecto, que es lo que ya cubre
+      // la prueba de mas abajo; lo unico que esta prueba verifica es que la
+      // clase .active vuelva a la entrada repintada.
+      if (sel === '.nav-item.active') return claveActivaPrevia ? { dataset: { key: claveActivaPrevia }, closest: () => null } : null;
       const m = sel.match(/\.nav-sec\[aria-controls="([^"]+)"\]/);
       if (m) return nav.children.find(e => e.className === 'nav-sec' && e.getAttribute('aria-controls') === m[1]) || null;
       return null;
@@ -164,7 +178,11 @@ function ejecutarBuildNav(movil) {
   return nav;
 }
 
-const clavesDe = (els) => els.filter(e => e.className === 'nav-item').map(e => e.dataset.key);
+// Token, no igualdad exacta: una entrada restaurada como activa llega con
+// className='nav-item active' (dos clases), y con '===' esa entrada
+// desaparecia de la lista sin que ninguna prueba lo notara -- "se perdio una
+// entrada" con un mensaje que apuntaba al lugar equivocado.
+const clavesDe = (els) => els.filter(e => e.className.split(' ').includes('nav-item')).map(e => e.dataset.key);
 
 test('en ESCRITORIO pinta la lista plana en orden NAV, sin encabezados', () => {
   const nav = ejecutarBuildNav(false);
@@ -253,6 +271,28 @@ test('el badge de mensajes sin leer sigue colgando de su entrada', () => {
   assert.ok(mensajes, 'no se pinto la entrada de Mensajes');
   assert.ok(mensajes.innerHTML.includes('nav-badge-mensajes'),
     'se perdio el badge de mensajes sin leer al reorganizar el menu');
+});
+
+test('buildNav restaura la clase .active en la entrada repintada, en las dos formas del menu', () => {
+  // vigilarAnchoDelMenu() repinta al cruzar el breakpoint (ver el comentario de
+  // :672 en app.js): la clave activa se lee de '.nav-item.active' ANTES de
+  // borrar el DOM viejo y se reaplica a la entrada nueva. Sin esta prueba, ese
+  // camino nunca se ejercita: todo lo demas de esta suite corre como si fuera
+  // siempre el primer pintado (claveActivaPrevia sin usar).
+  const claveActiva = CLAVES_NAV[5];
+
+  const plano = ejecutarBuildNav(false, claveActiva);
+  const activaPlano = plano.children.find(e => e.dataset.key === claveActiva);
+  assert.ok(activaPlano, 'no se encontro la entrada activa en el menu de escritorio');
+  assert.equal(activaPlano.className, 'nav-item active',
+    'buildNav no restauro la clase .active al repintar en escritorio');
+
+  const agrupado = ejecutarBuildNav(true, claveActiva);
+  const entradasAgrupadas = agrupado.children.filter(e => e.className === 'nav-grupo').flatMap(g => g.children);
+  const activaMovil = entradasAgrupadas.find(e => e.dataset.key === claveActiva);
+  assert.ok(activaMovil, 'no se encontro la entrada activa en el menu movil');
+  assert.equal(activaMovil.className, 'nav-item active',
+    'buildNav no restauro la clase .active al repintar en movil');
 });
 
 test('en MOVIL buildNav conecta el clic de cada encabezado con alternarGrupo', () => {
@@ -547,7 +587,7 @@ test('con mensajes sin leer se marca EXACTAMENTE el tema de la entrada, y ningun
   const { doc, grupos, encabezados } = documentoConGrupos(5, 'x');
   const fn = new Function('document', `${recortarFuncion('marcarGrupoConSinLeer')}
     return marcarGrupoConSinLeer;`)(doc);
-  encabezados.forEach(h => { h.classList = { _c: new Set(), add(c){this._c.add(c);}, remove(c){this._c.delete(c);} }; });
+  encabezados.forEach((h, i) => { h.classList = { _c: new Set(), add(c){this._c.add(c);}, remove(c){this._c.delete(c);} }; h.textContent = `Tema ${i}`; });
   // El badge vive dentro del segundo tema, igual que la entrada activa del
   // arnes de mas arriba (documentoConGrupos): closest() de juguete solo
   // conoce '.nav-grupo'.
@@ -558,8 +598,14 @@ test('con mensajes sin leer se marca EXACTAMENTE el tema de la entrada, y ningun
     const marcado = h.classList._c.has('con-sin-leer');
     if (grupos[i] === grupos[1]) {
       assert.ok(marcado, 'el tema que SI tiene mensajes sin leer no quedo marcado');
+      // El punto es puro CSS (::after): sin aria-label, un lector de pantalla
+      // no anuncia nada distinto en este encabezado.
+      assert.equal(h.getAttribute('aria-label'), `${h.textContent} — mensajes sin leer`,
+        'el tema con mensajes sin leer no tiene un aria-label que lo diga');
     } else {
       assert.ok(!marcado, `se marco el tema ${grupos[i].id}, que no tiene mensajes sin leer`);
+      assert.equal(h.getAttribute('aria-label'), undefined,
+        `el tema ${grupos[i].id} tiene aria-label sin tener mensajes sin leer`);
     }
   });
 });
@@ -569,11 +615,15 @@ test('una marca de una llamada anterior no sobrevive si ya no hay mensajes sin l
   const fn = new Function('document', `${recortarFuncion('marcarGrupoConSinLeer')}
     return marcarGrupoConSinLeer;`)(doc);
   encabezados.forEach(h => { h.classList = { _c: new Set(), add(c){this._c.add(c);}, remove(c){this._c.delete(c);} }; });
-  // Estado obsoleto: un tema quedo marcado en una llamada previa.
+  // Estado obsoleto: un tema quedo marcado en una llamada previa, aria-label
+  // incluido.
   encabezados[1].classList.add('con-sin-leer');
+  encabezados[1].setAttribute('aria-label', 'Tema 1 — mensajes sin leer');
   fn(null, 0);
   assert.ok(encabezados.every(h => !h.classList._c.has('con-sin-leer')),
     'la marca de una llamada anterior siguio puesta aunque ya no hay nada sin leer');
+  assert.ok(encabezados.every(h => h.getAttribute('aria-label') === undefined),
+    'el aria-label de una llamada anterior siguio puesto aunque ya no hay nada sin leer');
 });
 
 test('el CSS del punto vive dentro del @media y se calla con el tema abierto', () => {
