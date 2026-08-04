@@ -111,12 +111,16 @@ const perfilSchema = z.object({
   mostrar_email: z.coerce.number().int().min(0).max(1).optional()
 });
 r.patch('/perfil', validar(perfilSchema), (req, res) => {
+  // El mismo 404 que su gemelo GET /perfil. Hoy este camino es inalcanzable por
+  // HTTP (authMiddleware relee la persona y devuelve 401 antes de llegar aqui),
+  // pero sin el guard un `.nombre` sobre undefined revienta en 500 el dia que
+  // esa revocacion cambie. Hay una prueba que fija el 401 de la cadena real.
+  const personaActual = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(req.user.persona_id);
+  if (!personaActual) return res.status(404).json({ error: 'Persona no encontrada' });
   // Se necesita el nombre VIEJO antes de sobreescribirlo, por dos razones: para
   // dejarlo en la auditoria (que dice "de que a que" cambio) y, sobre todo,
   // para saber si de verdad cambio.
-  const nombreViejo = req.body.nombre !== undefined
-    ? db.prepare('SELECT nombre FROM persona WHERE id = ?').get(req.user.persona_id).nombre
-    : null;
+  const nombreViejo = req.body.nombre !== undefined ? personaActual.nombre : null;
   // "Mi perfil" es un formulario entero: manda 'nombre' cada vez que alguien
   // guarda, aunque solo haya tocado el telefono o una casilla de privacidad.
   // Auditar por "vino el campo" en vez de por "cambio el campo" llenaba el
