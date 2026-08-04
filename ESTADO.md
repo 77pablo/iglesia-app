@@ -3,6 +3,31 @@
 
 ---
 
+## 🆕 4 DE AGOSTO DE 2026 — el menú plegable quedó en `main`, y el hallazgo del 500 del perfil, cerrado
+
+**El menú plegable accesible se fusionó a `main`** (merge `40122f5`, `--no-ff`, rama
+`feat/menu-plegable` borrada). El mecanismo está descrito en la sección del 31 de julio
+(reescrita entonces para contar el mecanismo real). Verificación al fusionar: suite en
+verde y caminata Playwright de 21 comprobaciones (escritorio intacto, acordeón, teclado
+con rescate de foco, cruce 390↔1280 restaurando `.active`, menú corto plano, consola
+limpia). Detalle fino de la ejecución: `.superpowers/sdd/progress.md`.
+
+**Y el hallazgo de auditoría del perfil quedó cerrado** (merge del mismo día): `PATCH
+/api/directorio/perfil` hacía `.nombre` sobre una fila que podía no existir — 500 donde
+su gemelo `GET /perfil` daba 404. **Matiz honesto:** ese 500 hoy es *inalcanzable por
+HTTP*, porque `authMiddleware` relee la persona en cada petición y devuelve 401 antes de
+llegar a la ruta (revocación de la limpieza profunda). El guard nuevo es la segunda
+línea por si esa revocación cambia, y una prueba fija el 401 real de la cadena.
+
+De los 8 hallazgos de la auditoría queda **1 abierto**: el push cruzado en dispositivo
+compartido (`backend/src/push.js:70-72`) — necesita decisión de diseño, no es un parche.
+⚠️ La nota del 31-jul sobre la fecha de Cuidado pastoral (`verCaso`) **caducó**: se
+arregló el 1-ago en `59772ca` junto con aprobaciones y material musical.
+
+Suite: **617** (medida hoy con `cd backend && npm test`; caduca con cada rama).
+
+---
+
 ## 🆕 1 DE AGOSTO DE 2026 — 🎯 las campañas de tesorería por fin se pueden usar
 
 La pantalla anunciaba la función —*"una campaña sirve para juntar para algo concreto —el techo, un viaje misionero— y ver cuánto falta"*— y **no tenía ni un solo botón**. El backend sí existía: `POST /campanias` y `PATCH /campanias/:id/aportar` estaban escritos, validados y protegidos, y nadie los llamaba nunca.
