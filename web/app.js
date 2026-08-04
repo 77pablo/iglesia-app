@@ -694,6 +694,9 @@ function buildNav(){
 
   if(!agrupado){
     visibles.forEach(key=>nav.appendChild(conActiva(key)));
+    // El repintado por cambio de ancho destruye el badge en las dos formas
+    // del menu, no solo en la agrupada: hay que reaplicarlo tambien aqui.
+    if(typeof Chat!=='undefined'&&Chat._sinLeer) Chat.actualizarBadgeNav(Chat._sinLeer);
     return;
   }
 

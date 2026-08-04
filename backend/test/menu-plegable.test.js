@@ -543,6 +543,39 @@ test('sin mensajes sin leer no se marca ningun tema', () => {
     'se marco un tema sin haber nada sin leer');
 });
 
+test('con mensajes sin leer se marca EXACTAMENTE el tema de la entrada, y ningun otro', () => {
+  const { doc, grupos, encabezados } = documentoConGrupos(5, 'x');
+  const fn = new Function('document', `${recortarFuncion('marcarGrupoConSinLeer')}
+    return marcarGrupoConSinLeer;`)(doc);
+  encabezados.forEach(h => { h.classList = { _c: new Set(), add(c){this._c.add(c);}, remove(c){this._c.delete(c);} }; });
+  // El badge vive dentro del segundo tema, igual que la entrada activa del
+  // arnes de mas arriba (documentoConGrupos): closest() de juguete solo
+  // conoce '.nav-grupo'.
+  const badge = crearElementoDeJuguete('span');
+  badge.closest = (sel) => (sel === '.nav-grupo' ? grupos[1] : null);
+  fn(badge, 3);
+  encabezados.forEach((h, i) => {
+    const marcado = h.classList._c.has('con-sin-leer');
+    if (grupos[i] === grupos[1]) {
+      assert.ok(marcado, 'el tema que SI tiene mensajes sin leer no quedo marcado');
+    } else {
+      assert.ok(!marcado, `se marco el tema ${grupos[i].id}, que no tiene mensajes sin leer`);
+    }
+  });
+});
+
+test('una marca de una llamada anterior no sobrevive si ya no hay mensajes sin leer', () => {
+  const { doc, encabezados } = documentoConGrupos(5, 'x');
+  const fn = new Function('document', `${recortarFuncion('marcarGrupoConSinLeer')}
+    return marcarGrupoConSinLeer;`)(doc);
+  encabezados.forEach(h => { h.classList = { _c: new Set(), add(c){this._c.add(c);}, remove(c){this._c.delete(c);} }; });
+  // Estado obsoleto: un tema quedo marcado en una llamada previa.
+  encabezados[1].classList.add('con-sin-leer');
+  fn(null, 0);
+  assert.ok(encabezados.every(h => !h.classList._c.has('con-sin-leer')),
+    'la marca de una llamada anterior siguio puesta aunque ya no hay nada sin leer');
+});
+
 test('el CSS del punto vive dentro del @media y se calla con el tema abierto', () => {
   const n = anchoMovilDelJs();
   const i = hoja.indexOf(`@media (max-width:${n}px){`);
