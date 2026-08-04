@@ -467,6 +467,7 @@ function abrirApp(){
     // los nombres de la base de datos. La traducción ya estaba escrita.
     : (ME.roles.pertenencias.map(p=>rolLabel(p.rol)).join(', ') || 'Feligrés');
   buildNav();
+  vigilarAnchoDelMenu();
   // (La campana la actualiza el dashboard con su propia carga; evitamos pedir /notificaciones dos veces.)
   pushAutoResuscribir();   // mantiene el push activo entre sesiones (si ya dio permiso)
   Chat.refrescarBadge();  // badge de mensajes sin leer, visible aunque no se abra la vista
@@ -627,78 +628,187 @@ function iniciarIconos(){
   window._emojiObs.observe(document.body,{childList:true,subtree:true,characterData:true});
 }
 
-// Pinta el menu lateral.
+// El ancho por debajo del cual el menu se agrupa por temas y se pliega.
 //
-// ⚠️ El DOM sale SIEMPRE en el orden del NAV, agrupado o no. Es deliberado: el
-// agrupamiento por temas es SOLO del movil, y agruparNav() no sabe nada del
-// ancho de pantalla — si aqui pintaramos en orden de grupo, el escritorio
-// tambien quedaria reordenado, y ocultar los encabezados por CSS no deshace un
-// reordenamiento hecho en el DOM: el pastor se encontraria una lista plana
-// barajada (12 de sus 19 entradas cambiaban de sitio).
+// ⚠️ TIENE que ser el mismo numero que el `@media` de web/styles.css. Si se
+// separan, el JS pinta una forma del menu mientras el CSS aplica los estilos de
+// la otra, y no salta ningun error: el menu simplemente aparece roto, y solo en
+// los anchos que queden entre los dos numeros. No hay manera de compartir un
+// valor entre JS y CSS en este proyecto, asi que lo vigila una prueba
+// (backend/test/menu-plegable.test.js).
+const NAV_MOVIL_MAX = 900;
+function esMovil(){ return window.matchMedia(`(max-width:${NAV_MOVIL_MAX}px)`).matches; }
+
+// Girar el telefono o cambiar el tamano de la ventana no puede dejar el menu con
+// la forma del otro modo. El guardia evita registrar el oyente dos veces si se
+// vuelve a entrar en la app sin recargar la pagina.
+function vigilarAnchoDelMenu(){
+  if(vigilarAnchoDelMenu._puesto) return;
+  vigilarAnchoDelMenu._puesto=true;
+  window.matchMedia(`(max-width:${NAV_MOVIL_MAX}px)`)
+    .addEventListener('change', ()=>{ if($('nav')) buildNav(); });
+}
+
+// Pinta el menu lateral. Tiene DOS formas segun el ancho de pantalla.
 //
-// El orden visual del movil se consigue con `order` de flexbox: cada elemento
-// lleva un `--ord` correlativo y UNICO, y el @media de 900px de styles.css es el
-// unico sitio donde ese numero se convierte en `order`. En escritorio no hay
-// ningun `order` activo, asi que manda el orden del DOM = el del NAV de siempre.
+// Escritorio: la lista plana en el orden del NAV, sin encabezados. Es la de
+// siempre.
 //
-// Los valores son unicos a proposito: entre elementos con el MISMO `order` manda
-// el orden del DOM, y ahi un encabezado podria acabar detras de sus propias
-// entradas.
+// Movil con el menu largo (>= NAV_UMBRAL_GRUPOS entradas): cada tema es un
+// <button> encabezado seguido de un <div class="nav-grupo"> con sus entradas
+// DENTRO. Con contenedores de verdad el orden del DOM vuelve a ser el orden
+// visual, y por eso aqui ya no hay ningun `--ord`: el truco de `order` que
+// sostenia el agrupamiento anterior se retiro entero.
+//
+// ⚠️ Historia que conviene no repetir: la primera version del menu agrupado
+// pintaba en orden de grupo SIN mirar el ancho, y ocultaba los encabezados por
+// CSS. Eso reordenaba tambien el escritorio (12 de las 19 entradas del pastor
+// cambiaban de sitio), porque el CSS no puede deshacer un reordenamiento hecho
+// en el DOM. De ahi que la decision de la forma se tome aqui, con esMovil().
 function buildNav(){
-  const nav=$('nav'); nav.innerHTML='';
+  const nav=$('nav');
+  // vigilarAnchoDelMenu() llama a buildNav() cada vez que se cruza el
+  // breakpoint, y buildNav() borra todo el DOM del menu (nav.innerHTML='').
+  // La clase ".active" de la entrada actual vive SOLO en ese DOM -- navTo() es
+  // el unico otro sitio que la pone -- asi que sin esto, cambiar el ancho de
+  // la ventana apaga el resaltado y no queda nada marcado. Por eso la clave
+  // activa se guarda ANTES de borrar, y se restaura al crear su entrada.
+  //
+  // La consulta se protege porque el arnes de pruebas ejecuta este mismo
+  // buildNav() contra un `document` de juguete sin querySelector.
+  const claveActiva=(typeof document.querySelector==='function' && document.querySelector('.nav-item.active'))
+    ? document.querySelector('.nav-item.active').dataset.key : null;
+  nav.innerHTML='';
   const visibles=NAV.filter(n=>tieneModulo(n[0])).map(n=>n[0]);
   const secciones=agruparNav(visibles);
-  // titulo null = modo plano: ni encabezados ni `--ord` (por debajo del umbral
-  // no se agrupa nada, tampoco en el movil).
-  const agrupado=secciones.some(s=>s.titulo);
+  // Se agrupa solo en el movil Y solo si el menu es largo. agruparNav() decide
+  // lo segundo (devuelve una sola seccion sin titulo por debajo del umbral).
+  const agrupado=esMovil() && secciones.some(s=>s.titulo);
 
-  const grupoDe=new Map();     // clave del NAV -> titulo de su grupo
-  const ordenDe=new Map();     // clave del NAV -> su sitio en el orden del movil
-  const ordenTitulo=new Map(); // titulo de grupo -> su sitio en el orden del movil
-  if(agrupado){
-    let n=0;   // arranca en 1: `order:0` es el valor por defecto, no lo pisamos
-    secciones.forEach(seccion=>{
-      ordenTitulo.set(seccion.titulo, ++n);
-      seccion.claves.forEach(k=>{ grupoDe.set(k, seccion.titulo); ordenDe.set(k, ++n); });
-    });
+  // Crea la entrada y le devuelve su resaltado si es la que estaba activa.
+  const conActiva=key=>{
+    const el=crearEntradaNav(key);
+    if(key===claveActiva) el.className='nav-item active';
+    return el;
+  };
+
+  if(!agrupado){
+    visibles.forEach(key=>nav.appendChild(conActiva(key)));
+    // El repintado por cambio de ancho destruye el badge en las dos formas
+    // del menu, no solo en la agrupada: hay que reaplicarlo tambien aqui.
+    if(typeof Chat!=='undefined'&&Chat._sinLeer) Chat.actualizarBadgeNav(Chat._sinLeer);
+    return;
   }
 
-  const pendientes=new Set(ordenTitulo.keys());   // encabezados aun sin pintar
-  visibles.forEach(key=>{
-    // El encabezado se cuela justo antes de la primera entrada suya que aparece,
-    // para que el DOM tampoco quede absurdo para quien lo lea en orden.
-    const titulo=grupoDe.get(key);
-    if(titulo && pendientes.has(titulo)){
-      pendientes.delete(titulo);
-      const h=document.createElement('div');
-      // "primero" es el primero VISUALMENTE (el del grupo 1), que no tiene por
-      // que ser el primero del DOM: por eso una clase y no `:first-child`.
-      h.className='nav-sec'+(ordenTitulo.get(titulo)===1?' nav-sec-primero':'');
-      // textContent, no innerHTML: los titulos son fijos, pero no hay motivo
-      // para abrir esa puerta en el menu.
-      h.textContent=titulo;
-      h.style.setProperty('--ord', ordenTitulo.get(titulo));
-      // aria-hidden, deliberado: `order` separa el orden VISUAL del orden del
-      // DOM, y el DOM es lo que lee un lector de pantalla. Un encabezado en su
-      // sitio del DOM (justo antes de su primera entrada visual) puede acabar
-      // leyendose delante de entradas de OTRO grupo (en el menu real del
-      // pastor, 6 de 19 quedan asi). Un encabezado equivocado es peor que
-      // ninguno. Estos <div> no son headings, no reciben foco y su posicion en
-      // el DOM es puramente un ancla para el `order` visual: ocultarlos al
-      // lector de pantalla no quita informacion, deja las 19 entradas en el
-      // orden del NAV sin ninguna etiqueta enganosa — exactamente como estaban
-      // antes de agrupar el menu.
-      h.setAttribute('aria-hidden','true');
-      nav.appendChild(h);
-    }
-    const el=document.createElement('div');
-    el.className='nav-item'; el.dataset.key=key;
-    if(agrupado) el.style.setProperty('--ord', ordenDe.get(key));
-    el.innerHTML=`<span class="ic">${NAV_ICON[key]||iconDe(key)}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
-    el.onclick=()=>navTo(key);
-    nav.appendChild(el);
+  secciones.forEach((seccion,i)=>{
+    const id=`nav-g-${i+1}`;
+    const h=document.createElement('button');
+    h.type='button';
+    h.className='nav-sec';
+    // textContent, no innerHTML: los titulos son fijos, pero no hay motivo para
+    // abrir esa puerta en el menu.
+    h.textContent=seccion.titulo;
+    h.setAttribute('aria-controls',id);
+    h.setAttribute('aria-expanded','true');
+    h.onclick=()=>alternarGrupo(id);
+    nav.appendChild(h);
+
+    const cont=document.createElement('div');
+    cont.className='nav-grupo';
+    cont.id=id;
+    seccion.claves.forEach(k=>cont.appendChild(conActiva(k)));
+    nav.appendChild(cont);
+  });
+
+  // Estado inicial: abierto solo el tema de la pantalla actual. Si no hay
+  // ninguna activa, el primero -- nunca los cinco cerrados de entrada.
+  // Protegido igual que claveActiva arriba: el arnes de pruebas de buildNav
+  // ejecuta esta funcion contra un `document` de juguete que puede no tener
+  // querySelector/querySelectorAll -- y grupoActivo() usa el primero antes de
+  // que abrirGrupo() use el segundo, asi que el guardia tiene que cubrir los dos.
+  if(typeof document.querySelector==='function' && typeof document.querySelectorAll==='function'){
+    abrirGrupo(grupoActivo()||'nav-g-1');
+    // El menu se acaba de repintar: el punto de sin-leer se perdio con el DOM
+    // anterior. Se reaplica con el ultimo dato conocido, sin volver a pedirlo.
+    if(typeof Chat!=='undefined'&&Chat._sinLeer) Chat.actualizarBadgeNav(Chat._sinLeer);
+  }
+}
+
+// Una entrada del menu. Es un <button> de verdad, no un <div onclick>: asi se
+// alcanza con Tab, se activa con Enter y con Espacio, y un lector de pantalla la
+// anuncia como el control que es.
+function crearEntradaNav(key){
+  const el=document.createElement('button');
+  el.type='button';   // sin esto, dentro de un formulario lo enviaria
+  el.className='nav-item';
+  el.dataset.key=key;
+  el.innerHTML=`<span class="ic">${NAV_ICON[key]||iconDe(key)}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
+  el.onclick=()=>navTo(key);
+  return el;
+}
+
+// El tema que contiene la pantalla en la que esta. Devuelve null si no hay
+// ninguna entrada marcada como activa: pasa de verdad, hay pantallas que no
+// tienen entrada en el menu.
+function grupoActivo(){
+  const activa=document.querySelector('.nav-item.active');
+  const cont=activa&&activa.closest('.nav-grupo');
+  return cont?cont.id:null;
+}
+
+// Deja abierto exactamente el tema `id` y cierra los demas. Con null, cierra
+// todos. `aria-expanded` sale del estado real, no de un valor fijo: si mintiera,
+// un lector de pantalla anunciaria como abierto algo que esta cerrado.
+function abrirGrupo(id){
+  document.querySelectorAll('#nav .nav-grupo').forEach(g=>{
+    const abierto=(g.id===id);
+    g.hidden=!abierto;
+    const h=document.querySelector(`.nav-sec[aria-controls="${g.id}"]`);
+    if(h) h.setAttribute('aria-expanded',abierto?'true':'false');
   });
 }
+
+// Lo que hace tocar un encabezado: si estaba abierto lo cierra, y si no, lo abre
+// cerrando el anterior.
+function alternarGrupo(id){
+  const g=document.getElementById(id);
+  if(!g) return;
+  const seCierra=!g.hidden;
+  // Si el foco esta dentro del tema que se cierra hay que rescatarlo: un foco en
+  // un elemento oculto se pierde y el navegador lo manda al principio de la
+  // pagina, que para quien navega con teclado es volver a empezar.
+  if(seCierra&&g.contains&&g.contains(document.activeElement)){
+    const h=document.querySelector(`.nav-sec[aria-controls="${id}"]`);
+    if(h&&h.focus) h.focus();
+  }
+  abrirGrupo(seCierra?null:id);
+}
+
+// Un tema cerrado esconde el badge de su entrada. Sin esto, tener mensajes sin
+// leer dejaria de verse en cuanto su tema no fuera el abierto — una perdida real
+// respecto a como funcionaba antes de plegar el menu.
+//
+// El punto NO cuenta nada por su cuenta: sale del mismo numero que ya gobierna
+// el badge, para que no haya dos verdades que mantener.
+function marcarGrupoConSinLeer(entradaBadge, n){
+  // El punto (::after, puro CSS) es invisible para un lector de pantalla: sin
+  // aria-label el encabezado se anuncia solo con su titulo, como si el tema no
+  // tuviera nada pendiente. Se limpia siempre junto con la clase, para que un
+  // encabezado nunca quede diciendo "mensajes sin leer" de una llamada vieja.
+  document.querySelectorAll('#nav .nav-sec').forEach(h=>{
+    h.classList.remove('con-sin-leer');
+    h.removeAttribute('aria-label');
+  });
+  if(!n||!entradaBadge||!entradaBadge.closest) return;
+  const cont=entradaBadge.closest('.nav-grupo');
+  if(!cont) return;   // menu plano (escritorio o menu corto): el badge ya se ve
+  const h=document.querySelector(`.nav-sec[aria-controls="${cont.id}"]`);
+  if(h){
+    h.classList.add('con-sin-leer');
+    h.setAttribute('aria-label', h.textContent+' — mensajes sin leer');
+  }
+}
+
 function navTo(key){
   document.querySelectorAll('.nav-item').forEach(i=>i.classList.toggle('active', i.dataset.key===key));
   $('page-title').textContent = labelDe(key);
@@ -728,7 +838,14 @@ function navTo(key){
   $('content').innerHTML=`<div class="placeholder"><div class="big">${iconDe(key)}</div>
     <h2>${labelDe(key)}</h2><p>Este módulo se construye en una próxima fase.</p></div>`;
 }
-function toggleSidebar(){ $('sidebar').classList.toggle('open'); $('overlay').classList.toggle('show'); }
+// Al ABRIR el cajon se recalcula que tema dejar abierto. Por eso no hace falta
+// guardar nada entre visitas: navTo() cierra el cajon al navegar, asi que cada
+// apertura parte del mismo estado predecible.
+function toggleSidebar(){
+  const abriendo=!$('sidebar').classList.contains('open');
+  $('sidebar').classList.toggle('open'); $('overlay').classList.toggle('show');
+  if(abriendo) abrirGrupo(grupoActivo()||'nav-g-1');
+}
 function closeSidebar(){ $('sidebar').classList.remove('open'); $('overlay').classList.remove('show'); }
 
 // ============================================================
@@ -4251,13 +4368,20 @@ const Chat = {
   convActual: null,
   escribiendoTimer: null,
   es: null,
+  // buildNav() lo lee (":699" y ":733") para reaplicar el badge/punto tras un
+  // repintado del menu. Declarado aqui, no solo asignado dentro de
+  // actualizarBadgeNav, para que la forma del objeto no dependa de que ese
+  // metodo ya se haya llamado alguna vez.
+  _sinLeer: 0,
   async abrirVista(){
     await this.cargarLista();
     this.conectarSSE();
   },
   async actualizarBadgeNav(n){
-    const b=$('nav-badge-mensajes'); if(!b) return;
-    b.classList.toggle('hidden', !n); b.textContent=n;
+    this._sinLeer=n;   // se reaplica si el menu se repinta al cambiar de ancho
+    const b=$('nav-badge-mensajes');
+    if(b){ b.classList.toggle('hidden', !n); b.textContent=n; }
+    marcarGrupoConSinLeer(b, n);
   },
   // Trae solo el total de no-leidos, sin tocar la vista (se llama desde abrirApp).
   async refrescarBadge(){
