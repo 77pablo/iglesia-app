@@ -203,6 +203,9 @@ label{display:block;font-size:0.7813rem;font-weight:600;color:var(--muted);
   width:3px;height:22px;border-radius:0 3px 3px 0;background:var(--gold);}
 .nav-item .ic{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
 .nav-item .ic svg{width:19px;height:19px;}
+/* El anillo de foco global usa --primary, que sobre el azul de la barra lateral
+   no llega al 3:1 que pide WCAG para verse. Sobre la barra, blanco. */
+.nav-item:focus-visible,.nav-sec:focus-visible{outline-color:#fff;}
 
 .sidebar-foot{border-top:1px solid rgba(255,255,255,.12);padding:14px;}
 .u-nombre{color:#fff;}

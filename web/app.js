@@ -666,15 +666,34 @@ function vigilarAnchoDelMenu(){
 // cambiaban de sitio), porque el CSS no puede deshacer un reordenamiento hecho
 // en el DOM. De ahi que la decision de la forma se tome aqui, con esMovil().
 function buildNav(){
-  const nav=$('nav'); nav.innerHTML='';
+  const nav=$('nav');
+  // vigilarAnchoDelMenu() llama a buildNav() cada vez que se cruza el
+  // breakpoint, y buildNav() borra todo el DOM del menu (nav.innerHTML='').
+  // La clase ".active" de la entrada actual vive SOLO en ese DOM -- navTo() es
+  // el unico otro sitio que la pone -- asi que sin esto, cambiar el ancho de
+  // la ventana apaga el resaltado y no queda nada marcado. Por eso la clave
+  // activa se guarda ANTES de borrar, y se restaura al crear su entrada.
+  //
+  // La consulta se protege porque el arnes de pruebas ejecuta este mismo
+  // buildNav() contra un `document` de juguete sin querySelector.
+  const claveActiva=(typeof document.querySelector==='function' && document.querySelector('.nav-item.active'))
+    ? document.querySelector('.nav-item.active').dataset.key : null;
+  nav.innerHTML='';
   const visibles=NAV.filter(n=>tieneModulo(n[0])).map(n=>n[0]);
   const secciones=agruparNav(visibles);
   // Se agrupa solo en el movil Y solo si el menu es largo. agruparNav() decide
   // lo segundo (devuelve una sola seccion sin titulo por debajo del umbral).
   const agrupado=esMovil() && secciones.some(s=>s.titulo);
 
+  // Crea la entrada y le devuelve su resaltado si es la que estaba activa.
+  const conActiva=key=>{
+    const el=crearEntradaNav(key);
+    if(key===claveActiva) el.className='nav-item active';
+    return el;
+  };
+
   if(!agrupado){
-    visibles.forEach(key=>nav.appendChild(crearEntradaNav(key)));
+    visibles.forEach(key=>nav.appendChild(conActiva(key)));
     return;
   }
 
@@ -693,7 +712,7 @@ function buildNav(){
     const cont=document.createElement('div');
     cont.className='nav-grupo';
     cont.id=id;
-    seccion.claves.forEach(k=>cont.appendChild(crearEntradaNav(k)));
+    seccion.claves.forEach(k=>cont.appendChild(conActiva(k)));
     nav.appendChild(cont);
   });
 }
