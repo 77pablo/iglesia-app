@@ -707,6 +707,7 @@ function buildNav(){
     h.textContent=seccion.titulo;
     h.setAttribute('aria-controls',id);
     h.setAttribute('aria-expanded','true');
+    h.onclick=()=>alternarGrupo(id);
     nav.appendChild(h);
 
     const cont=document.createElement('div');
@@ -715,6 +716,12 @@ function buildNav(){
     seccion.claves.forEach(k=>cont.appendChild(conActiva(k)));
     nav.appendChild(cont);
   });
+
+  // Estado inicial: abierto solo el tema de la pantalla actual. Si no hay
+  // ninguna activa, el primero -- nunca los cinco cerrados de entrada.
+  // Protegido igual que claveActiva arriba: el arnes de pruebas de buildNav
+  // ejecuta esta funcion contra un `document` de juguete sin querySelectorAll.
+  if(typeof document.querySelectorAll==='function') abrirGrupo(grupoActivo()||'nav-g-1');
 }
 
 // Una entrada del menu. Es un <button> de verdad, no un <div onclick>: asi se
@@ -729,6 +736,44 @@ function crearEntradaNav(key){
   el.onclick=()=>navTo(key);
   return el;
 }
+
+// El tema que contiene la pantalla en la que esta. Devuelve null si no hay
+// ninguna entrada marcada como activa: pasa de verdad, hay pantallas que no
+// tienen entrada en el menu.
+function grupoActivo(){
+  const activa=document.querySelector('.nav-item.active');
+  const cont=activa&&activa.closest('.nav-grupo');
+  return cont?cont.id:null;
+}
+
+// Deja abierto exactamente el tema `id` y cierra los demas. Con null, cierra
+// todos. `aria-expanded` sale del estado real, no de un valor fijo: si mintiera,
+// un lector de pantalla anunciaria como abierto algo que esta cerrado.
+function abrirGrupo(id){
+  document.querySelectorAll('#nav .nav-grupo').forEach(g=>{
+    const abierto=(g.id===id);
+    g.hidden=!abierto;
+    const h=document.querySelector(`.nav-sec[aria-controls="${g.id}"]`);
+    if(h) h.setAttribute('aria-expanded',abierto?'true':'false');
+  });
+}
+
+// Lo que hace tocar un encabezado: si estaba abierto lo cierra, y si no, lo abre
+// cerrando el anterior.
+function alternarGrupo(id){
+  const g=document.getElementById(id);
+  if(!g) return;
+  const seCierra=!g.hidden;
+  // Si el foco esta dentro del tema que se cierra hay que rescatarlo: un foco en
+  // un elemento oculto se pierde y el navegador lo manda al principio de la
+  // pagina, que para quien navega con teclado es volver a empezar.
+  if(seCierra&&g.contains&&g.contains(document.activeElement)){
+    const h=document.querySelector(`.nav-sec[aria-controls="${id}"]`);
+    if(h&&h.focus) h.focus();
+  }
+  abrirGrupo(seCierra?null:id);
+}
+
 function navTo(key){
   document.querySelectorAll('.nav-item').forEach(i=>i.classList.toggle('active', i.dataset.key===key));
   $('page-title').textContent = labelDe(key);
@@ -758,7 +803,14 @@ function navTo(key){
   $('content').innerHTML=`<div class="placeholder"><div class="big">${iconDe(key)}</div>
     <h2>${labelDe(key)}</h2><p>Este módulo se construye en una próxima fase.</p></div>`;
 }
-function toggleSidebar(){ $('sidebar').classList.toggle('open'); $('overlay').classList.toggle('show'); }
+// Al ABRIR el cajon se recalcula que tema dejar abierto. Por eso no hace falta
+// guardar nada entre visitas: navTo() cierra el cajon al navegar, asi que cada
+// apertura parte del mismo estado predecible.
+function toggleSidebar(){
+  const abriendo=!$('sidebar').classList.contains('open');
+  $('sidebar').classList.toggle('open'); $('overlay').classList.toggle('show');
+  if(abriendo) abrirGrupo(grupoActivo()||'nav-g-1');
+}
 function closeSidebar(){ $('sidebar').classList.remove('open'); $('overlay').classList.remove('show'); }
 
 // ============================================================

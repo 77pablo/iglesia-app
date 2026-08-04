@@ -492,6 +492,10 @@ const EXCEPCIONES = [
   {
     firma: 'id::ap-error-${id}',
     motivo: 'mismo id de formAporte() explicado arriba: siempre c.id, un entero de la tabla campania.'
+  },
+  {
+    firma: 'aria-controls::${id}',
+    motivo: 'alternarGrupo(id): la única llamada de este archivo es el onclick que fija buildNav(), alternarGrupo(id) con id=`nav-g-${i+1}` generado en el propio forEach de secciones (un índice entero del bucle); nunca un dato que escriba una persona.'
   }
 ];
 

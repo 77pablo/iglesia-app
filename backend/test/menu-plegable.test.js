@@ -258,3 +258,124 @@ test('un tema oculto no puede reaparecer porque alguien le ponga display', () =>
   assert.ok(/\.nav-grupo\[hidden\]\s*\{[^}]*display\s*:\s*none/.test(hoja),
     'falta la regla .nav-grupo[hidden]{display:none}: un display posterior la anularia');
 });
+
+// --- el acordeon --------------------------------------------------------------
+
+// Un documento de juguete que soporta los selectores que usa el acordeon.
+function documentoConGrupos(cuantos, claveActiva) {
+  const grupos = [], encabezados = [];
+  for (let i = 1; i <= cuantos; i++) {
+    const g = crearElementoDeJuguete('div');
+    g.className = 'nav-grupo'; g.id = `nav-g-${i}`; g.hidden = true;
+    const h = crearElementoDeJuguete('button');
+    h.className = 'nav-sec'; h.setAttribute('aria-controls', g.id);
+    h.setAttribute('aria-expanded', 'false');
+    grupos.push(g); encabezados.push(h);
+  }
+  // La entrada activa vive en el segundo grupo, para que "el tema actual" no
+  // coincida por casualidad con "el primero".
+  const activa = crearElementoDeJuguete('button');
+  activa.className = 'nav-item active'; activa.dataset.key = claveActiva || 'x';
+  activa._grupo = grupos[1];
+  grupos[1].children.push(activa);
+
+  const doc = {
+    querySelector(sel) {
+      if (sel === '.nav-item.active') return claveActiva ? activa : null;
+      const m = sel.match(/\.nav-sec\[aria-controls="([^"]+)"\]/);
+      if (m) return encabezados.find(h => h.getAttribute('aria-controls') === m[1]) || null;
+      if (sel === '#nav .nav-grupo') return grupos[0] || null;
+      return null;
+    },
+    querySelectorAll(sel) {
+      if (sel === '#nav .nav-grupo') return grupos;
+      if (sel === '#nav .nav-sec') return encabezados;
+      return [];
+    },
+    getElementById(id) { return grupos.find(g => g.id === id) || null; },
+    activeElement: null,
+  };
+  // closest() de juguete: solo lo que usa el acordeon.
+  activa.closest = (sel) => (sel === '.nav-grupo' ? activa._grupo : null);
+  return { doc, grupos, encabezados, activa };
+}
+
+function cargarAcordeon(doc) {
+  const cuerpo = `
+    ${recortarFuncion('grupoActivo')}
+    ${recortarFuncion('abrirGrupo')}
+    ${recortarFuncion('alternarGrupo')}
+    return { grupoActivo, abrirGrupo, alternarGrupo };
+  `;
+  return new Function('document', cuerpo)(doc);
+}
+
+test('abrir un tema cierra todos los demas', () => {
+  const { doc, grupos, encabezados } = documentoConGrupos(5, 'x');
+  const a = cargarAcordeon(doc);
+  a.abrirGrupo('nav-g-3');
+  assert.deepEqual(grupos.map(g => g.hidden), [true, true, false, true, true],
+    'tiene que quedar exactamente un tema abierto: es lo unico que garantiza que el menu no vuelva a ser largo');
+  assert.deepEqual(encabezados.map(h => h.getAttribute('aria-expanded')),
+    ['false', 'false', 'true', 'false', 'false'],
+    'aria-expanded tiene que decir la verdad sobre cada tema, no un valor fijo');
+});
+
+test('abrirGrupo(null) los cierra todos', () => {
+  const { doc, grupos } = documentoConGrupos(5, 'x');
+  const a = cargarAcordeon(doc);
+  a.abrirGrupo('nav-g-2');
+  a.abrirGrupo(null);
+  assert.ok(grupos.every(g => g.hidden), 'con null no debe quedar ninguno abierto');
+});
+
+test('tocar el tema abierto lo cierra', () => {
+  const { doc, grupos } = documentoConGrupos(5, 'x');
+  const a = cargarAcordeon(doc);
+  a.abrirGrupo('nav-g-2');
+  a.alternarGrupo('nav-g-2');
+  assert.ok(grupos.every(g => g.hidden),
+    'tocar el tema que ya estaba abierto tiene que cerrarlo');
+});
+
+test('el tema que se abre solo es el de la pantalla actual, no el primero', () => {
+  const { doc } = documentoConGrupos(5, 'mi_grupo');
+  const a = cargarAcordeon(doc);
+  assert.equal(a.grupoActivo(), 'nav-g-2',
+    'se abrio un tema que no es el de la pantalla en la que esta');
+});
+
+test('si NINGUNA entrada esta activa, grupoActivo devuelve null', () => {
+  // Caso real: en app.js se quita el .active de todas las entradas en algunas
+  // pantallas. Sin este caso cubierto, el menu se abriria con los cinco temas
+  // cerrados y sin nada que mirar.
+  const { doc } = documentoConGrupos(5, null);
+  const a = cargarAcordeon(doc);
+  assert.equal(a.grupoActivo(), null,
+    'sin entrada activa no hay tema actual: quien llame tiene que poder recurrir al primero');
+});
+
+test('al cerrar un tema con el foco dentro, el foco va a su encabezado', () => {
+  // Sin esto, quien navegue con teclado se queda con el foco en un elemento
+  // oculto y el navegador lo devuelve al principio de la pagina.
+  const { doc, grupos, encabezados, activa } = documentoConGrupos(5, 'x');
+  const a = cargarAcordeon(doc);
+  a.abrirGrupo('nav-g-2');
+  doc.activeElement = activa;
+  grupos[1].contains = (el) => el === activa;
+  let enfocado = null;
+  encabezados[1].focus = () => { enfocado = encabezados[1]; };
+  a.alternarGrupo('nav-g-2');
+  assert.equal(enfocado, encabezados[1],
+    'el foco se quedo dentro de un tema cerrado');
+});
+
+test('toggleSidebar recalcula que tema abrir CADA vez que se abre el cajon', () => {
+  // Es lo que hace innecesario guardar nada entre visitas: navTo() cierra el
+  // cajon, asi que cada apertura parte del mismo estado predecible.
+  const cuerpo = recortarFuncion('toggleSidebar');
+  assert.ok(cuerpo.includes('abrirGrupo'),
+    'toggleSidebar ya no fija el tema abierto: el menu se abriria como lo dejo la vez anterior');
+  assert.ok(cuerpo.includes('grupoActivo'),
+    'toggleSidebar no consulta cual es el tema de la pantalla actual');
+});
