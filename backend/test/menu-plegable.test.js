@@ -108,8 +108,32 @@ function crearElementoDeJuguete(tag) {
 // ⚠️ El `\r?` de la primera expresion no es adorno: en JavaScript `.` no casa
 // con `\r`, y git deja los archivos en disco con finales de linea de Windows.
 // Sin el, este recorte no encuentra nada y la prueba revienta sola. Ya paso.
+// El `document` de juguete para buildNav ahora tambien resuelve
+// querySelector/querySelectorAll: sin ellos, el guardia de :724 salta entero
+// el estado inicial del acordeon (abrirGrupo(grupoActivo()||'nav-g-1')) y
+// ninguna prueba lo ejercita de verdad. Los selectores que hacen falta son
+// solo los que grupoActivo()/abrirGrupo() usan de verdad -- ver el mismo
+// patron, mas completo, en documentoConGrupos() mas abajo.
 function ejecutarBuildNav(movil) {
   const nav = { innerHTML: '', children: [], appendChild(el) { this.children.push(el); return el; } };
+  const doc = {
+    createElement: (tag) => crearElementoDeJuguete(tag),
+    // Ninguna entrada empieza con .active en este arnes (es el primer
+    // pintado): no hace falta rastrear una de verdad para que grupoActivo()
+    // funcione, el null es la respuesta correcta.
+    querySelector(sel) {
+      if (sel === '.nav-item.active') return null;
+      const m = sel.match(/\.nav-sec\[aria-controls="([^"]+)"\]/);
+      if (m) return nav.children.find(e => e.className === 'nav-sec' && e.getAttribute('aria-controls') === m[1]) || null;
+      return null;
+    },
+    querySelectorAll(sel) {
+      if (sel === '#nav .nav-grupo') return nav.children.filter(e => e.className === 'nav-grupo');
+      if (sel === '#nav .nav-sec') return nav.children.filter(e => e.className === 'nav-sec');
+      return [];
+    },
+    getElementById(id) { return nav.children.find(e => e.id === id) || null; },
+  };
   const lineaIc = fuente.match(/const _ic=.*\r?\n/);
   assert.ok(lineaIc, 'no se encontro la definicion de _ic en web/app.js');
 
@@ -121,12 +145,15 @@ function ejecutarBuildNav(movil) {
     const NAV_ICON = ${recortarObjeto('NAV_ICON')};
     ${recortarFuncion('agruparNav')}
     ${recortarFuncion('crearEntradaNav')}
+    ${recortarFuncion('grupoActivo')}
+    ${recortarFuncion('abrirGrupo')}
+    ${recortarFuncion('alternarGrupo')}
     ${recortarFuncion('buildNav')}
     return buildNav;
   `;
   const fn = new Function('$', 'document', 'tieneModulo', 'labelDe', 'iconDe', 'navTo', 'esMovil', cuerpo)(
     (id) => (id === 'nav' ? nav : null),
-    { createElement: (tag) => crearElementoDeJuguete(tag) },
+    doc,
     () => true,            // el pastor: ve las 19 entradas
     (k) => k,
     () => '',
@@ -226,6 +253,53 @@ test('el badge de mensajes sin leer sigue colgando de su entrada', () => {
   assert.ok(mensajes, 'no se pinto la entrada de Mensajes');
   assert.ok(mensajes.innerHTML.includes('nav-badge-mensajes'),
     'se perdio el badge de mensajes sin leer al reorganizar el menu');
+});
+
+test('en MOVIL buildNav conecta el clic de cada encabezado con alternarGrupo', () => {
+  // Sin el onclick, un encabezado es un boton muerto: se ve, se puede
+  // enfocar, pero tocarlo (o darle Enter) no hace nada. Nada mas en esta
+  // suite revienta si se borra la linea `h.onclick=()=>alternarGrupo(id);`.
+  const nav = ejecutarBuildNav(true);
+  const encabezados = nav.children.filter(e => e.className === 'nav-sec');
+  assert.ok(encabezados.length > 1, 'con 19 entradas tiene que haber varios temas');
+  assert.ok(encabezados.every(h => typeof h.onclick === 'function'),
+    'algun encabezado se pinto sin onclick: no se podria plegar ni con el mouse ni con el teclado');
+});
+
+test('en MOVIL buildNav deja UN solo tema abierto al pintar, no los cinco', () => {
+  // Sin el `abrirGrupo(grupoActivo()||'nav-g-1')` de :724, buildNav pinta los
+  // temas pero nunca los cierra: el menu quedaria tan largo como antes del
+  // acordeon, solo que ahora con encabezados encima. En este arnes ninguna
+  // entrada llega marcada .active (es el primer pintado), asi que el que
+  // tiene que quedar abierto es el primero.
+  const nav = ejecutarBuildNav(true);
+  const grupos = nav.children.filter(e => e.className === 'nav-grupo');
+  const abiertos = grupos.filter(g => g.hidden === false);
+  assert.equal(abiertos.length, 1,
+    'buildNav tiene que dejar exactamente un tema abierto al pintar, no todos ni ninguno');
+  assert.equal(abiertos[0], grupos[0],
+    'sin ninguna entrada activa, el tema que se abre de entrada tiene que ser el primero');
+});
+
+test('en MOVIL el onclick de un encabezado de verdad abre y cierra su tema', () => {
+  // Comprobacion de que el onclick de arriba no es solo "una funcion", sino
+  // la funcion correcta: llamarlo tiene que producir el mismo efecto que
+  // tocar el encabezado en la pantalla.
+  const nav = ejecutarBuildNav(true);
+  const grupos = nav.children.filter(e => e.className === 'nav-grupo');
+  const encabezados = nav.children.filter(e => e.className === 'nav-sec');
+  assert.ok(grupos.length > 2, 'hacen falta al menos tres temas para esta prueba');
+
+  // El primero ya esta abierto (ver la prueba anterior). Tocar el segundo
+  // tiene que abrirlo a el y cerrar el primero.
+  encabezados[1].onclick();
+  assert.equal(grupos[0].hidden, true, 'el clic en otro tema no cerro el que estaba abierto');
+  assert.equal(grupos[1].hidden, false, 'el clic en el encabezado no abrio su propio tema');
+
+  // Y volver a tocar el mismo encabezado lo cierra (no deja el menu sin
+  // ningun tema visible por accidente: eso lo prueba el hidden en true).
+  encabezados[1].onclick();
+  assert.equal(grupos[1].hidden, true, 'tocar dos veces el mismo encabezado tiene que cerrarlo');
 });
 
 test('el CSS del plegado vive TODO dentro del @media del movil', () => {
@@ -370,12 +444,65 @@ test('al cerrar un tema con el foco dentro, el foco va a su encabezado', () => {
     'el foco se quedo dentro de un tema cerrado');
 });
 
-test('toggleSidebar recalcula que tema abrir CADA vez que se abre el cajon', () => {
+// Un classList de juguete: lo minimo que toggleSidebar necesita (add/remove/
+// toggle/contains sobre un conjunto).
+function crearClassList(clases) {
+  const set = new Set(clases);
+  return {
+    contains: (c) => set.has(c),
+    add: (c) => set.add(c),
+    remove: (c) => set.delete(c),
+    toggle: (c) => { if (set.has(c)) { set.delete(c); return false; } set.add(c); return true; },
+  };
+}
+
+// Ejecuta el toggleSidebar REAL, con grupoActivo/abrirGrupo de verdad detras
+// (no de mentira): asi una prueba puede comprobar el EFECTO -- que tema queda
+// abierto -- y no solo que el texto fuente menciona los nombres correctos.
+function cargarToggleSidebar(doc, sidebar, overlay) {
+  const cuerpo = `
+    ${recortarFuncion('grupoActivo')}
+    ${recortarFuncion('abrirGrupo')}
+    ${recortarFuncion('toggleSidebar')}
+    return toggleSidebar;
+  `;
+  const $ = (id) => (id === 'sidebar' ? sidebar : id === 'overlay' ? overlay : null);
+  return new Function('$', 'document', cuerpo)($, doc);
+}
+
+test('toggleSidebar, al ABRIR el cajon, recalcula que tema mostrar', () => {
   // Es lo que hace innecesario guardar nada entre visitas: navTo() cierra el
   // cajon, asi que cada apertura parte del mismo estado predecible.
-  const cuerpo = recortarFuncion('toggleSidebar');
-  assert.ok(cuerpo.includes('abrirGrupo'),
-    'toggleSidebar ya no fija el tema abierto: el menu se abriria como lo dejo la vez anterior');
-  assert.ok(cuerpo.includes('grupoActivo'),
-    'toggleSidebar no consulta cual es el tema de la pantalla actual');
+  const { doc, grupos } = documentoConGrupos(5, 'x'); // la activa vive en el segundo tema
+  const sidebar = { classList: crearClassList([]) };  // cerrado
+  const overlay = { classList: crearClassList([]) };
+  const toggleSidebar = cargarToggleSidebar(doc, sidebar, overlay);
+
+  toggleSidebar(); // abre
+
+  assert.ok(sidebar.classList.contains('open'), 'toggleSidebar no marco el cajon como abierto');
+  const abiertos = grupos.filter(g => !g.hidden).map(g => g.id);
+  assert.deepEqual(abiertos, ['nav-g-2'],
+    'al abrir el cajon tiene que quedar abierto el tema de la pantalla actual, y ningun otro');
+});
+
+test('toggleSidebar, al CERRAR el cajon, NO recalcula nada', () => {
+  // La distincion abrir-vs-cerrar es el punto de este test: si se pierde (por
+  // ejemplo llamando a abrirGrupo() sin el `if(abriendo)`), cerrar el cajon
+  // tambien reordena los temas, y eso es un efecto que nadie pidio.
+  const { doc, grupos } = documentoConGrupos(5, 'x');
+  // Un estado que abrirGrupo() jamas dejaria (dos temas "abiertos" a la vez):
+  // si toggleSidebar llamara a abrirGrupo() al cerrar, este estado se
+  // corregiria solo, y no se podria distinguir "no llamo" de "llamo pero no
+  // cambio nada".
+  grupos[0].hidden = false; grupos[2].hidden = false;
+  const sidebar = { classList: crearClassList(['open']) }; // ya esta abierto
+  const overlay = { classList: crearClassList(['show']) };
+  const toggleSidebar = cargarToggleSidebar(doc, sidebar, overlay);
+
+  toggleSidebar(); // cierra
+
+  assert.ok(!sidebar.classList.contains('open'), 'toggleSidebar no cerro el cajon');
+  assert.deepEqual(grupos.map(g => g.hidden), [false, true, false, true, true],
+    'al cerrar el cajon, toggleSidebar toco los grupos: solo tiene que tocarlos al abrir');
 });

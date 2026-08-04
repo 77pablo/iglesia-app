@@ -720,8 +720,10 @@ function buildNav(){
   // Estado inicial: abierto solo el tema de la pantalla actual. Si no hay
   // ninguna activa, el primero -- nunca los cinco cerrados de entrada.
   // Protegido igual que claveActiva arriba: el arnes de pruebas de buildNav
-  // ejecuta esta funcion contra un `document` de juguete sin querySelectorAll.
-  if(typeof document.querySelectorAll==='function') abrirGrupo(grupoActivo()||'nav-g-1');
+  // ejecuta esta funcion contra un `document` de juguete que puede no tener
+  // querySelector/querySelectorAll -- y grupoActivo() usa el primero antes de
+  // que abrirGrupo() use el segundo, asi que el guardia tiene que cubrir los dos.
+  if(typeof document.querySelector==='function' && typeof document.querySelectorAll==='function') abrirGrupo(grupoActivo()||'nav-g-1');
 }
 
 // Una entrada del menu. Es un <button> de verdad, no un <div onclick>: asi se

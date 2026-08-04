@@ -561,6 +561,49 @@ test('formAporte: solo se llama con un id (algo.id), nunca con un dato de person
   }
 });
 
+test('alternarGrupo: aria-controls::${id} vive SOLO ahí, y su única llamada pasa el id local del bucle de buildNav', () => {
+  // Verificación real de la excepción aria-controls::${id} de arriba: su
+  // motivo dice que la única llamada del archivo es el onclick que fija
+  // buildNav(), con id=`nav-g-${i+1}` generado en el propio bucle. Sin esta
+  // prueba, si mañana aparece OTRA interpolación aria-controls="${id}" con un
+  // id que sí venga de una persona, tendría la misma firma y la excepción de
+  // arriba la blanquearía en silencio -- es justo el riesgo que describe el
+  // comentario de diseño junto a EXCEPCIONES más arriba.
+
+  // (a) La interpolación vive solo dentro del cuerpo de alternarGrupo.
+  const inicioFn = fuente.indexOf('function alternarGrupo(');
+  assert.ok(inicioFn >= 0, 'no se encontró alternarGrupo() en web/app.js');
+  let saldo = 0, finFn = -1;
+  for (let j = fuente.indexOf('{', inicioFn); j < fuente.length; j++) {
+    if (fuente[j] === '{') saldo++;
+    else if (fuente[j] === '}') { saldo--; if (saldo === 0) { finFn = j + 1; break; } }
+  }
+  assert.ok(finFn > 0, 'no se pudo cerrar alternarGrupo()');
+  const cuerpoFn = fuente.slice(inicioFn, finFn);
+  const resto = fuente.slice(0, inicioFn) + fuente.slice(finFn);
+
+  assert.ok(cuerpoFn.includes('aria-controls="${id}"'),
+    'alternarGrupo ya no interpola aria-controls="${id}": actualizar o borrar esta prueba junto con la excepción de arriba');
+  assert.ok(!resto.includes('aria-controls="${id}"'),
+    'hay OTRA interpolación aria-controls="${id}" fuera de alternarGrupo: la excepción de arriba la blanquearía sin comprobar si es segura');
+
+  // (b) La única llamada a alternarGrupo( del archivo (no la declaración de la
+  // función) pasa el identificador local "id", nada más.
+  const llamadas = [...fuente.matchAll(/(?<!function )alternarGrupo\(([^)]*)\)/g)];
+  assert.ok(llamadas.length > 0,
+    'no se encontró ninguna llamada a alternarGrupo(); si se renombró, esta prueba hay que actualizarla, no borrarla');
+  for (const m of llamadas) {
+    assert.equal(m[1].trim(), 'id',
+      `alternarGrupo se llama con algo distinto del identificador local "id": ${m[1]}`);
+  }
+
+  // Y ese "id" local es exactamente el nav-g-${i+1} del bucle de buildNav, un
+  // entero controlado por el propio código, no cualquier variable que se
+  // llame igual por casualidad.
+  assert.ok(/const id=`nav-g-\$\{i\+1\}`;/.test(fuente),
+    'el id que buildNav pasa a alternarGrupo ya no es el nav-g-${i+1} del bucle: revisar si sigue siendo un entero controlado por el código antes de mantener esta excepción');
+});
+
 // --- Cuántas interpolaciones hay en total, cuántas son de atributo, y qué
 //     queda pendiente fuera de esta prueba. Ver el informe de esta tarea
 //     para la decisión sobre ese resto. ---
