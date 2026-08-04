@@ -627,6 +627,17 @@ function iniciarIconos(){
   window._emojiObs.observe(document.body,{childList:true,subtree:true,characterData:true});
 }
 
+// El ancho por debajo del cual el menu se agrupa por temas y se pliega.
+//
+// ⚠️ TIENE que ser el mismo numero que el `@media` de web/styles.css. Si se
+// separan, el JS pinta una forma del menu mientras el CSS aplica los estilos de
+// la otra, y no salta ningun error: el menu simplemente aparece roto, y solo en
+// los anchos que queden entre los dos numeros. No hay manera de compartir un
+// valor entre JS y CSS en este proyecto, asi que lo vigila una prueba
+// (backend/test/menu-plegable.test.js).
+const NAV_MOVIL_MAX = 900;
+function esMovil(){ return window.matchMedia(`(max-width:${NAV_MOVIL_MAX}px)`).matches; }
+
 // Pinta el menu lateral.
 //
 // ⚠️ El DOM sale SIEMPRE en el orden del NAV, agrupado o no. Es deliberado: el
