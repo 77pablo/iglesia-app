@@ -246,3 +246,28 @@ test('generarCumpleanosHoyThrottled: la 2a llamada seguida para la misma iglesia
   assert.equal(creados2, 0, 'la 2a llamada dentro de la ventana de throttle no recalcula');
   assert.equal(despues, antes, 'no se crearon notificaciones nuevas en la 2a corrida');
 });
+
+// --- Fix: PATCH /perfil con una persona cuya fila ya no existe -----------------
+//
+// El hallazgo de la auditoria decia "500 en vez de 404" en directorio.js. Hoy ese
+// 500 es INALCANZABLE por HTTP: authMiddleware relee la persona en cada peticion
+// y devuelve 401 antes de llegar a la ruta (auth.js, revocacion de la limpieza
+// profunda). Esta prueba fija ese comportamiento real — si algun dia la
+// revocacion cambia y deja pasar el token, el guard nuevo de la ruta (el mismo
+// 404 que ya tenia su gemelo GET /perfil) es la segunda linea, y esta prueba
+// habria que actualizarla a 404, no borrarla.
+
+test('PATCH /perfil con token de una persona cuya fila fue borrada: 401 de la revocacion, nunca un 500', async () => {
+  const r = db.prepare("INSERT INTO persona (iglesia_id, nombre, usuario, password_hash, activo) VALUES (?, 'Fugaz', 'fugaz', 'x', 1)")
+    .run(SEM.iglesiaId);
+  const fugazId = Number(r.lastInsertRowid);
+  db.prepare('DELETE FROM persona WHERE id = ?').run(fugazId);
+
+  const res = await fetch(base + '/api/directorio/perfil', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + signToken({ id: fugazId, iglesia_id: SEM.iglesiaId }) },
+    body: JSON.stringify({ nombre: 'Ya No Existo' })
+  });
+  assert.equal(res.status, 401, `respondio ${res.status}; un 500 aqui seria la ruta reventando con .nombre de undefined`);
+});
