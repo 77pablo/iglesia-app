@@ -183,15 +183,20 @@ label{display:block;font-size:0.7813rem;font-weight:600;color:var(--muted);
 .logo-mark svg{width:20px;height:20px;}
 .logo-mark img{width:40px;height:40px;object-fit:contain;}
 .nav{flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:2px;}
-/* Encabezado de seccion del menu. OCULTO por defecto: solo aparece en el movil
-   (ver el @media de 900px), que es donde el cajon obliga a desplazarse. En
-   escritorio caben las 19 entradas de golpe y verlas juntas ayuda.
-   Aqui NO se declara ningun `order`: en escritorio manda el orden del DOM, que
-   buildNav deja siempre en el orden del NAV de siempre. */
-.nav-sec{display:none;}
+/* Encabezado de tema del menu. OCULTO por defecto: solo aparece en el movil (ver
+   el @media), que es donde el cajon obliga a desplazarse. En escritorio caben
+   las 19 entradas de golpe y verlas juntas ayuda.
+   Es un <button> de verdad para poder plegarlo con el teclado, asi que hay que
+   neutralizarle el aspecto que el navegador da a los botones. */
+.nav-sec{display:none;background:none;border:none;font-family:inherit;
+  -webkit-appearance:none;appearance:none;text-align:left;width:100%;cursor:pointer;}
+/* Las entradas tambien son <button>: alcanzables con Tab y activables con Enter
+   y Espacio. El aspecto tiene que quedar EXACTAMENTE como cuando eran <div>. */
 .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;
   cursor:pointer;color:rgba(255,255,255,.6);font-size:0.9rem;font-weight:500;letter-spacing:-.01em;
-  position:relative;transition:background .15s var(--ease),color .15s var(--ease);}
+  position:relative;transition:background .15s var(--ease),color .15s var(--ease);
+  background:none;border:none;font-family:inherit;text-align:left;width:100%;
+  -webkit-appearance:none;appearance:none;}
 .nav-item:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.92);}
 .nav-item.active{background:rgba(255,255,255,.12);color:#fff;font-weight:600;}
 .nav-item.active::before{content:"";position:absolute;left:-12px;top:50%;transform:translateY(-50%);
@@ -390,24 +395,23 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
   .overlay.show{display:block;}
   .hamb{display:flex;align-items:center;justify-content:center;}
   main{padding:22px 18px;}
-  /* El agrupamiento por temas, SOLO aqui. El DOM esta siempre en el orden del
-     NAV; buildNav deja en cada elemento un `--ord` correlativo y unico con el
-     sitio que le toca en el movil, y esta es la unica regla de toda la hoja que
-     lo convierte en `order`. Asi el escritorio no se entera de nada.
-     El 0 de reserva es el modo plano: por debajo del umbral nadie lleva `--ord`,
-     todos empatan a 0 y manda el orden del DOM = el del NAV. */
-  .nav-sec,.nav-item{order:var(--ord,0);}
+  /* Los temas del menu, SOLO aqui. En escritorio no existen ni los encabezados
+     ni los contenedores, asi que todo esto vive dentro del @media: una regla de
+     estas suelta fuera ocultaria entradas del menu de escritorio. */
   .nav-sec{display:block;font-size:0.6875rem;font-weight:700;letter-spacing:.08em;
     text-transform:uppercase;color:rgba(255,255,255,.45);
     padding:14px 12px 6px;}
-  /* El primero VISUALMENTE (el del grupo 1), que ya no tiene por que ser el
-     primero del DOM: por eso una clase que pone buildNav y no `:first-child`.
-     `.nav-sec.nav-sec-primero` y no `.nav-sec-primero` a secas: con la misma
-     especificidad que `.nav-sec`, este padding-top solo gana hoy porque esta
-     regla aparece DESPUES en el archivo — si alguien reordena las reglas, deja
-     de aplicarse sin ningun aviso. Con las dos clases juntas la especificidad
-     es mayor y gana siempre, en cualquier orden. */
-  .nav-sec.nav-sec-primero{padding-top:4px;}
+  /* Ahora el primer encabezado SI es el primer hijo del nav (con contenedores
+     reales el orden del DOM es el visual), asi que ya no hace falta la clase que
+     lo marcaba. */
+  .nav-sec:first-child{padding-top:4px;}
+  /* El contenedor de un tema. Repite el gap del .nav para que las entradas se
+     vean igual de separadas que cuando colgaban directamente del nav. */
+  .nav-grupo{display:flex;flex-direction:column;gap:2px;}
+  /* ⚠️ Esta regla NO es redundante. `hidden` oculta porque la hoja del navegador
+     le pone display:none, y el display:flex de arriba le gana. Sin esto, los
+     temas cerrados se verian igual y no saltaria ningun error. */
+  .nav-grupo[hidden]{display:none;}
 }
 @media (max-width:820px){
   .auth{grid-template-columns:1fr;}

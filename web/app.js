@@ -467,6 +467,7 @@ function abrirApp(){
     // los nombres de la base de datos. La traducción ya estaba escrita.
     : (ME.roles.pertenencias.map(p=>rolLabel(p.rol)).join(', ') || 'Feligrés');
   buildNav();
+  vigilarAnchoDelMenu();
   // (La campana la actualiza el dashboard con su propia carga; evitamos pedir /notificaciones dos veces.)
   pushAutoResuscribir();   // mantiene el push activo entre sesiones (si ya dio permiso)
   Chat.refrescarBadge();  // badge de mensajes sin leer, visible aunque no se abra la vista
@@ -638,77 +639,76 @@ function iniciarIconos(){
 const NAV_MOVIL_MAX = 900;
 function esMovil(){ return window.matchMedia(`(max-width:${NAV_MOVIL_MAX}px)`).matches; }
 
-// Pinta el menu lateral.
+// Girar el telefono o cambiar el tamano de la ventana no puede dejar el menu con
+// la forma del otro modo. El guardia evita registrar el oyente dos veces si se
+// vuelve a entrar en la app sin recargar la pagina.
+function vigilarAnchoDelMenu(){
+  if(vigilarAnchoDelMenu._puesto) return;
+  vigilarAnchoDelMenu._puesto=true;
+  window.matchMedia(`(max-width:${NAV_MOVIL_MAX}px)`)
+    .addEventListener('change', ()=>{ if($('nav')) buildNav(); });
+}
+
+// Pinta el menu lateral. Tiene DOS formas segun el ancho de pantalla.
 //
-// ⚠️ El DOM sale SIEMPRE en el orden del NAV, agrupado o no. Es deliberado: el
-// agrupamiento por temas es SOLO del movil, y agruparNav() no sabe nada del
-// ancho de pantalla — si aqui pintaramos en orden de grupo, el escritorio
-// tambien quedaria reordenado, y ocultar los encabezados por CSS no deshace un
-// reordenamiento hecho en el DOM: el pastor se encontraria una lista plana
-// barajada (12 de sus 19 entradas cambiaban de sitio).
+// Escritorio: la lista plana en el orden del NAV, sin encabezados. Es la de
+// siempre.
 //
-// El orden visual del movil se consigue con `order` de flexbox: cada elemento
-// lleva un `--ord` correlativo y UNICO, y el @media de 900px de styles.css es el
-// unico sitio donde ese numero se convierte en `order`. En escritorio no hay
-// ningun `order` activo, asi que manda el orden del DOM = el del NAV de siempre.
+// Movil con el menu largo (>= NAV_UMBRAL_GRUPOS entradas): cada tema es un
+// <button> encabezado seguido de un <div class="nav-grupo"> con sus entradas
+// DENTRO. Con contenedores de verdad el orden del DOM vuelve a ser el orden
+// visual, y por eso aqui ya no hay ningun `--ord`: el truco de `order` que
+// sostenia el agrupamiento anterior se retiro entero.
 //
-// Los valores son unicos a proposito: entre elementos con el MISMO `order` manda
-// el orden del DOM, y ahi un encabezado podria acabar detras de sus propias
-// entradas.
+// ⚠️ Historia que conviene no repetir: la primera version del menu agrupado
+// pintaba en orden de grupo SIN mirar el ancho, y ocultaba los encabezados por
+// CSS. Eso reordenaba tambien el escritorio (12 de las 19 entradas del pastor
+// cambiaban de sitio), porque el CSS no puede deshacer un reordenamiento hecho
+// en el DOM. De ahi que la decision de la forma se tome aqui, con esMovil().
 function buildNav(){
   const nav=$('nav'); nav.innerHTML='';
   const visibles=NAV.filter(n=>tieneModulo(n[0])).map(n=>n[0]);
   const secciones=agruparNav(visibles);
-  // titulo null = modo plano: ni encabezados ni `--ord` (por debajo del umbral
-  // no se agrupa nada, tampoco en el movil).
-  const agrupado=secciones.some(s=>s.titulo);
+  // Se agrupa solo en el movil Y solo si el menu es largo. agruparNav() decide
+  // lo segundo (devuelve una sola seccion sin titulo por debajo del umbral).
+  const agrupado=esMovil() && secciones.some(s=>s.titulo);
 
-  const grupoDe=new Map();     // clave del NAV -> titulo de su grupo
-  const ordenDe=new Map();     // clave del NAV -> su sitio en el orden del movil
-  const ordenTitulo=new Map(); // titulo de grupo -> su sitio en el orden del movil
-  if(agrupado){
-    let n=0;   // arranca en 1: `order:0` es el valor por defecto, no lo pisamos
-    secciones.forEach(seccion=>{
-      ordenTitulo.set(seccion.titulo, ++n);
-      seccion.claves.forEach(k=>{ grupoDe.set(k, seccion.titulo); ordenDe.set(k, ++n); });
-    });
+  if(!agrupado){
+    visibles.forEach(key=>nav.appendChild(crearEntradaNav(key)));
+    return;
   }
 
-  const pendientes=new Set(ordenTitulo.keys());   // encabezados aun sin pintar
-  visibles.forEach(key=>{
-    // El encabezado se cuela justo antes de la primera entrada suya que aparece,
-    // para que el DOM tampoco quede absurdo para quien lo lea en orden.
-    const titulo=grupoDe.get(key);
-    if(titulo && pendientes.has(titulo)){
-      pendientes.delete(titulo);
-      const h=document.createElement('div');
-      // "primero" es el primero VISUALMENTE (el del grupo 1), que no tiene por
-      // que ser el primero del DOM: por eso una clase y no `:first-child`.
-      h.className='nav-sec'+(ordenTitulo.get(titulo)===1?' nav-sec-primero':'');
-      // textContent, no innerHTML: los titulos son fijos, pero no hay motivo
-      // para abrir esa puerta en el menu.
-      h.textContent=titulo;
-      h.style.setProperty('--ord', ordenTitulo.get(titulo));
-      // aria-hidden, deliberado: `order` separa el orden VISUAL del orden del
-      // DOM, y el DOM es lo que lee un lector de pantalla. Un encabezado en su
-      // sitio del DOM (justo antes de su primera entrada visual) puede acabar
-      // leyendose delante de entradas de OTRO grupo (en el menu real del
-      // pastor, 6 de 19 quedan asi). Un encabezado equivocado es peor que
-      // ninguno. Estos <div> no son headings, no reciben foco y su posicion en
-      // el DOM es puramente un ancla para el `order` visual: ocultarlos al
-      // lector de pantalla no quita informacion, deja las 19 entradas en el
-      // orden del NAV sin ninguna etiqueta enganosa — exactamente como estaban
-      // antes de agrupar el menu.
-      h.setAttribute('aria-hidden','true');
-      nav.appendChild(h);
-    }
-    const el=document.createElement('div');
-    el.className='nav-item'; el.dataset.key=key;
-    if(agrupado) el.style.setProperty('--ord', ordenDe.get(key));
-    el.innerHTML=`<span class="ic">${NAV_ICON[key]||iconDe(key)}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
-    el.onclick=()=>navTo(key);
-    nav.appendChild(el);
+  secciones.forEach((seccion,i)=>{
+    const id=`nav-g-${i+1}`;
+    const h=document.createElement('button');
+    h.type='button';
+    h.className='nav-sec';
+    // textContent, no innerHTML: los titulos son fijos, pero no hay motivo para
+    // abrir esa puerta en el menu.
+    h.textContent=seccion.titulo;
+    h.setAttribute('aria-controls',id);
+    h.setAttribute('aria-expanded','true');
+    nav.appendChild(h);
+
+    const cont=document.createElement('div');
+    cont.className='nav-grupo';
+    cont.id=id;
+    seccion.claves.forEach(k=>cont.appendChild(crearEntradaNav(k)));
+    nav.appendChild(cont);
   });
+}
+
+// Una entrada del menu. Es un <button> de verdad, no un <div onclick>: asi se
+// alcanza con Tab, se activa con Enter y con Espacio, y un lector de pantalla la
+// anuncia como el control que es.
+function crearEntradaNav(key){
+  const el=document.createElement('button');
+  el.type='button';   // sin esto, dentro de un formulario lo enviaria
+  el.className='nav-item';
+  el.dataset.key=key;
+  el.innerHTML=`<span class="ic">${NAV_ICON[key]||iconDe(key)}</span> ${labelDe(key)}${key==='mensajes'?'<span id="nav-badge-mensajes" class="badge hidden">0</span>':''}`;
+  el.onclick=()=>navTo(key);
+  return el;
 }
 function navTo(key){
   document.querySelectorAll('.nav-item').forEach(i=>i.classList.toggle('active', i.dataset.key===key));

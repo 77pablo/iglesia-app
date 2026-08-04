@@ -228,36 +228,13 @@ test('buildNav sigue llamando a agruparNav y sigue colgando el badge de Mensajes
   const cuerpo = fuenteDeBuildNav();
   assert.ok(cuerpo.includes('agruparNav('),
     'buildNav ya no llama a agruparNav: lo que prueban las demas pruebas dejaria de ser lo que ve la persona');
-  assert.ok(cuerpo.includes('nav-badge-mensajes'),
-    'buildNav ya no pinta el badge de mensajes sin leer');
-});
-
-test('el orden por temas se aplica SOLO en el movil', () => {
-  // El fallo que esto vigila: buildNav pintando el DOM en orden de grupo. Como
-  // agruparNav no consulta el ancho de pantalla, eso reordena TAMBIEN el
-  // escritorio, y ocultar los encabezados por CSS no deshace un reordenamiento
-  // hecho en el DOM. La solucion es `order` de flexbox, y `order` solo puede
-  // acotarse a un ancho desde la hoja de estilos.
-  const cuerpo = fuenteDeBuildNav();
-  assert.ok(cuerpo.includes("setProperty('--ord'"),
-    'buildNav ya no marca el orden del movil con --ord');
-
-  const CSS = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'styles.css'), 'utf8');
-  const i = CSS.indexOf('@media (max-width:900px){');
-  assert.ok(i >= 0, 'no se encontro el @media de 900px en web/styles.css');
-  let saldo = 0, fin = -1;
-  for (let j = CSS.indexOf('{', i); j < CSS.length; j++) {
-    if (CSS[j] === '{') saldo++;
-    else if (CSS[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
-  }
-  assert.ok(fin > 0, 'no se pudo cerrar el @media de 900px');
-
-  const movil = CSS.slice(i, fin);
-  const resto = CSS.slice(0, i) + CSS.slice(fin);
-  assert.ok(/order\s*:\s*var\(\s*--ord/.test(movil),
-    'el @media del movil ya no convierte --ord en order: el menu no se agrupara en el telefono');
-  assert.ok(!resto.includes('--ord'),
-    'hay un --ord fuera del @media de 900px: el escritorio quedaria reordenado, que es justo el fallo');
+  // El badge ya no se pinta dentro de buildNav(): desde la Task 2 cada entrada
+  // (incluida la de Mensajes) la construye crearEntradaNav(), a la que buildNav
+  // llama para cada clave. Por eso se busca en las dos fuentes.
+  assert.ok(cuerpo.includes('crearEntradaNav('),
+    'buildNav ya no llama a crearEntradaNav: las entradas dejarian de construirse ahi');
+  assert.ok(recortarFuncion('crearEntradaNav').includes('nav-badge-mensajes'),
+    'crearEntradaNav ya no pinta el badge de mensajes sin leer');
 });
 
 // --- el orden REAL que buildNav pinta en el DOM --------------------------------
@@ -305,13 +282,15 @@ function recortarFuncion(nombre) {
   return fuente.slice(i, fin);
 }
 
-// Un elemento de DOM de juguete: lo minimo que buildNav toca (className,
-// dataset, style.setProperty, setAttribute, innerHTML, onclick).
-function crearElementoDeJuguete() {
+// Un elemento de DOM de juguete: lo minimo que buildNav toca.
+function crearElementoDeJuguete(tag) {
   return {
-    className: '', dataset: {}, innerHTML: '', onclick: null,
-    style: { _props: {}, setProperty(k, v) { this._props[k] = v; } },
+    tag, className: '', dataset: {}, innerHTML: '', textContent: '',
+    onclick: null, id: '', hidden: false, type: '', children: [],
+    appendChild(el) { this.children.push(el); return el; },
     setAttribute(k, v) { this[`attr_${k}`] = v; },
+    getAttribute(k) { return this[`attr_${k}`]; },
+    style: { _props: {}, setProperty(k, v) { this._props[k] = v; } },
   };
 }
 
@@ -328,7 +307,7 @@ function crearElementoDeJuguete() {
 //    claves; se dejan en lo minimo que no revienta.
 function ejecutarBuildNavReal() {
   const nav = { innerHTML: '', children: [], appendChild(el) { this.children.push(el); } };
-  const doc = { createElement: () => crearElementoDeJuguete() };
+  const doc = { createElement: (tag) => crearElementoDeJuguete(tag) };
   // NAV_ICON llama a _ic(...) para cada entrada: sin esa arrow function
   // definida, evaluar el objeto revienta con "_ic is not defined".
   //
@@ -349,40 +328,20 @@ function ejecutarBuildNavReal() {
     const NAV_UMBRAL_GRUPOS = ${fuente.match(/const NAV_UMBRAL_GRUPOS\s*=\s*(\d+)\s*;/)[1]};
     const NAV_ICON = ${recortarObjeto('NAV_ICON')};
     ${recortarFuncion('agruparNav')}
+    ${recortarFuncion('crearEntradaNav')}
     ${recortarFuncion('buildNav')}
     return buildNav;
   `;
-  const buildNav = new Function('$', 'document', 'tieneModulo', 'labelDe', 'iconDe', 'navTo', cuerpo)(
+  const buildNav = new Function('$', 'document', 'tieneModulo', 'labelDe', 'iconDe', 'navTo', 'esMovil', cuerpo)(
     (id) => (id === 'nav' ? nav : null),
     doc,
     () => true,
     (k) => k,
     () => '',
     () => {},
+    () => true,
   );
   buildNav();
   return nav;
 }
 
-test('buildNav pinta el DOM SIEMPRE en el orden del NAV, agrupado o no (ejecutado de verdad)', () => {
-  const nav = ejecutarBuildNavReal();
-  const clavesPintadas = nav.children
-    .filter(el => el.className === 'nav-item')
-    .map(el => el.dataset.key);
-
-  // El caso del pastor: 19 entradas, por encima del umbral, se agrupa de
-  // verdad. Si buildNav recorriera las secciones agrupadas en vez del NAV
-  // (la regresion real), esto saldria en el orden de GRUPOS_NAV y esta
-  // asercion caeria.
-  assert.deepEqual(clavesPintadas, CLAVES_NAV,
-    'buildNav pinto los .nav-item en un orden distinto al del NAV. En escritorio --ord no se ' +
-    'convierte en order (eso solo pasa dentro del @media de 900px), asi que manda el orden del DOM: ' +
-    'esto es el menu reordenado de verdad, el mismo fallo que ya paso una vez en esta rama');
-
-  // Y los encabezados: cada uno queda oculto al lector de pantalla, a
-  // proposito (ver el comentario en buildNav).
-  const encabezados = nav.children.filter(el => el.className.startsWith('nav-sec'));
-  assert.ok(encabezados.length > 1, 'con 19 entradas por encima del umbral tiene que haber encabezados');
-  assert.ok(encabezados.every(h => h['attr_aria-hidden'] === 'true'),
-    'un encabezado sin aria-hidden se anunciaria con la clave equivocada al lector de pantalla');
-});
