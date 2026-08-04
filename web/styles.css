@@ -188,14 +188,14 @@ label{display:block;font-size:0.7813rem;font-weight:600;color:var(--muted);
    las 19 entradas de golpe y verlas juntas ayuda.
    Es un <button> de verdad para poder plegarlo con el teclado, asi que hay que
    neutralizarle el aspecto que el navegador da a los botones. */
-.nav-sec{display:none;background:none;border:none;font-family:inherit;
+.nav-sec{display:none;background:none;border:none;font-family:inherit;line-height:inherit;
   -webkit-appearance:none;appearance:none;text-align:left;width:100%;cursor:pointer;}
 /* Las entradas tambien son <button>: alcanzables con Tab y activables con Enter
    y Espacio. El aspecto tiene que quedar EXACTAMENTE como cuando eran <div>. */
 .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;
   cursor:pointer;color:rgba(255,255,255,.6);font-size:0.9rem;font-weight:500;letter-spacing:-.01em;
   position:relative;transition:background .15s var(--ease),color .15s var(--ease);
-  background:none;border:none;font-family:inherit;text-align:left;width:100%;
+  background:none;border:none;font-family:inherit;line-height:inherit;text-align:left;width:100%;
   -webkit-appearance:none;appearance:none;}
 .nav-item:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.92);}
 .nav-item.active{background:rgba(255,255,255,.12);color:#fff;font-weight:600;}

@@ -791,12 +791,22 @@ function alternarGrupo(id){
 // El punto NO cuenta nada por su cuenta: sale del mismo numero que ya gobierna
 // el badge, para que no haya dos verdades que mantener.
 function marcarGrupoConSinLeer(entradaBadge, n){
-  document.querySelectorAll('#nav .nav-sec').forEach(h=>h.classList.remove('con-sin-leer'));
+  // El punto (::after, puro CSS) es invisible para un lector de pantalla: sin
+  // aria-label el encabezado se anuncia solo con su titulo, como si el tema no
+  // tuviera nada pendiente. Se limpia siempre junto con la clase, para que un
+  // encabezado nunca quede diciendo "mensajes sin leer" de una llamada vieja.
+  document.querySelectorAll('#nav .nav-sec').forEach(h=>{
+    h.classList.remove('con-sin-leer');
+    h.removeAttribute('aria-label');
+  });
   if(!n||!entradaBadge||!entradaBadge.closest) return;
   const cont=entradaBadge.closest('.nav-grupo');
   if(!cont) return;   // menu plano (escritorio o menu corto): el badge ya se ve
   const h=document.querySelector(`.nav-sec[aria-controls="${cont.id}"]`);
-  if(h) h.classList.add('con-sin-leer');
+  if(h){
+    h.classList.add('con-sin-leer');
+    h.setAttribute('aria-label', h.textContent+' — mensajes sin leer');
+  }
 }
 
 function navTo(key){
@@ -4358,6 +4368,11 @@ const Chat = {
   convActual: null,
   escribiendoTimer: null,
   es: null,
+  // buildNav() lo lee (":699" y ":733") para reaplicar el badge/punto tras un
+  // repintado del menu. Declarado aqui, no solo asignado dentro de
+  // actualizarBadgeNav, para que la forma del objeto no dependa de que ese
+  // metodo ya se haya llamado alguna vez.
+  _sinLeer: 0,
   async abrirVista(){
     await this.cargarLista();
     this.conectarSSE();
