@@ -103,6 +103,12 @@ const ERR_CONEXION = 'No hay conexión. Revisa tus datos o el wifi e inténtalo 
 const ERR_SESION   = 'Tu sesión se cerró por seguridad. Vuelve a entrar.';
 let _avisandoSesion = false;
 function _sesionCaducada(){
+  // El 401 dice que esta sesión ya no es de nadie: se corta el push del
+  // dispositivo sin esperar (la recarga de abajo no lo va a esperar) y sin
+  // avisar al servidor (este token ya no autentica; la fila huérfana la poda
+  // el 404/410 de enviarPush). Va ANTES de la salida temprana del arranque:
+  // llegar con un token viejo guardado también es una sesión que terminó.
+  pushCortarDispositivo({avisarServidor:false});
   localStorage.removeItem('token');
   const app=$('app');
   // Si la app todavía no está a la vista, estamos arrancando con un token viejo
@@ -298,7 +304,20 @@ function mostrarLogin(){
   const fp=$('forzar-pass'); if(fp) fp.classList.add('hidden');
   $('app').classList.add('hidden'); $('login').classList.remove('hidden'); showStep(1);
 }
-function salir(){ localStorage.removeItem('token'); location.reload(); }
+// Cerrar sesion corta el push de este dispositivo (spec 2026-08-04): sin esto,
+// en un dispositivo compartido las notificaciones del que se fue —cuidado
+// pastoral incluido— siguen llegando a la vista del siguiente. 2 s de tope:
+// cortar es cortesia, cerrar sesion es la orden.
+async function salir(){
+  try{
+    await Promise.race([
+      pushCortarDispositivo({avisarServidor:true}),
+      new Promise(r=>setTimeout(r,2000))
+    ]);
+  }finally{
+    localStorage.removeItem('token'); location.reload();
+  }
+}
 
 // ============================================================
 //  REGISTRO ("Primera vez") — un feligrés se une con el código de su iglesia
@@ -4147,13 +4166,28 @@ async function pushAutoResuscribir(){
     await api('/push/suscribir',{method:'POST',body:JSON.stringify(sub)});
   }catch{}
 }
-async function desactivarPush(){
+// Corta el push de ESTE dispositivo: baja en el servidor (si avisarServidor;
+// el fallo se traga, porque tras eliminar la cuenta o caducar la sesion el
+// token ya no autentica) y siempre des-suscribe el navegador, que es el corte
+// real. Nunca lanza: cerrar sesion no puede quedarse a medias por la red.
+async function pushCortarDispositivo({avisarServidor=true}={}){
+  if(!pushSoportado()) return true;
   try{
     const reg=await navigator.serviceWorker.ready;
     const sub=await reg.pushManager.getSubscription();
-    if(sub){ await api('/push/baja',{method:'POST',body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{}); await sub.unsubscribe(); }
-    toast('Notificaciones desactivadas'); vistaAjustes();
-  }catch(e){ toast(e.message); }
+    if(!sub) return true;
+    // fetch crudo, no api(): con la cuenta recien eliminada el token ya no
+    // autentica, y el 401 no puede disparar _sesionCaducada desde dentro del
+    // propio corte (pisaria el aviso de "cuenta eliminada" con el de sesion).
+    if(avisarServidor) await fetch(API+'/push/baja',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{});
+    await sub.unsubscribe();
+    return true;
+  }catch{ return false; }
+}
+async function desactivarPush(){
+  const ok=await pushCortarDispositivo({avisarServidor:true});
+  toast(ok?'Notificaciones desactivadas':'No se pudo desactivar. Inténtalo otra vez.');
+  vistaAjustes();
 }
 async function probarPush(){
   try{ await api('/push/probar',{method:'POST'}); toast('Enviado — debería llegar la notificación 🔔'); }

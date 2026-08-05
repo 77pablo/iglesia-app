@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; la bandeja del portal público y la fuente del gasto, construidas; poder corregir el nombre propio o el de otro, **fusionado a `main` y subido** — ~~construido en rama local sin fusionar~~ *(desfasado)*; el menú del móvil agrupado por temas, construido en la rama local `feat/menu-agrupado`, esa sí sin fusionar). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; la bandeja del portal público y la fuente del gasto, construidas; poder corregir el nombre propio o el de otro, **fusionado a `main` y subido** — ~~construido en rama local sin fusionar~~ *(desfasado)*; el menú del móvil agrupado por temas, construido en la rama local `feat/menu-agrupado`, esa sí sin fusionar; el push muere con la sesión, construido en la rama `feat/push-muere-con-sesion`). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
@@ -19,8 +19,20 @@ HTTP*, porque `authMiddleware` relee la persona en cada petición y devuelve 401
 llegar a la ruta (revocación de la limpieza profunda). El guard nuevo es la segunda
 línea por si esa revocación cambia, y una prueba fija el 401 real de la cadena.
 
-De los 8 hallazgos de la auditoría queda **1 abierto**: el push cruzado en dispositivo
-compartido (`backend/src/push.js:70-72`) — necesita decisión de diseño, no es un parche.
+De los 8 hallazgos de la auditoría **ya no queda ninguno abierto**: el push
+cruzado en dispositivo compartido se cerró el mismo 4 de agosto (rama
+`feat/push-muere-con-sesion`) — cerrar sesión y la sesión caducada cortan el
+push del dispositivo (baja en servidor + des-suscripción del navegador, en un
+solo helper `pushCortarDispositivo` en `web/app.js`), con timeout de 2 s para
+que el logout nunca se cuelgue. Spec:
+`docs/superpowers/specs/2026-08-04-push-dispositivo-compartido-design.md`.
+⚠️ **Riesgo residual aceptado:** quien abandona un dispositivo compartido SIN
+cerrar sesión sigue filtrando push hasta que otra persona entre (el login del
+siguiente reasigna el canal — el `ON CONFLICT` de `push.js:70-72` se queda a
+propósito, ahora como mitigación). ⚠️ **Verificación manual pendiente de
+Pablo** (no hay banco de pruebas de navegador): activar push como una persona,
+cerrar sesión, entrar como otra en el mismo navegador y comprobar con
+`/push/probar` que no llega nada del anterior.
 ⚠️ La nota del 31-jul sobre la fecha de Cuidado pastoral (`verCaso`) **caducó**: se
 arregló el 1-ago en `59772ca` junto con aprobaciones y material musical.
 
