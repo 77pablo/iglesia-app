@@ -1932,8 +1932,8 @@ function renderCanciones(q){
   if(!lista.length){ cont.className='muted'; cont.innerHTML='<p class="small">'+(todas.length?'Sin resultados para “'+escHtml(q||'')+'”.':'Aún no hay canciones.')+'</p>'; return; }
   cont.className='list';
   const puede=esLiderMusicaUI();
-  cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1;cursor:pointer" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
-    <span class="estado-chip">${escHtml(c.tono||'—')}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></div>
+  cont.innerHTML=lista.map(c=>`<div class="item-card flex"><button type="button" class="btn-plano" style="flex:1" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
+    <span class="estado-chip">${escHtml(c.tono||'—')}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></button>
     ${puede?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar canción" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
 }
 function borrarCancion(id){ modalConfirm('¿Eliminar esta canción del cancionero?', async()=>{
@@ -1962,8 +1962,8 @@ async function cargarSetlist(eventoId){
     let html = items.length
       ? '<div class="list">'+items.map((s,i)=>`<div class="item-card flex">
           <span class="mini-date" style="min-width:34px"><b>${i+1}</b></span>
-          <div style="flex:1;cursor:pointer" onclick="abrirVisorSetlist(${s.cancion_id},${escJsAttr(s.tono_dia||'')})" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
-          <div class="muted small">${escHtml(s.autor||'')}</div></div>
+          <button type="button" class="btn-plano" style="flex:1" onclick="abrirVisorSetlist(${s.cancion_id},${escJsAttr(s.tono_dia||'')})" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
+          <div class="muted small">${escHtml(s.autor||'')}</div></button>
           ${lider?`<button class="link" onclick="quitarSetlist(${s.id})">Quitar</button>`:''}</div>`).join('')+'</div>'
       : '<p class="muted small">Sin canciones en este servicio.</p>';
     if(lider){
@@ -2009,7 +2009,7 @@ async function cargarPlan(eventoId){
       ? '<div class="list" style="margin-top:6px">'+[...porPersona.values()].map(p=>`<div class="item-card flex">
           <div style="flex:1"><b>${escHtml(p.nombre)}</b>
             <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;vertical-align:middle">${p.items.map(it=>
-              `<span class="estado-chip">${escHtml(it.instrumento||'—')}${lider?` <span title="Quitar" style="cursor:pointer;color:var(--red-tx);font-weight:700;margin-left:2px" onclick="quitarIntegrante(${it.id})">×</span>`:''}</span>`).join('')}</span>
+              `<span class="estado-chip">${escHtml(it.instrumento||'—')}${lider?` <button type="button" class="btn-plano" title="Quitar" aria-label="Quitar del equipo" style="color:var(--red-tx);font-weight:700;margin-left:2px" onclick="quitarIntegrante(${it.id})">×</button>`:''}</span>`).join('')}</span>
           </div></div>`).join('')+'</div>'
       : '<p class="muted small" style="margin-top:6px">Aún no hay equipo asignado.</p>';
     // Form para agregar (solo líder)
@@ -2058,7 +2058,7 @@ async function cargarMaterialMusica(){
       const esHimnario = m.archivo_url==='/assets/himnario-nuevo.pdf';
       const puedeBorrar = !permanente && (lider || m.creado_por===ME.persona.id);
       const titulo = esHimnario
-        ? `<b class="mus-himnario" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</b>`
+        ? `<button type="button" class="btn-plano mus-himnario" style="font-weight:700" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</button>`
         : `<b>${escHtml(m.titulo)}</b>`;
       const sub = esHimnario
         ? `<div class="muted small"><a href="javascript:abrirHimnario()">🔎 Abrir cancionero (buscar y transponer)</a> · <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">descargar PDF</a></div>`
@@ -2175,8 +2175,8 @@ function himnarioBuscar(q){
   // Se pintan TODOS. Antes se cortaba en 300 y, con 522 himnos, los últimos no
   // aparecían nunca al abrir el himnario: había que adivinar el título para que
   // el buscador los sacara. Son 522 <div>: el navegador con eso no se despeina.
-  cont.innerHTML=lista.map(h=>`<div class="hmodal-song ${_hmSel&&_hmSel.id===h.id?'sel':''}" onclick="himnarioSel(${escJsAttr(h.id)})">
-    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span>${h.seccion===2?' <span class="muted small">· coros</span>':''}</div>`).join('');
+  cont.innerHTML=lista.map(h=>`<button type="button" class="btn-plano hmodal-song ${_hmSel&&_hmSel.id===h.id?'sel':''}" onclick="himnarioSel(${escJsAttr(h.id)})">
+    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span>${h.seccion===2?' <span class="muted small">· coros</span>':''}</button>`).join('');
 }
 // Se selecciona por `id`, no por número: los números se repiten entre las dos
 // secciones y un find(h=>h.n===n) devolvía SIEMPRE el de la primera. Tocar
@@ -3264,7 +3264,7 @@ async function vistaPanelObispo(){
   $('ob').className='';
   $('ob').innerHTML=`<div class="hero"><h2>👑 Panel del Obispo</h2><p>Visión de todas las iglesias (${list.length}) · 👁️ solo lectura</p></div>
     <div class="grid" style="margin-top:18px">${list.map(i=>`
-      <div class="module-card" style="text-align:left;align-items:stretch" onclick="verIglesiaObispo(${i.id})">
+      <button type="button" class="btn-plano module-card" style="text-align:left;align-items:stretch" onclick="verIglesiaObispo(${i.id})">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div class="label" style="font-size:16px">⛪ ${escHtml(i.nombre)}</div><span class="estado-chip">${escHtml(i.codigo_unico)}</span></div>
         <div class="muted small" style="margin:6px 0 10px">Pastor: ${escHtml(i.pastor||'—')}</div>
@@ -3273,7 +3273,7 @@ async function vistaPanelObispo(){
           <span class="estado-chip">📅 ${i.eventos}</span>
           <span class="estado-chip">📊 asist. ${i.asistenciaPromedio}</span>
           <span class="estado-chip">💰 ${money(i.saldo)}</span>
-        </div></div>`).join('')}</div>`;
+        </div></button>`).join('')}</div>`;
 }
 let _obMes=null;
 async function verIglesiaObispo(id, mes){
@@ -3295,12 +3295,12 @@ async function verIglesiaObispo(id, mes){
     </div>
     <div class="widgets" style="margin-bottom:18px">
       <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${d.miembros}</div></div>
-      <div class="widget" style="cursor:pointer" onclick="obAsistencia(${id})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></div>
-      <div class="widget" style="cursor:pointer" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></div>
+      <button type="button" class="btn-plano widget" onclick="obAsistencia(${id})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></button>
+      <button type="button" class="btn-plano widget" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></button>
     </div>
     ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green-tx)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red-tx)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${id})">Ver movimientos ›</button>`)}
     ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${escHtml(e.grupo||'')} · ${escHtml(e.estado)}</div></div><span class="estado-chip">✅ ${e.asistencia}</span></div>`, 'Sin eventos este mes.'))}
-    ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<div class="item-card flex" style="cursor:pointer" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${escHtml(p.predicador||'')}</div></div><span class="muted" style="font-size:18px">›</span></div>`, 'Sin prédicas este mes.'))}
+    ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<button type="button" class="btn-plano item-card flex" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${escHtml(p.predicador||'')}</div></div><span class="muted" style="font-size:18px">›</span></button>`, 'Sin prédicas este mes.'))}
     <div class="widgets" style="margin-bottom:16px">
       <div class="widget"><div class="widget-head">📢 Anuncios (mes)</div><div class="stat-num">${d.anunciosMes}</div></div>
       <div class="widget"><div class="widget-head">❤️ Casos de cuidado abiertos</div><div class="stat-num">${d.cuidado.casosAbiertos}</div></div>

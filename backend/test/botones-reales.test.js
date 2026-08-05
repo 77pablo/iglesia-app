@@ -19,17 +19,7 @@ const hoja = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'styles.css
 // Deuda de conversion. Cada entrada es un trozo LITERAL de la etiqueta que
 // TODAVIA es <div>/<span> clicable. Las tareas del plan las quitan al
 // convertir; no agregues entradas: un control nuevo nace <button>.
-const PENDIENTES = [
-  `onclick="abrirVisorCancion(`,
-  `onclick="abrirVisorSetlist(`,
-  `onclick="quitarIntegrante(`,
-  `onclick="himnarioSel(`,
-  `onclick="verIglesiaObispo(`,
-  `onclick="obAsistencia(`,
-  `onclick="obTesoreria(`,
-  `onclick="obPredica(`,
-  `onclick="abrirHimnario()`,
-];
+const PENDIENTES = [];
 
 // Excepciones con motivo escrito: clicables que NO se convierten a proposito.
 const EXCEPCIONES = [
