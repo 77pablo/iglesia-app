@@ -155,13 +155,6 @@ CREATE TABLE IF NOT EXISTS fecha_no_disp (
   repetir     TEXT
 );
 
--- RECURSO: espacio/equipo reservable (salon, canon...)
-CREATE TABLE IF NOT EXISTS recurso (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  iglesia_id  INTEGER NOT NULL REFERENCES iglesia(id),
-  nombre      TEXT NOT NULL
-);
-
 -- DISPOSITIVO PUSH: token del telefono para notificaciones (legacy)
 CREATE TABLE IF NOT EXISTS dispositivo_push (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -697,6 +690,18 @@ export function migrarCampaniaAMovimientos(conexion = db) {
   ).run();
 }
 migrarCampaniaAMovimientos();
+
+// RECURSO: la tabla nacio para "espacio/equipo reservable" y NADA la escribio
+// jamas (cero INSERT en toda la historia del repo: por construccion esta
+// vacia en cualquier despliegue). No confundir con recurso_grupo ni
+// predica_recurso, que si se usan. DROP IF EXISTS es idempotente por si
+// mismo, asi que no necesita la guarda PRAGMA de las migraciones de arriba.
+// Exportada por el mismo motivo que las demas: que una prueba pueda llamarla
+// dos veces.
+export function migrarQuitarRecurso(conexion = db) {
+  conexion.exec('DROP TABLE IF EXISTS recurso');
+}
+migrarQuitarRecurso();
 
 // Cuando se cerro la campania (NULL = activa). Una campania cerrada ya no
 // admite aportes; no se borra, para no perder el historial de para que se junto.

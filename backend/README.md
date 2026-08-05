@@ -22,7 +22,6 @@ npm start          # arranca la API en http://localhost:3000
 | GET | `/api/health` | Comprueba que el backend responde |
 | POST | `/api/login` | Login en 3 pasos: `{iglesia, usuario, password}` → token |
 | GET | `/api/me` | Perfil + roles + módulos visibles (requiere token) |
-| POST | `/api/dispositivo` | Registra token push (requiere token) |
 
 ## Estado
 - [x] 1A.1 Proyecto base
