@@ -1536,9 +1536,9 @@ async function vistaAsistencia(){
     const ev=await api('/eventos');
     if(!ev.length){ $('lista').innerHTML='<div class="placeholder"><div class="big">✅</div><p>No hay eventos para registrar.</p></div>'; return; }
     $('lista').className='list';
-    $('lista').innerHTML=ev.map(e=>`<div class="item-card flex" style="cursor:pointer" onclick="hojaAsistencia(${e.id})">
+    $('lista').innerHTML=ev.map(e=>`<button type="button" class="btn-plano item-card flex" onclick="hojaAsistencia(${e.id})">
       ${fechaChip(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
-      <div class="muted small">${escHtml(e.grupo||'')}</div></div><span class="muted" style="font-size:20px">›</span></div>`).join('');
+      <div class="muted small">${escHtml(e.grupo||'')}</div></div><span class="muted" style="font-size:20px">›</span></button>`).join('');
   }catch{ $('lista').innerHTML=errCargar('vistaAsistencia()','la hoja de asistencia'); }
 }
 
@@ -1574,9 +1574,9 @@ function renderHoja(d){
 }
 function filaAsist(m, on){
   const editable = window._puedeEditar;
-  return `<div class="asist-row ${on?'on':''}" ${editable?`onclick="togglePresente(${m.id})"`:'style="cursor:default"'}>
+  return `${editable?`<button type="button" class="btn-plano asist-row ${on?'on':''}" aria-pressed="${on?'true':'false'}" onclick="togglePresente(${m.id})">`:`<div class="asist-row ${on?'on':''}" style="cursor:default">`}
     <div><div>${escHtml(m.nombre)}</div>${m.grupos?`<div class="muted small">🏷️ ${escHtml(m.grupos)}</div>`:''}</div>
-    <span class="tick">${on?'✅':'○'}</span></div>`;
+    <span class="tick">${on?'✅':'○'}</span>${editable?'</button>':'</div>'}`;
 }
 function renderListasAsist(){
   const miembros = window._hojaMiembros || [];
@@ -2305,9 +2305,9 @@ async function cargarCasos(){
     if(!casos.length){ cont.className='muted'; cont.innerHTML='<div class="placeholder"><div class="big">❤️</div><p>No hay casos de cuidado.</p></div>'; return; }
     cont.className='list';
     cont.innerHTML=casos.map(c=>{const[si,sl,cls]=CASO_ESTADO[c.estado]||['','',''];
-      return `<div class="item-card flex" style="cursor:pointer" onclick="verCaso(${c.id})">
+      return `<button type="button" class="btn-plano item-card flex" onclick="verCaso(${c.id})">
         <div style="flex:1"><b>${MOTIVO_ICON[c.motivo]||'❔'} ${escHtml(c.nombre)}</b><div class="muted small">${cap(c.motivo||'')}</div></div>
-        <span class="estado-chip ${cls}">${si} ${sl}</span></div>`;}).join('');
+        <span class="estado-chip ${cls}">${si} ${sl}</span></button>`;}).join('');
   }catch(e){ $('lista-casos').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
 async function toggleFormCaso(){
@@ -2753,9 +2753,9 @@ async function cargarClases(){
     const cl=await api('/ninos/clases'); const c=$('clases');
     if(!cl.length){ c.className='muted'; c.innerHTML='<div class="placeholder"><div class="big">👶</div><p>No hay clases aún.</p></div>'; return; }
     c.className='grid';
-    c.innerHTML=cl.map(x=>`<div class="module-card" onclick="vistaClase(${x.id},${escJsAttr(x.nombre||'')})">
+    c.innerHTML=cl.map(x=>`<button type="button" class="btn-plano module-card" onclick="vistaClase(${x.id},${escJsAttr(x.nombre||'')})">
       <div class="icon">📚</div><div class="label">${escHtml(x.nombre)}</div>
-      <div class="muted small">${escHtml(x.edad||'')} · ${x.ninos} niños</div></div>`).join('');
+      <div class="muted small">${escHtml(x.edad||'')} · ${x.ninos} niños</div></button>`).join('');
   }catch(e){ $('clases').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
 function formClase(){ const z=$('form-clase'); if(z.innerHTML){z.innerHTML='';return;}
@@ -3151,10 +3151,10 @@ function renderPredicas(items){
   const c=$('pr-lista');
   if(!items.length){ c.className='muted'; c.innerHTML='<p class="small">Aún no hay prédicas registradas.</p>'; return; }
   c.className='list';
-  c.innerHTML=items.map(p=>`<div class="item-card flex" style="cursor:pointer" onclick="verPredica(${p.id})">
+  c.innerHTML=items.map(p=>`<button type="button" class="btn-plano item-card flex" onclick="verPredica(${p.id})">
     ${chipFecha(p.fecha||'')}<div style="flex:1"><div class="item-titulo">${escHtml(p.titulo)}</div>
     <div class="muted small">${p.predicador?'🎤 '+escHtml(p.predicador):''}${p.recursos?' · 📎 '+p.recursos+' recurso(s)':''}</div></div>
-    <span class="muted" style="font-size:20px">›</span></div>`).join('');
+    <span class="muted" style="font-size:20px">›</span></button>`).join('');
 }
 async function verPredica(id){
   $('content').innerHTML='<button class="link" onclick="vistaPredica()">‹ Prédicas</button><div id="prd" class="muted">Cargando…</div>';
@@ -4609,11 +4609,11 @@ async function vistaOrganizacion(){
     z.innerHTML = hojas.length ? hojas.map(h=>{
       const titulo = h.evento_titulo || h.titulo || '(sin título)';
       const fecha = h.evento_fecha || h.fecha;
-      return `<div class="item-card flex" style="margin-top:10px;cursor:pointer" onclick="Org.abrir(${h.id},'organizacion')">
+      return `<button type="button" class="btn-plano item-card flex" style="margin-top:10px" onclick="Org.abrir(${h.id},'organizacion')">
         <div style="flex:1"><div class="item-titulo">${escHtml(titulo)}</div>
           <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''} · ${h.n_cosas||0} cosa(s)</div></div>
         <div style="text-align:right"><b>${money(h.total_gastado)}</b><div class="muted small">gastado</div></div>
-      </div>`;
+      </button>`;
     }).join('') : '<p class="muted small">Aún no hay listas. Crea una con "Nueva lista".</p>';
   }catch(e){ const z=$('org-lista'); z.className='error'; z.textContent=(e&&e.message)||'No se pudo cargar'; }
 }

@@ -20,20 +20,14 @@ const hoja = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'styles.css
 // TODAVIA es <div>/<span> clicable. Las tareas del plan las quitan al
 // convertir; no agregues entradas: un control nuevo nace <button>.
 const PENDIENTES = [
-  `onclick="hojaAsistencia(`,
-  `onclick="togglePresente(`,
   `onclick="abrirVisorCancion(`,
   `onclick="abrirVisorSetlist(`,
   `onclick="quitarIntegrante(`,
   `onclick="himnarioSel(`,
-  `onclick="verCaso(`,
-  `onclick="vistaClase(`,
-  `onclick="verPredica(`,
   `onclick="verIglesiaObispo(`,
   `onclick="obAsistencia(`,
   `onclick="obTesoreria(`,
   `onclick="obPredica(`,
-  `onclick="Org.abrir(`,
   `onclick="abrirHimnario()`,
 ];
 
