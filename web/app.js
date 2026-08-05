@@ -724,6 +724,11 @@ function buildNav(){
 
   let primerGrupo=null;   // el fallback del acordeon: el primer tema REAL
   secciones.forEach((seccion,i)=>{
+    // El id se calcula para toda seccion, incluida la que se pinta suelta y
+    // no lo usa: por eso puede haber huecos (nav-g-1, nav-g-3, sin nav-g-2) si
+    // el segundo tema quedo de una sola entrada. No es un bug -- aria-controls
+    // siempre sale de esta misma variable, asi que header y contenedor jamas
+    // se desincronizan aunque la numeracion salte.
     const id=`nav-g-${i+1}`;
     // Tema de una sola entrada (titulo null): la entrada va suelta, en el
     // lugar del tema, sin acordeon que abrir para una sola cosa.
@@ -784,6 +789,16 @@ function grupoActivo(){
   const activa=document.querySelector('.nav-item.active');
   const cont=activa&&activa.closest('.nav-grupo');
   return cont?cont.id:null;
+}
+
+// El primer tema REAL del menu pintado. Es la respuesta a "que abro si no hay
+// ninguna entrada activa": desde que un tema de una sola entrada se pinta
+// suelto (sin contenedor), el primer contenedor ya no es necesariamente
+// 'nav-g-1' -- se le pregunta al DOM en vez de repetir el calculo de
+// buildNav, para que no haya dos verdades que mantener sincronizadas.
+function primerGrupoNav(){
+  const g=document.querySelector('#nav .nav-grupo');
+  return g?g.id:null;
 }
 
 // Deja abierto exactamente el tema `id` y cierra los demas. Con null, cierra
@@ -874,7 +889,7 @@ function navTo(key){
 function toggleSidebar(){
   const abriendo=!$('sidebar').classList.contains('open');
   $('sidebar').classList.toggle('open'); $('overlay').classList.toggle('show');
-  if(abriendo) abrirGrupo(grupoActivo()||'nav-g-1');
+  if(abriendo) abrirGrupo(grupoActivo()||primerGrupoNav());
 }
 function closeSidebar(){ $('sidebar').classList.remove('open'); $('overlay').classList.remove('show'); }
 

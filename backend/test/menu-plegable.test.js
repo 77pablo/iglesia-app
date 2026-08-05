@@ -578,6 +578,33 @@ test('toggleSidebar, al CERRAR el cajon, NO recalcula nada', () => {
     'al cerrar el cajon, toggleSidebar toco los grupos: solo tiene que tocarlos al abrir');
 });
 
+test('toggleSidebar ya no depende del literal "nav-g-1": usa primerGrupoNav()', () => {
+  // Desde que un tema de una sola entrada se pinta suelto (sin contenedor), el
+  // primer contenedor real del menu ya no es necesariamente 'nav-g-1' -- si
+  // toggleSidebar siguiera con el literal, abrir el cajon sin ninguna entrada
+  // activa podria pedir un id que no existe y dejar los temas todos cerrados.
+  const cuerpo = recortarFuncion('toggleSidebar');
+  assert.ok(cuerpo.includes('primerGrupoNav('),
+    'toggleSidebar ya no llama a primerGrupoNav(): volvio el literal fijo');
+  assert.ok(!cuerpo.includes("'nav-g-1'"),
+    'toggleSidebar todavia tiene el literal nav-g-1 escrito a mano');
+});
+
+test('primerGrupoNav pregunta al DOM por el primer contenedor real, no lo inventa', () => {
+  const cargar = (doc) => new Function('document', `
+    ${recortarFuncion('primerGrupoNav')}
+    return primerGrupoNav;
+  `)(doc);
+
+  const conGrupo = cargar({ querySelector: (sel) => (sel === '#nav .nav-grupo' ? { id: 'nav-g-2' } : null) });
+  assert.equal(conGrupo(), 'nav-g-2',
+    'con un contenedor real en el DOM, primerGrupoNav tiene que devolver su id');
+
+  const sinGrupo = cargar({ querySelector: () => null });
+  assert.equal(sinGrupo(), null,
+    'sin ningun contenedor en el DOM (menu todo suelto), primerGrupoNav tiene que devolver null');
+});
+
 // --- el punto de mensajes sin leer -------------------------------------------
 
 // actualizarBadgeNav NO es `function nombre(...)`: es un metodo de un objeto
