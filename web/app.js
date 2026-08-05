@@ -4147,13 +4147,25 @@ async function pushAutoResuscribir(){
     await api('/push/suscribir',{method:'POST',body:JSON.stringify(sub)});
   }catch{}
 }
-async function desactivarPush(){
+// Corta el push de ESTE dispositivo: baja en el servidor (si avisarServidor;
+// el fallo se traga, porque tras eliminar la cuenta o caducar la sesion el
+// token ya no autentica) y siempre des-suscribe el navegador, que es el corte
+// real. Nunca lanza: cerrar sesion no puede quedarse a medias por la red.
+async function pushCortarDispositivo({avisarServidor=true}={}){
+  if(!pushSoportado()) return true;
   try{
     const reg=await navigator.serviceWorker.ready;
     const sub=await reg.pushManager.getSubscription();
-    if(sub){ await api('/push/baja',{method:'POST',body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{}); await sub.unsubscribe(); }
-    toast('Notificaciones desactivadas'); vistaAjustes();
-  }catch(e){ toast(e.message); }
+    if(!sub) return true;
+    if(avisarServidor) await api('/push/baja',{method:'POST',body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{});
+    await sub.unsubscribe();
+    return true;
+  }catch{ return false; }
+}
+async function desactivarPush(){
+  const ok=await pushCortarDispositivo({avisarServidor:true});
+  toast(ok?'Notificaciones desactivadas':'No se pudo desactivar. Inténtalo otra vez.');
+  vistaAjustes();
 }
 async function probarPush(){
   try{ await api('/push/probar',{method:'POST'}); toast('Enviado — debería llegar la notificación 🔔'); }
