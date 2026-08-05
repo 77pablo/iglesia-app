@@ -103,11 +103,11 @@ const ERR_CONEXION = 'No hay conexión. Revisa tus datos o el wifi e inténtalo 
 const ERR_SESION   = 'Tu sesión se cerró por seguridad. Vuelve a entrar.';
 let _avisandoSesion = false;
 function _sesionCaducada(){
-  // El 401 dice que esta sesion ya no es de nadie: se corta el push del
+  // El 401 dice que esta sesión ya no es de nadie: se corta el push del
   // dispositivo sin esperar (la recarga de abajo no lo va a esperar) y sin
-  // avisar al servidor (este token ya no autentica; la fila huerfana la poda
+  // avisar al servidor (este token ya no autentica; la fila huérfana la poda
   // el 404/410 de enviarPush). Va ANTES de la salida temprana del arranque:
-  // llegar con un token viejo guardado tambien es una sesion que termino.
+  // llegar con un token viejo guardado también es una sesión que terminó.
   pushCortarDispositivo({avisarServidor:false});
   localStorage.removeItem('token');
   const app=$('app');
@@ -4176,7 +4176,10 @@ async function pushCortarDispositivo({avisarServidor=true}={}){
     const reg=await navigator.serviceWorker.ready;
     const sub=await reg.pushManager.getSubscription();
     if(!sub) return true;
-    if(avisarServidor) await api('/push/baja',{method:'POST',body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{});
+    // fetch crudo, no api(): con la cuenta recien eliminada el token ya no
+    // autentica, y el 401 no puede disparar _sesionCaducada desde dentro del
+    // propio corte (pisaria el aviso de "cuenta eliminada" con el de sesion).
+    if(avisarServidor) await fetch(API+'/push/baja',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{});
     await sub.unsubscribe();
     return true;
   }catch{ return false; }
