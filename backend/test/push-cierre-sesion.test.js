@@ -48,3 +48,16 @@ test('desactivarPush usa el helper, no su propia copia de la baja', () => {
   assert.ok(f.includes('pushCortarDispositivo('),
     'desactivarPush() no pasa por pushCortarDispositivo(): dos copias de la baja');
 });
+
+test('salir() corta el push y el logout va en un finally', () => {
+  // El corte es cortesia con timeout; borrar el token y recargar es la orden,
+  // y el finally garantiza que ocurre aunque la red o el push service fallen.
+  const f = cuerpoDe('async function salir');
+  assert.ok(f.includes('pushCortarDispositivo('),
+    'salir() ya no corta el push: las notificaciones del que se fue seguirian ' +
+    'llegando al dispositivo (el hallazgo de la auditoria, reabierto)');
+  assert.ok(f.includes('Promise.race'),
+    'salir() espera el corte sin timeout: sin red, cerrar sesion se quedaria colgado');
+  assert.ok(/finally\s*\{[^}]*localStorage\.removeItem\('token'\)[^}]*location\.reload\(\)[^}]*\}/.test(f),
+    'salir() no garantiza el logout en un finally con removeItem + reload');
+});

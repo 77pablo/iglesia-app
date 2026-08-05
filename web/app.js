@@ -298,7 +298,20 @@ function mostrarLogin(){
   const fp=$('forzar-pass'); if(fp) fp.classList.add('hidden');
   $('app').classList.add('hidden'); $('login').classList.remove('hidden'); showStep(1);
 }
-function salir(){ localStorage.removeItem('token'); location.reload(); }
+// Cerrar sesion corta el push de este dispositivo (spec 2026-08-04): sin esto,
+// en un dispositivo compartido las notificaciones del que se fue —cuidado
+// pastoral incluido— siguen llegando a la vista del siguiente. 2 s de tope:
+// cortar es cortesia, cerrar sesion es la orden.
+async function salir(){
+  try{
+    await Promise.race([
+      pushCortarDispositivo({avisarServidor:true}),
+      new Promise(r=>setTimeout(r,2000))
+    ]);
+  }finally{
+    localStorage.removeItem('token'); location.reload();
+  }
+}
 
 // ============================================================
 //  REGISTRO ("Primera vez") — un feligrés se une con el código de su iglesia
