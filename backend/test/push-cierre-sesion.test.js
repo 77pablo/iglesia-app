@@ -61,3 +61,19 @@ test('salir() corta el push y el logout va en un finally', () => {
   assert.ok(/finally\s*\{[^}]*localStorage\.removeItem\('token'\)[^}]*location\.reload\(\)[^}]*\}/.test(f),
     'salir() no garantiza el logout en un finally con removeItem + reload');
 });
+
+test('_sesionCaducada corta el push local antes de su early-return, sin llamar al servidor', () => {
+  const f = cuerpoDe('function _sesionCaducada');
+  const corte = f.indexOf('pushCortarDispositivo({avisarServidor:false})');
+  assert.ok(corte >= 0,
+    '_sesionCaducada() no corta el push, o lo corta llamando al servidor con un ' +
+    'token que acaba de caducar (avisarServidor debe ser false)');
+  assert.ok(!/await\s+pushCortarDispositivo/.test(f),
+    '_sesionCaducada() hace await del corte: es fire-and-forget, la funcion es sincrona');
+  // 'return;' con punto y coma: busca la sentencia real, no la palabra suelta
+  // en un comentario.
+  const early = f.indexOf('return;');
+  assert.ok(early < 0 || corte < early,
+    'el corte esta despues de un return: al arrancar con un token viejo (app aun ' +
+    'oculta) el push del dueño anterior quedaria vivo');
+});

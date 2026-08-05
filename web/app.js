@@ -103,6 +103,12 @@ const ERR_CONEXION = 'No hay conexión. Revisa tus datos o el wifi e inténtalo 
 const ERR_SESION   = 'Tu sesión se cerró por seguridad. Vuelve a entrar.';
 let _avisandoSesion = false;
 function _sesionCaducada(){
+  // El 401 dice que esta sesion ya no es de nadie: se corta el push del
+  // dispositivo sin esperar (la recarga de abajo no lo va a esperar) y sin
+  // avisar al servidor (este token ya no autentica; la fila huerfana la poda
+  // el 404/410 de enviarPush). Va ANTES de la salida temprana del arranque:
+  // llegar con un token viejo guardado tambien es una sesion que termino.
+  pushCortarDispositivo({avisarServidor:false});
   localStorage.removeItem('token');
   const app=$('app');
   // Si la app todavía no está a la vista, estamos arrancando con un token viejo

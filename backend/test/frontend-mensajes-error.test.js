@@ -57,12 +57,13 @@ function montar({ responde, lanza, conToken = true, appVisible = true } = {}) {
       json: async () => { if (responde.sinCuerpo) throw new Error('no json'); return responde.cuerpo || {}; }
     };
   };
+  const pushCortarDispositivoFn = () => {}; // fire-and-forget, nunca falla
   const src = ['ERR_CONEXION', 'ERR_SESION', '_avisandoSesion', '_sesionCaducada', 'api']
     .map(recortar).join('\n');
   const api = new Function(
-    'API', 'token', 'fetch', 'localStorage', '$', 'toast', 'location', 'setTimeout',
+    'API', 'token', 'fetch', 'localStorage', '$', 'toast', 'location', 'setTimeout', 'pushCortarDispositivo',
     `${src}\nreturn api;`
-  )('/api', () => estado.guardado, fetch, localStorage, $, toast, location, setTimeout_);
+  )('/api', () => estado.guardado, fetch, localStorage, $, toast, location, setTimeout_, pushCortarDispositivoFn);
   return { api, estado };
 }
 
