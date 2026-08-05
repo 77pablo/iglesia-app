@@ -4876,12 +4876,13 @@ const Org = {
     // representa, se repone. Dejarlo en blanco es exactamente lo que le
     // adjudicaba la deuda a quien solo venía a corregir una falta de ortografía.
     //
-    // Y se reconcilia TAMBIÉN cuando la opción puesta es la inyectada: si la
-    // persona sí estaba activa y su <option> real acaba de llegar con el
-    // directorio, sin esto se queda para siempre el rótulo falso "(cuenta
-    // inactiva)" sobre alguien activo, y su nombre dos veces en la lista.
-    // _ponerPagador es idempotente: quita la inyectada y solo la repone si de
-    // verdad sigue sin estar.
+    // La gemela ya quedó resuelta arriba, en quitarAusenteDuplicada: si el
+    // directorio trajo a la persona, ahí se le quita el rótulo falso "(cuenta
+    // inactiva)" conservando la elección. Lo que cubre esta condición es lo
+    // que queda: la persona de verdad sigue sin estar, y el innerHTML de más
+    // arriba reconstruyó el selector desde cero, así que hay que volver a
+    // pedirle a _ponerPagador que reponga la inyectada (es idempotente: no
+    // hace nada si ya está).
     //
     // Se exige que la inyectada sea la SELECCIONADA para no pisar a quien haya
     // cambiado el selector a mano mientras el directorio viajaba: en ese caso su

@@ -6,10 +6,11 @@
 //   - POST /api/dispositivo -> 404 (endpoint legacy eliminado; el push real
 //     usa push_sub via /api/push/*).
 // ----------------------------------------------------------------------------
-import { test, before, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { cargarDb } from './helpers.js';
@@ -47,12 +48,18 @@ test('POST /api/dispositivo -> 404 (endpoint legacy eliminado)', async (t) => {
     },
     stdio: 'pipe'
   });
-  t.after(() => servidor.kill());
+  t.after(() => {
+    servidor.kill();
+    try { fs.unlinkSync(DB_PATH); } catch { /* puede no existir */ }
+    try { fs.unlinkSync(DB_PATH + '-journal'); } catch { /* idem */ }
+  });
+  let listo = false;
   for (let i = 0; i < 60; i++) {
-    try { if ((await fetch(`${BASE}/api/health`)).ok) break; }
+    try { if ((await fetch(`${BASE}/api/health`)).ok) { listo = true; break; } }
     catch { /* aun no levanta */ }
     await new Promise(r => setTimeout(r, 250));
   }
+  if (!listo) throw new Error('El servidor de pruebas no respondio a tiempo');
   const login = await fetch(`${BASE}/api/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ iglesia: 'MONTESION', usuario: 'pastor', password: '1234' })
