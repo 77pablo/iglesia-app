@@ -72,6 +72,25 @@ function recortarMetodo(nombre) {
 const METODOS = ['_llenarQuienPago', 'cambioQuienPago', 'cambioFuente', '_ponerPagador', '_opcionAusente',
   '_opcionSinRegistrar', 'editarGasto', 'cancelarEdicionGasto', 'guardarGasto'];
 
+// _llenarQuienPago llama a quitarAusenteDuplicada, una funcion de nivel
+// superior (fuera del objeto Org). recortarMetodo solo sabe cortar metodos
+// indentados con dos espacios dentro de Org, asi que aqui se recorta aparte
+// balanceando llaves igual que hace organizacion-selector.test.js, y se
+// inyecta como declaracion real en el mismo scope del new Function() de
+// abajo -- para que se ejecute la funcion REAL, no un mock.
+function recortarFuncionTop(nombre) {
+  const i = fuente.indexOf(`function ${nombre}(`);
+  assert.ok(i >= 0, `no se encontro ${nombre} en web/app.js`);
+  let saldo = 0, fin = -1;
+  for (let j = fuente.indexOf('{', i); j < fuente.length; j++) {
+    if (fuente[j] === '{') saldo++;
+    else if (fuente[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
+  }
+  assert.ok(fin > 0, `no se pudo cerrar ${nombre}`);
+  return fuente.slice(i, fin);
+}
+const QUITAR_AUSENTE_DUPLICADA = recortarFuncionTop('quitarAusenteDuplicada');
+
 // ---------- DOM de mentira ----------
 class FakeOption {
   constructor() { this.value = ''; this.textContent = ''; this.dataset = {}; this.padre = null; }
@@ -139,6 +158,7 @@ function montar({ gastos, directorio, miId = 3 }) {
     }
   };
   const cuerpo = `
+    ${QUITAR_AUSENTE_DUPLICADA}
     const Org = {
       _hoja: HOJA, _gastoEditando: null, _pagador: '', _personas: null,
       _fuente: 'devuelve', _origenTocado: false,

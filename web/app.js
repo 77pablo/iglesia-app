@@ -4655,6 +4655,25 @@ const ORG_ORIGEN = {
   calendario:   { etiqueta:'Calendario',   ir:()=>navTo('calendario') },
 };
 
+// La opcion inyectada "(cuenta inactiva)" del selector de quien pago
+// (Org._opcionAusente) es PROVISIONAL: existe para que el selector pueda
+// representar a un pagador que /directorio aun no trajo. Si el directorio
+// llega y trae a esa misma persona (gemela real, mismo value), la inyectada
+// sobra: su rotulo pasa a ser mentira y el nombre sale dos veces. Se quita
+// SIEMPRE que haya gemela -- no solo si esta seleccionada, que era el hueco
+// (pendiente 7 de la fuente del gasto) -- conservando la eleccion: si la
+// seleccionada era la inyectada, reasignar el mismo value cae en la real.
+// Sin gemela no se toca nada: la persona esta inactiva de verdad.
+function quitarAusenteDuplicada(sel){
+  const ausente=sel.querySelector('option[data-ausente]');
+  if(!ausente) return;
+  const hayGemela=Array.prototype.some.call(sel.options, o=>o!==ausente && o.value===ausente.value);
+  if(!hayGemela) return;
+  const valor=sel.value;
+  ausente.remove();
+  sel.value=valor;
+}
+
 const Org = {
   // Crea una lista suelta (pide título) y la abre.
   nuevaHoja(){
@@ -4850,6 +4869,9 @@ const Org = {
         sel.appendChild(o);
       }
     }catch{ /* sin directorio quedan "Lo puse yo" y "La caja de la iglesia", ya pintadas arriba */ }
+    // El directorio acaba de llegar: si trajo a la persona de la opcion
+    // inyectada, la inyectada sobra -- se quita conservando la eleccion.
+    quitarAusenteDuplicada(sel);
     // Y si aun así hay una corrección en curso cuyo pagador el selector ya no
     // representa, se repone. Dejarlo en blanco es exactamente lo que le
     // adjudicaba la deuda a quien solo venía a corregir una falta de ortografía.
