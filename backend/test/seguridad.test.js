@@ -13,10 +13,11 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { puertoLibre } from './puerto-libre.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_PATH = path.join(__dirname, '..', 'src', 'server.js');
-const PORT = 3931;
+let PORT;            // se pide al SO en before(): ver test/puerto-libre.js
 // Se usa la IP literal, NO "localhost": limiterLogin cuenta por IP, y "localhost"
 // resuelve a ::1 y a 127.0.0.1 a la vez. Node trae autoSelectFamily activado por
 // defecto, asi que cada conexion nueva compite entre ambas familias y puede
@@ -24,7 +25,7 @@ const PORT = 3931;
 // para express-rate-limit son DOS cubos distintos: los intentos se repartirian
 // entre dos contadores y el 429 llegaria mas tarde de lo previsto (o nunca).
 const HOST = '127.0.0.1';
-const BASE = `http://${HOST}:${PORT}`;
+let BASE;            // depende de PORT: se arma en before()
 // El limite declarado en src/seguridad.js para limiterLogin.
 const LIMITE_LOGIN = 5;
 const DB_PATH = path.join(os.tmpdir(), `iglesia-test-seguridad-${Date.now()}.db`);
@@ -43,6 +44,8 @@ async function esperarListo(intentos = 60) {
 }
 
 before(async () => {
+  PORT = await puertoLibre();
+  BASE = `http://${HOST}:${PORT}`;
   servidor = spawn(process.execPath, [SERVER_PATH], {
     env: {
       ...process.env,
