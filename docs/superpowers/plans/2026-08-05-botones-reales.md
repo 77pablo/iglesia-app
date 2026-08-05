@@ -117,7 +117,7 @@ const EXCEPCIONES = [
 // Cualquier etiqueta clicable que NO sea <button> ni <a>, aunque ocupe varias
 // lineas del fuente. El match llega hasta la comilla que cierra el onclick.
 function tagsClicables() {
-  return fuente.match(/<(?!button\b|a\b|\/)[a-z0-9]+\b[^>]*onclick="[^"]*"/gi) || [];
+  return fuente.match(/<(?!button\b|a\b|\/)[a-z][a-z0-9]*\b[^>]*onclick="[^"]*"/gi) || [];
 }
 const esGuardaPura = t => /onclick="event\.stopPropagation\(\)"$/.test(t);
 
