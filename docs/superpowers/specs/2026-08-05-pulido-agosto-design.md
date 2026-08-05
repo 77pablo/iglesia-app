@@ -26,22 +26,24 @@ encabezado (`.nav-sec.con-sin-leer::after`, `web/styles.css` — la regla vive s
 en el `@media` del móvil). Es un `::after` con `content:""`: un lector de
 pantalla no anuncia nada. Pendientes 5 y 6 de la sección del menú en `ESTADO.md`.
 
-**Diseño:**
-- El punto pasa a `background: var(--red)` (el badge usa `var(--red)`,
-  `styles.css:247`). El dorado desaparece de esa regla.
-- `marcarGrupoConSinLeer()` (`web/app.js:812`) ya pone y quita la clase
-  `con-sin-leer`; ahora, en el mismo lugar:
-  - al marcar: `aria-label` en el encabezado = el título del tema + " — mensajes sin leer"
-    (compuesto desde el título del grupo, no desde `textContent`, para no
-    arrastrar flechas ni glifos);
-  - al desmarcar: se quita el `aria-label` y el botón vuelve a anunciarse por
-    su texto visible.
-- No se toca el badge ni `Chat._sinLeer`: sigue habiendo un solo dato.
+**⚠️ Corrección al planificar (5-ago):** la mitad del pendiente estaba
+desfasada. `marcarGrupoConSinLeer()` (`web/app.js:812-829`) **ya pone y quita
+el `aria-label`** ("Tema — mensajes sin leer"), y `menu-plegable.test.js`
+(`:598-626`) **ya lo asierta**, puesto, quitado y contra estado obsoleto. Lo
+trajo la reescritura del menú del 3-ago y el pendiente 5 de `ESTADO.md` nunca
+se tachó. Es la enésima lista de pendientes que envejeció sin avisar.
 
-**Prueba:** el arnés de `backend/test/menu-plegable.test.js` ya ejecuta
-`marcarGrupoConSinLeer` contra un documento simulado — se le añade la
-aserción del atributo puesto y quitado. La regla CSS se comprueba leyendo la
-fuente (con `\r?\n`, lección anotada en `ESTADO.md`).
+**Diseño (lo que de verdad queda):**
+- El punto pasa de `var(--gold)` a `var(--red)` (el badge usa `var(--red)`,
+  `styles.css:247`). Es un cambio de una palabra en `styles.css:425`.
+- Y un candado nuevo: una aserción que fija que la regla del punto usa
+  `var(--red)`, para que color del punto y color del badge no vuelvan a
+  divergir en silencio.
+- No se toca el badge, ni `Chat._sinLeer`, ni `marcarGrupoConSinLeer`.
+
+**Prueba:** aserción nueva en `menu-plegable.test.js` sobre la regla
+`.nav-sec.con-sin-leer::after` del `@media` del móvil (leyendo la fuente CSS;
+sin `.` que cruce `\r\n`, lección anotada en `ESTADO.md`).
 
 ## 2. El rótulo "(cuenta inactiva)" que miente mientras carga el directorio
 
