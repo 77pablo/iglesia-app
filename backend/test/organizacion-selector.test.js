@@ -54,7 +54,12 @@ function selectDeJuguete(opciones) {
       value, textContent: etiqueta, dataset: ausente ? { ausente: '1' } : {},
       remove() {
         sel.options.splice(sel.options.indexOf(o), 1);
-        if (sel._value === value && !sel.options.some(x => x.value === value))
+        // DOM real: quitar la <option> SELECCIONADA resetea el select a su
+        // primera opcion, por identidad de nodo -- da igual que otra opcion
+        // comparta el mismo value. Sin imitar esto, la linea `sel.value=valor`
+        // del codigo de produccion no se ejercita nunca y el test 2 no puede
+        // fallar (verificado: pasaba igual con la restauracion borrada).
+        if (sel._value === value)
           sel._value = sel.options.length ? sel.options[0].value : '';
       },
     };
