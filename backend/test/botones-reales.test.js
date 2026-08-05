@@ -41,20 +41,35 @@ const PENDIENTES = [
   `onclick="obTesoreria(`,
   `onclick="obPredica(`,
   `onclick="Org.abrir(`,
+  `onclick="abrirHimnario()`,
 ];
 
-// Cada <div ...onclick= / <span ...onclick= con lo que le sigue en su linea.
-function tagsClicables() {
-  return fuente.match(/<(?:div|span)[^\r\n>]*onclick=[^\r\n]*/g) || [];
-}
+// Excepciones con motivo escrito: clicables que NO se convierten a proposito.
+const EXCEPCIONES = [
+  // El chip de evento del calendario vive DENTRO de la celda del dia, que ya
+  // es un <button> (anidar botones esta prohibido y el navegador los desanida
+  // rompiendo el layout). Su contenido completo se alcanza con teclado:
+  // celda -> panel del dia, que pinta titulo, hora, lugar y estado con
+  // botones reales. El chip queda como atajo de raton.
+  `onclick="event.stopPropagation();abrirEvento(`,
+];
 
-test('ningun <div>/<span> clicable fuera de la deuda declarada', () => {
-  const usados = new Set();
+// Cualquier etiqueta clicable que NO sea <button> ni <a>, aunque ocupe varias
+// lineas del fuente. El match llega hasta la comilla que cierra el onclick.
+function tagsClicables() {
+  return fuente.match(/<(?!button\b|a\b|\/)[a-z0-9]+\b[^>]*onclick="[^"]*"/gi) || [];
+}
+const esGuardaPura = t => /onclick="event\.stopPropagation\(\)"$/.test(t);
+
+test('ningun clicable fuera de <button>/<a>, salvo deuda y excepciones declaradas', () => {
+  const usados = new Set(), excUsadas = new Set();
   for (const tag of tagsClicables()) {
-    if (tag.includes('stopPropagation')) continue;   // se cuentan aparte abajo
+    if (esGuardaPura(tag)) continue;   // guardas de modal, contadas aparte abajo
+    const exc = EXCEPCIONES.find(e => tag.includes(e));
+    if (exc) { excUsadas.add(exc); continue; }
     const p = PENDIENTES.find(p => tag.includes(p));
     assert.ok(p,
-      'Control clicable nuevo como <div>/<span>:\n  ' + tag.slice(0, 120) +
+      'Control clicable nuevo fuera de <button>/<a>:\n  ' + tag.replace(/\s+/g, ' ').slice(0, 120) +
       '\nUsa <button type="button" class="btn-plano ..."> — Tab, Enter y el ' +
       'lector de pantalla vienen gratis. No agregues entradas a PENDIENTES.');
     usados.add(p);
@@ -63,15 +78,19 @@ test('ningun <div>/<span> clicable fuera de la deuda declarada', () => {
     assert.ok(usados.has(p),
       `La entrada ya se convirtio (o cambio de forma): quitala de PENDIENTES -> ${p}`);
   }
+  for (const e of EXCEPCIONES) {
+    assert.ok(excUsadas.has(e),
+      `La excepcion ya no existe en el fuente: quitala (y su motivo) -> ${e}`);
+  }
 });
 
-test('los onclick de stopPropagation son exactamente los 6 de los modales', () => {
+test('las guardas puras de stopPropagation son exactamente las 6 de los modales', () => {
   // No son controles: solo evitan que el clic dentro del modal lo cierre.
   // Si agregas un modal nuevo con esta tecnica, sube el numero A PROPOSITO.
-  const n = tagsClicables().filter(t => t.includes('stopPropagation')).length;
+  const n = tagsClicables().filter(esGuardaPura).length;
   assert.equal(n, 6,
-    `hay ${n} onclick de stopPropagation y se esperaban 6 — si es un modal ` +
-    'nuevo legitimo, actualiza este numero; si no, algo se colo');
+    `hay ${n} guardas puras de stopPropagation y se esperaban 6 — si es un ` +
+    'modal nuevo legitimo, actualiza este numero; si no, algo se colo');
 });
 
 test('.btn-plano existe y tiene foco visible', () => {
