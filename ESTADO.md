@@ -3,6 +3,36 @@
 
 ---
 
+## 🆕 5 DE AGOSTO DE 2026 — ⌨️ toda la app se usa con teclado: los 21 divs clicables son botones
+
+La otra mitad de la brecha de accesibilidad que dejó anotada el menú (su punto
+4 de "sigue sin resolver") quedó cerrada: **los 22 controles clicables que no
+eran `<button>` fuera del menú lo son ahora, de verdad** — panel de inicio,
+celdas del calendario, notificaciones, asistencia (el toggle de presente lleva
+`aria-pressed`), música (el × de quitar integrante ganó `aria-label`, y el 🎵
+del himnario era un `<b>`), himnario, cuidado pastoral, Escuela Dominical,
+prédicas, panel del obispo y hojas de Organización. Visual idéntico: la clase
+`.btn-plano` (`web/styles.css`) neutraliza el estilo nativo y las clases de
+siempre mandan.
+
+**El candado es un barrido multilínea** (`backend/test/botones-reales.test.js`):
+cualquier etiqueta clicable que no sea `<button>`/`<a>` rompe la suite con un
+mensaje que dice qué usar, salvo las 6 guardas puras de `stopPropagation` de
+los modales y **una excepción con motivo escrito**: el chip `cal-ev` del
+calendario, que vive dentro de la celda-botón (anidar botones está prohibido)
+y cuyo contenido completo se alcanza por teclado vía celda → panel del día.
+La lista `PENDIENTES` del barrido quedó vacía y así se queda.
+⚠️ La primera versión del barrido era de una sola línea y solo `div`/`span`:
+así se escaparon el `<b>` del himnario y el chip — lo cazó la review de la
+primera tarea. Si un barrido futuro filtra por forma, que busque la forma
+del fallo, no la forma del ejemplo.
+
+**Fuera de alcance, a propósito:** el overlay del cajón del menú (es fondo, no
+control), `kiosko.html`/`inscribir.html` (despliegue facial aparte) y las
+páginas legales. Spec: `docs/superpowers/specs/2026-08-05-botones-reales-design.md`.
+
+---
+
 ## 🆕 4 DE AGOSTO DE 2026 — el menú plegable quedó en `main`, y el hallazgo del 500 del perfil, cerrado
 
 **El menú plegable accesible se fusionó a `main`** (merge `40122f5`, `--no-ff`, rama
@@ -140,7 +170,7 @@ Suite aquel 31 de julio: partió en 526, llegó a **536**. Hoy, con el mecanismo
 > 1. ~~Esto mejora buscar, no acorta el scroll.~~ **(desfasado, resuelto):** era justo el hueco que cerró el acordeón de `feat/menu-plegable` — con un solo tema abierto a la vez el scroll SÍ se acorta ahora. No hizo falta esperar a un trabajo futuro de "secciones plegables": es lo que hay descrito arriba.
 > 2. **Dos personas de la misma iglesia ven el menú con estructura distinta**, según crucen o no el umbral de 12. Sigue igual: es un paso pequeño sobre algo que ya pasaba (cada rol ve entradas distintas), pero conviene tenerlo escrito antes de que alguien lo reporte como fallo.
 > 3. **El umbral de 12 sigue siendo un número elegido, no medido.** Nadie sabe todavía cómo usa el pastor la app en el teléfono. Cuando haya ese dato, se puede ajustar — o sustituir todo esto por accesos rápidos a lo que de verdad se usa.
-> 4. **El resto de la app sigue sin botones reales.** El menú ya es accesible por teclado; fuera de él quedan cerca de 20 `<div onclick>` (contados hoy con un grep sobre `web/app.js`, sin contar los que solo cortan la propagación de un clic dentro de un modal) que no se alcanzan con Tab. Es la mitad de la brecha de accesibilidad que quedaba anotada aquí; la otra mitad, el menú mismo, ya se cerró.
+> 4. **(desfasado, resuelto el 5-ago:** ver la sección de esa fecha**)** ~~**El resto de la app sigue sin botones reales.** El menú ya es accesible por teclado; fuera de él quedan cerca de 20 `<div onclick>` (contados hoy con un grep sobre `web/app.js`, sin contar los que solo cortan la propagación de un clic dentro de un modal) que no se alcanzan con Tab. Es la mitad de la brecha de accesibilidad que quedaba anotada aquí; la otra mitad, el menú mismo, ya se cerró.~~
 > 5. **El punto de sin-leer no tiene nombre accesible.** Es un `::after` puramente visual (`content:""`, `web/styles.css:420-421`): un lector de pantalla no anuncia nada distinto en un encabezado con mensajes pendientes. Hoy el punto solo lo ve quien ve. Falta un `aria-label` (o un texto oculto) en el encabezado cuando lleva la clase `con-sin-leer`.
 > 6. **El punto es dorado y el badge que representa es rojo.** Comparten el mismo dato (`Chat._sinLeer`), pero no el mismo color — nadie decidió que debieran combinar, simplemente no combinan.
 > 7. **A un líder de cuerpo se le pinta el encabezado "Pastoreo" con una sola entrada debajo** (verificado a mano: de los 12 módulos que ve ese rol, "Pastoreo" solo trae `asistencia`; "Administración" directamente desaparece, por vacío). La regla descarta grupos **vacíos**, no grupos de uno. Sigue siendo un dato de interfaz, no un defecto: queda decidir si un encabezado para una sola entrada compensa.

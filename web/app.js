@@ -890,20 +890,20 @@ async function renderDashboard(){
 
   // --- Resumen: 3 métricas clicables ---
   const resumen=`<div class="widgets" style="margin-bottom:20px">
-    <div class="widget" style="cursor:pointer" onclick="navTo('calendario')">
+    <button type="button" class="btn-plano widget" onclick="navTo('calendario')">
       <div class="widget-head">📅 Próximo evento</div>
       ${proximo
         ? `<div class="stat-num" style="font-size:22px">${fechaTxt(proximo.fecha)}</div><div class="muted small">${escHtml(proximo.titulo)}${proximo.hora_inicio?' · '+escHtml(proximo.hora_inicio):''}</div>`
         : '<div class="empty">Sin eventos próximos</div>'}
-    </div>
-    <div class="widget" style="cursor:pointer" onclick="navTo('mi_servicio')">
+    </button>
+    <button type="button" class="btn-plano widget" onclick="navTo('mi_servicio')">
       <div class="widget-head">🙌 Servicios por confirmar</div>
       <div class="stat-num" style="color:${pendientes.length?'var(--amber-tx)':'var(--green-tx)'}">${pendientes.length}</div>
-    </div>
-    <div class="widget" style="cursor:pointer" onclick="verNotificaciones()">
+    </button>
+    <button type="button" class="btn-plano widget" onclick="verNotificaciones()">
       <div class="widget-head">🔔 Notificaciones sin leer</div>
       <div class="stat-num" style="color:${sinLeer?'var(--primary)':'var(--muted)'}">${sinLeer}</div>
-    </div>
+    </button>
   </div>`;
 
   // --- Lo más útil: lo que TE toca confirmar (accionable aquí mismo) ---
@@ -924,13 +924,13 @@ async function renderDashboard(){
   // --- Próximos eventos + Anuncios recientes ---
   const listaEventos=eventos.length
     ? `<div class="mini-list">`+eventos.slice(0,4).map(e=>
-        `<div class="mini-item" style="cursor:pointer" onclick="navTo('calendario')">${chipFecha(e.fecha)}
-         <div><b>${escHtml(e.titulo)}</b><br><span class="muted small">${escHtml(e.grupo||'')}${e.hora_inicio?' · '+e.hora_inicio:''}</span></div></div>`).join('')+`</div>`
+        `<button type="button" class="btn-plano mini-item" onclick="navTo('calendario')">${chipFecha(e.fecha)}
+         <div><b>${escHtml(e.titulo)}</b><br><span class="muted small">${escHtml(e.grupo||'')}${e.hora_inicio?' · '+e.hora_inicio:''}</span></div></button>`).join('')+`</div>`
     : '<div class="empty">No hay eventos próximos.</div>';
   const listaAnuncios=anuncios.length
     ? `<div class="mini-list">`+anuncios.slice(0,3).map(a=>
-        `<div class="mini-item" style="cursor:pointer" onclick="navTo('anuncios')"><span style="font-size:20px">${a.urgente?'🔴':'📢'}</span>
-         <div><b>${escHtml(a.titulo)}</b><br><span class="muted small">${escHtml((a.texto||'').slice(0,80))}</span></div></div>`).join('')+`</div>`
+        `<button type="button" class="btn-plano mini-item" onclick="navTo('anuncios')"><span style="font-size:20px">${a.urgente?'🔴':'📢'}</span>
+         <div><b>${escHtml(a.titulo)}</b><br><span class="muted small">${escHtml((a.texto||'').slice(0,80))}</span></div></button>`).join('')+`</div>`
     : '<div class="empty">Sin anuncios.</div>';
   const columnas=`<div class="widgets">
     <div class="widget"><div class="widget-head">📅 Próximos eventos</div>${listaEventos}</div>
@@ -1077,8 +1077,8 @@ function renderCalendario(){
         onclick="event.stopPropagation();abrirEvento(${e.id})">${e.hora_inicio?'<b>'+e.hora_inicio+'</b> ':''}${escHtml(e.titulo)}</div>`;
     }).join('');
     const mas=delDia.length>3?`<div class="cal-mas">+${delDia.length-3} más</div>`:'';
-    celdas+=`<div class="cal-cell${esHoy?' today':''}${finde?' finde':''}${sel?' sel':''}${delDia.length?' tiene':''}" onclick="verDia('${fecha}')">
-      <div class="cal-daynum">${dia}</div>${chips?`<div class="cal-puntos">${chips}</div>`:''}${mas}</div>`;
+    celdas+=`<button type="button" class="btn-plano cal-cell${esHoy?' today':''}${finde?' finde':''}${sel?' sel':''}${delDia.length?' tiene':''}" onclick="verDia('${fecha}')">
+      <div class="cal-daynum">${dia}</div>${chips?`<div class="cal-puntos">${chips}</div>`:''}${mas}</button>`;
   }
   const resto=(7-((offset+dias)%7))%7;
   for(let i=0;i<resto;i++) celdas+=`<div class="cal-cell empty"></div>`;
@@ -1491,9 +1491,9 @@ async function verNotificaciones(){
 function filaNotif(n){
   const dest=_destinoNotif(n.tipo);
   const accion=n.tipo==='aprobacion'?'Revisar y aprobar ›':(dest?'Ver ›':'');
-  return `<div class="notif-item ${n.leida?'':'no-leida'}" ${dest?`style="cursor:pointer" onclick="abrirNotif('${n.tipo}')"`:''}>
+  return `${dest?`<button type="button" class="btn-plano notif-item ${n.leida?'':'no-leida'}" onclick="abrirNotif('${n.tipo}')">`:`<div class="notif-item ${n.leida?'':'no-leida'}">`}
     <div style="font-weight:600">${escHtml(n.titulo)}</div>${n.texto?`<div class="muted small">${escHtml(n.texto)}</div>`:''}
-    ${accion?`<div class="small" style="color:var(--primary);font-weight:600;margin-top:4px">${accion}</div>`:''}</div>`;
+    ${accion?`<div class="small" style="color:var(--primary);font-weight:600;margin-top:4px">${accion}</div>`:''}${dest?'</button>':'</div>'}`;
 }
 // El backend ya paginaba de 50 en 50 y mandaba hayMas (notificaciones.js:79-92);
 // esta pantalla simplemente nunca lo miró, así que pasadas 50 notificaciones las
@@ -1536,9 +1536,9 @@ async function vistaAsistencia(){
     const ev=await api('/eventos');
     if(!ev.length){ $('lista').innerHTML='<div class="placeholder"><div class="big">✅</div><p>No hay eventos para registrar.</p></div>'; return; }
     $('lista').className='list';
-    $('lista').innerHTML=ev.map(e=>`<div class="item-card flex" style="cursor:pointer" onclick="hojaAsistencia(${e.id})">
+    $('lista').innerHTML=ev.map(e=>`<button type="button" class="btn-plano item-card flex" onclick="hojaAsistencia(${e.id})">
       ${fechaChip(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
-      <div class="muted small">${escHtml(e.grupo||'')}</div></div><span class="muted" style="font-size:20px">›</span></div>`).join('');
+      <div class="muted small">${escHtml(e.grupo||'')}</div></div><span class="muted" style="font-size:20px">›</span></button>`).join('');
   }catch{ $('lista').innerHTML=errCargar('vistaAsistencia()','la hoja de asistencia'); }
 }
 
@@ -1574,9 +1574,9 @@ function renderHoja(d){
 }
 function filaAsist(m, on){
   const editable = window._puedeEditar;
-  return `<div class="asist-row ${on?'on':''}" ${editable?`onclick="togglePresente(${m.id})"`:'style="cursor:default"'}>
+  return `${editable?`<button type="button" class="btn-plano asist-row ${on?'on':''}" aria-pressed="${on?'true':'false'}" onclick="togglePresente(${m.id})">`:`<div class="asist-row ${on?'on':''}" style="cursor:default">`}
     <div><div>${escHtml(m.nombre)}</div>${m.grupos?`<div class="muted small">🏷️ ${escHtml(m.grupos)}</div>`:''}</div>
-    <span class="tick">${on?'✅':'○'}</span></div>`;
+    <span class="tick">${on?'✅':'○'}</span>${editable?'</button>':'</div>'}`;
 }
 function renderListasAsist(){
   const miembros = window._hojaMiembros || [];
@@ -1932,8 +1932,8 @@ function renderCanciones(q){
   if(!lista.length){ cont.className='muted'; cont.innerHTML='<p class="small">'+(todas.length?'Sin resultados para “'+escHtml(q||'')+'”.':'Aún no hay canciones.')+'</p>'; return; }
   cont.className='list';
   const puede=esLiderMusicaUI();
-  cont.innerHTML=lista.map(c=>`<div class="item-card flex"><div style="flex:1;cursor:pointer" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
-    <span class="estado-chip">${escHtml(c.tono||'—')}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></div>
+  cont.innerHTML=lista.map(c=>`<div class="item-card flex"><button type="button" class="btn-plano" style="flex:1" onclick="abrirVisorCancion(${c.id})" title="Ver y transponer"><b>${escHtml(c.titulo)}</b>
+    <span class="estado-chip">${escHtml(c.tono||'—')}</span>${(c.letra||'').trim()?' <span class="estado-chip estado-aceptado">🎸 acordes</span>':''}<div class="muted small">${escHtml(c.autor||'')}</div></button>
     ${puede?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar canción" onclick="borrarCancion(${c.id})">🗑️</button>`:''}</div>`).join('');
 }
 function borrarCancion(id){ modalConfirm('¿Eliminar esta canción del cancionero?', async()=>{
@@ -1962,8 +1962,8 @@ async function cargarSetlist(eventoId){
     let html = items.length
       ? '<div class="list">'+items.map((s,i)=>`<div class="item-card flex">
           <span class="mini-date" style="min-width:34px"><b>${i+1}</b></span>
-          <div style="flex:1;cursor:pointer" onclick="abrirVisorSetlist(${s.cancion_id},${escJsAttr(s.tono_dia||'')})" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
-          <div class="muted small">${escHtml(s.autor||'')}</div></div>
+          <button type="button" class="btn-plano" style="flex:1" onclick="abrirVisorSetlist(${s.cancion_id},${escJsAttr(s.tono_dia||'')})" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
+          <div class="muted small">${escHtml(s.autor||'')}</div></button>
           ${lider?`<button class="link" onclick="quitarSetlist(${s.id})">Quitar</button>`:''}</div>`).join('')+'</div>'
       : '<p class="muted small">Sin canciones en este servicio.</p>';
     if(lider){
@@ -2009,7 +2009,7 @@ async function cargarPlan(eventoId){
       ? '<div class="list" style="margin-top:6px">'+[...porPersona.values()].map(p=>`<div class="item-card flex">
           <div style="flex:1"><b>${escHtml(p.nombre)}</b>
             <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;vertical-align:middle">${p.items.map(it=>
-              `<span class="estado-chip">${escHtml(it.instrumento||'—')}${lider?` <span title="Quitar" style="cursor:pointer;color:var(--red-tx);font-weight:700;margin-left:2px" onclick="quitarIntegrante(${it.id})">×</span>`:''}</span>`).join('')}</span>
+              `<span class="estado-chip">${escHtml(it.instrumento||'—')}${lider?` <button type="button" class="btn-plano" title="Quitar" aria-label="Quitar del equipo" style="color:var(--red-tx);font-weight:700;margin-left:2px" onclick="quitarIntegrante(${it.id})">×</button>`:''}</span>`).join('')}</span>
           </div></div>`).join('')+'</div>'
       : '<p class="muted small" style="margin-top:6px">Aún no hay equipo asignado.</p>';
     // Form para agregar (solo líder)
@@ -2058,7 +2058,7 @@ async function cargarMaterialMusica(){
       const esHimnario = m.archivo_url==='/assets/himnario-nuevo.pdf';
       const puedeBorrar = !permanente && (lider || m.creado_por===ME.persona.id);
       const titulo = esHimnario
-        ? `<b class="mus-himnario" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</b>`
+        ? `<button type="button" class="btn-plano mus-himnario" style="font-weight:700" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</button>`
         : `<b>${escHtml(m.titulo)}</b>`;
       const sub = esHimnario
         ? `<div class="muted small"><a href="javascript:abrirHimnario()">🔎 Abrir cancionero (buscar y transponer)</a> · <a href="${escHtml(safeUrl(m.archivo_url))}" target="_blank">descargar PDF</a></div>`
@@ -2175,8 +2175,8 @@ function himnarioBuscar(q){
   // Se pintan TODOS. Antes se cortaba en 300 y, con 522 himnos, los últimos no
   // aparecían nunca al abrir el himnario: había que adivinar el título para que
   // el buscador los sacara. Son 522 <div>: el navegador con eso no se despeina.
-  cont.innerHTML=lista.map(h=>`<div class="hmodal-song ${_hmSel&&_hmSel.id===h.id?'sel':''}" onclick="himnarioSel(${escJsAttr(h.id)})">
-    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span>${h.seccion===2?' <span class="muted small">· coros</span>':''}</div>`).join('');
+  cont.innerHTML=lista.map(h=>`<button type="button" class="btn-plano hmodal-song ${_hmSel&&_hmSel.id===h.id?'sel':''}" onclick="himnarioSel(${escJsAttr(h.id)})">
+    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span>${h.seccion===2?' <span class="muted small">· coros</span>':''}</button>`).join('');
 }
 // Se selecciona por `id`, no por número: los números se repiten entre las dos
 // secciones y un find(h=>h.n===n) devolvía SIEMPRE el de la primera. Tocar
@@ -2305,9 +2305,9 @@ async function cargarCasos(){
     if(!casos.length){ cont.className='muted'; cont.innerHTML='<div class="placeholder"><div class="big">❤️</div><p>No hay casos de cuidado.</p></div>'; return; }
     cont.className='list';
     cont.innerHTML=casos.map(c=>{const[si,sl,cls]=CASO_ESTADO[c.estado]||['','',''];
-      return `<div class="item-card flex" style="cursor:pointer" onclick="verCaso(${c.id})">
+      return `<button type="button" class="btn-plano item-card flex" onclick="verCaso(${c.id})">
         <div style="flex:1"><b>${MOTIVO_ICON[c.motivo]||'❔'} ${escHtml(c.nombre)}</b><div class="muted small">${cap(c.motivo||'')}</div></div>
-        <span class="estado-chip ${cls}">${si} ${sl}</span></div>`;}).join('');
+        <span class="estado-chip ${cls}">${si} ${sl}</span></button>`;}).join('');
   }catch(e){ $('lista-casos').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
 async function toggleFormCaso(){
@@ -2753,9 +2753,9 @@ async function cargarClases(){
     const cl=await api('/ninos/clases'); const c=$('clases');
     if(!cl.length){ c.className='muted'; c.innerHTML='<div class="placeholder"><div class="big">👶</div><p>No hay clases aún.</p></div>'; return; }
     c.className='grid';
-    c.innerHTML=cl.map(x=>`<div class="module-card" onclick="vistaClase(${x.id},${escJsAttr(x.nombre||'')})">
+    c.innerHTML=cl.map(x=>`<button type="button" class="btn-plano module-card" onclick="vistaClase(${x.id},${escJsAttr(x.nombre||'')})">
       <div class="icon">📚</div><div class="label">${escHtml(x.nombre)}</div>
-      <div class="muted small">${escHtml(x.edad||'')} · ${x.ninos} niños</div></div>`).join('');
+      <div class="muted small">${escHtml(x.edad||'')} · ${x.ninos} niños</div></button>`).join('');
   }catch(e){ $('clases').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
 function formClase(){ const z=$('form-clase'); if(z.innerHTML){z.innerHTML='';return;}
@@ -3151,10 +3151,10 @@ function renderPredicas(items){
   const c=$('pr-lista');
   if(!items.length){ c.className='muted'; c.innerHTML='<p class="small">Aún no hay prédicas registradas.</p>'; return; }
   c.className='list';
-  c.innerHTML=items.map(p=>`<div class="item-card flex" style="cursor:pointer" onclick="verPredica(${p.id})">
+  c.innerHTML=items.map(p=>`<button type="button" class="btn-plano item-card flex" onclick="verPredica(${p.id})">
     ${chipFecha(p.fecha||'')}<div style="flex:1"><div class="item-titulo">${escHtml(p.titulo)}</div>
     <div class="muted small">${p.predicador?'🎤 '+escHtml(p.predicador):''}${p.recursos?' · 📎 '+p.recursos+' recurso(s)':''}</div></div>
-    <span class="muted" style="font-size:20px">›</span></div>`).join('');
+    <span class="muted" style="font-size:20px">›</span></button>`).join('');
 }
 async function verPredica(id){
   $('content').innerHTML='<button class="link" onclick="vistaPredica()">‹ Prédicas</button><div id="prd" class="muted">Cargando…</div>';
@@ -3264,7 +3264,7 @@ async function vistaPanelObispo(){
   $('ob').className='';
   $('ob').innerHTML=`<div class="hero"><h2>👑 Panel del Obispo</h2><p>Visión de todas las iglesias (${list.length}) · 👁️ solo lectura</p></div>
     <div class="grid" style="margin-top:18px">${list.map(i=>`
-      <div class="module-card" style="text-align:left;align-items:stretch" onclick="verIglesiaObispo(${i.id})">
+      <button type="button" class="btn-plano module-card" style="text-align:left;align-items:stretch" onclick="verIglesiaObispo(${i.id})">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div class="label" style="font-size:16px">⛪ ${escHtml(i.nombre)}</div><span class="estado-chip">${escHtml(i.codigo_unico)}</span></div>
         <div class="muted small" style="margin:6px 0 10px">Pastor: ${escHtml(i.pastor||'—')}</div>
@@ -3273,7 +3273,7 @@ async function vistaPanelObispo(){
           <span class="estado-chip">📅 ${i.eventos}</span>
           <span class="estado-chip">📊 asist. ${i.asistenciaPromedio}</span>
           <span class="estado-chip">💰 ${money(i.saldo)}</span>
-        </div></div>`).join('')}</div>`;
+        </div></button>`).join('')}</div>`;
 }
 let _obMes=null;
 async function verIglesiaObispo(id, mes){
@@ -3295,12 +3295,12 @@ async function verIglesiaObispo(id, mes){
     </div>
     <div class="widgets" style="margin-bottom:18px">
       <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${d.miembros}</div></div>
-      <div class="widget" style="cursor:pointer" onclick="obAsistencia(${id})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></div>
-      <div class="widget" style="cursor:pointer" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></div>
+      <button type="button" class="btn-plano widget" onclick="obAsistencia(${id})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></button>
+      <button type="button" class="btn-plano widget" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></button>
     </div>
     ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green-tx)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red-tx)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${id})">Ver movimientos ›</button>`)}
     ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${escHtml(e.grupo||'')} · ${escHtml(e.estado)}</div></div><span class="estado-chip">✅ ${e.asistencia}</span></div>`, 'Sin eventos este mes.'))}
-    ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<div class="item-card flex" style="cursor:pointer" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${escHtml(p.predicador||'')}</div></div><span class="muted" style="font-size:18px">›</span></div>`, 'Sin prédicas este mes.'))}
+    ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<button type="button" class="btn-plano item-card flex" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${escHtml(p.predicador||'')}</div></div><span class="muted" style="font-size:18px">›</span></button>`, 'Sin prédicas este mes.'))}
     <div class="widgets" style="margin-bottom:16px">
       <div class="widget"><div class="widget-head">📢 Anuncios (mes)</div><div class="stat-num">${d.anunciosMes}</div></div>
       <div class="widget"><div class="widget-head">❤️ Casos de cuidado abiertos</div><div class="stat-num">${d.cuidado.casosAbiertos}</div></div>
@@ -4609,11 +4609,11 @@ async function vistaOrganizacion(){
     z.innerHTML = hojas.length ? hojas.map(h=>{
       const titulo = h.evento_titulo || h.titulo || '(sin título)';
       const fecha = h.evento_fecha || h.fecha;
-      return `<div class="item-card flex" style="margin-top:10px;cursor:pointer" onclick="Org.abrir(${h.id},'organizacion')">
+      return `<button type="button" class="btn-plano item-card flex" style="margin-top:10px" onclick="Org.abrir(${h.id},'organizacion')">
         <div style="flex:1"><div class="item-titulo">${escHtml(titulo)}</div>
           <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''} · ${h.n_cosas||0} cosa(s)</div></div>
         <div style="text-align:right"><b>${money(h.total_gastado)}</b><div class="muted small">gastado</div></div>
-      </div>`;
+      </button>`;
     }).join('') : '<p class="muted small">Aún no hay listas. Crea una con "Nueva lista".</p>';
   }catch(e){ const z=$('org-lista'); z.className='error'; z.textContent=(e&&e.message)||'No se pudo cargar'; }
 }

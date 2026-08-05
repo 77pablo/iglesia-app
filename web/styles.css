@@ -110,6 +110,10 @@ h1,h2,h3{letter-spacing:-.018em;line-height:1.25;}
 .btn.ghost:disabled:hover{background:var(--surface);border-color:var(--border);filter:none;}
 .btn.danger:disabled:hover{background:var(--red);}
 .link:disabled:hover{color:var(--primary-tx);gap:4px;}
+/* Botones que se visten con las clases de la tarjeta que envuelven:
+   el reseteo deja que .widget, .item-card, .cal-cell... manden. */
+.btn-plano{appearance:none;-webkit-appearance:none;background:none;border:0;font:inherit;color:inherit;text-align:inherit;padding:0;cursor:pointer}
+.btn-plano:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .row{display:flex;gap:10px;}
 .row > .btn{flex:1;}                      /* solo los botones en fila comparten ancho */
 .login-card .step > .btn{width:100%;}     /* botón único de paso: full-width consistente */
