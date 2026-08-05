@@ -1,9 +1,13 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 31 de julio de 2026 (quién puede retirar a cada niño + poder corregir su ficha; texto legal corregido; la bandeja del portal público y la fuente del gasto, construidas; poder corregir el nombre propio o el de otro, **fusionado a `main` y subido** — ~~construido en rama local sin fusionar~~ *(desfasado)*; el menú del móvil agrupado por temas, construido en la rama local `feat/menu-agrupado`, esa sí sin fusionar; el push muere con la sesión, construido en la rama `feat/push-muere-con-sesion`). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 5 de agosto de 2026 (toda la app se usa con teclado — los divs clicables fuera del menú son botones de verdad, **fusionado a `main`**; no queda ninguna rama de trabajo local: `feat/menu-agrupado`, `feat/menu-plegable`, `feat/push-muere-con-sesion` y `feat/botones-reales` ya se fusionaron y se borraron). ⬆️ **`main` quedó SIN SUBIR ese día** (11 commits al momento de escribirse esto — el push lo hace Pablo con GitHub Desktop). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
 ## 🆕 5 DE AGOSTO DE 2026 — ⌨️ toda la app se usa con teclado: los 21 divs clicables son botones
+
+**Fusionado a `main` el mismo día** (merge `92b36b1`, `--no-ff`, rama `feat/botones-reales`
+borrada; suite re-corrida sobre la fusión: 624 en verde). **Sin subir a GitHub** al momento
+de escribirse esto — compruébalo con `git log origin/main..main --oneline`.
 
 La otra mitad de la brecha de accesibilidad que dejó anotada el menú (su punto
 4 de "sigue sin resolver") quedó cerrada: **los 22 controles clicables que no
