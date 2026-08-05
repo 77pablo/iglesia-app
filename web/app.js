@@ -890,20 +890,20 @@ async function renderDashboard(){
 
   // --- Resumen: 3 métricas clicables ---
   const resumen=`<div class="widgets" style="margin-bottom:20px">
-    <div class="widget" style="cursor:pointer" onclick="navTo('calendario')">
+    <button type="button" class="btn-plano widget" onclick="navTo('calendario')">
       <div class="widget-head">📅 Próximo evento</div>
       ${proximo
         ? `<div class="stat-num" style="font-size:22px">${fechaTxt(proximo.fecha)}</div><div class="muted small">${escHtml(proximo.titulo)}${proximo.hora_inicio?' · '+escHtml(proximo.hora_inicio):''}</div>`
         : '<div class="empty">Sin eventos próximos</div>'}
-    </div>
-    <div class="widget" style="cursor:pointer" onclick="navTo('mi_servicio')">
+    </button>
+    <button type="button" class="btn-plano widget" onclick="navTo('mi_servicio')">
       <div class="widget-head">🙌 Servicios por confirmar</div>
       <div class="stat-num" style="color:${pendientes.length?'var(--amber-tx)':'var(--green-tx)'}">${pendientes.length}</div>
-    </div>
-    <div class="widget" style="cursor:pointer" onclick="verNotificaciones()">
+    </button>
+    <button type="button" class="btn-plano widget" onclick="verNotificaciones()">
       <div class="widget-head">🔔 Notificaciones sin leer</div>
       <div class="stat-num" style="color:${sinLeer?'var(--primary)':'var(--muted)'}">${sinLeer}</div>
-    </div>
+    </button>
   </div>`;
 
   // --- Lo más útil: lo que TE toca confirmar (accionable aquí mismo) ---
@@ -924,13 +924,13 @@ async function renderDashboard(){
   // --- Próximos eventos + Anuncios recientes ---
   const listaEventos=eventos.length
     ? `<div class="mini-list">`+eventos.slice(0,4).map(e=>
-        `<div class="mini-item" style="cursor:pointer" onclick="navTo('calendario')">${chipFecha(e.fecha)}
-         <div><b>${escHtml(e.titulo)}</b><br><span class="muted small">${escHtml(e.grupo||'')}${e.hora_inicio?' · '+e.hora_inicio:''}</span></div></div>`).join('')+`</div>`
+        `<button type="button" class="btn-plano mini-item" onclick="navTo('calendario')">${chipFecha(e.fecha)}
+         <div><b>${escHtml(e.titulo)}</b><br><span class="muted small">${escHtml(e.grupo||'')}${e.hora_inicio?' · '+e.hora_inicio:''}</span></div></button>`).join('')+`</div>`
     : '<div class="empty">No hay eventos próximos.</div>';
   const listaAnuncios=anuncios.length
     ? `<div class="mini-list">`+anuncios.slice(0,3).map(a=>
-        `<div class="mini-item" style="cursor:pointer" onclick="navTo('anuncios')"><span style="font-size:20px">${a.urgente?'🔴':'📢'}</span>
-         <div><b>${escHtml(a.titulo)}</b><br><span class="muted small">${escHtml((a.texto||'').slice(0,80))}</span></div></div>`).join('')+`</div>`
+        `<button type="button" class="btn-plano mini-item" onclick="navTo('anuncios')"><span style="font-size:20px">${a.urgente?'🔴':'📢'}</span>
+         <div><b>${escHtml(a.titulo)}</b><br><span class="muted small">${escHtml((a.texto||'').slice(0,80))}</span></div></button>`).join('')+`</div>`
     : '<div class="empty">Sin anuncios.</div>';
   const columnas=`<div class="widgets">
     <div class="widget"><div class="widget-head">📅 Próximos eventos</div>${listaEventos}</div>
@@ -1077,8 +1077,8 @@ function renderCalendario(){
         onclick="event.stopPropagation();abrirEvento(${e.id})">${e.hora_inicio?'<b>'+e.hora_inicio+'</b> ':''}${escHtml(e.titulo)}</div>`;
     }).join('');
     const mas=delDia.length>3?`<div class="cal-mas">+${delDia.length-3} más</div>`:'';
-    celdas+=`<div class="cal-cell${esHoy?' today':''}${finde?' finde':''}${sel?' sel':''}${delDia.length?' tiene':''}" onclick="verDia('${fecha}')">
-      <div class="cal-daynum">${dia}</div>${chips?`<div class="cal-puntos">${chips}</div>`:''}${mas}</div>`;
+    celdas+=`<button type="button" class="btn-plano cal-cell${esHoy?' today':''}${finde?' finde':''}${sel?' sel':''}${delDia.length?' tiene':''}" onclick="verDia('${fecha}')">
+      <div class="cal-daynum">${dia}</div>${chips?`<div class="cal-puntos">${chips}</div>`:''}${mas}</button>`;
   }
   const resto=(7-((offset+dias)%7))%7;
   for(let i=0;i<resto;i++) celdas+=`<div class="cal-cell empty"></div>`;
@@ -1491,9 +1491,9 @@ async function verNotificaciones(){
 function filaNotif(n){
   const dest=_destinoNotif(n.tipo);
   const accion=n.tipo==='aprobacion'?'Revisar y aprobar ›':(dest?'Ver ›':'');
-  return `<div class="notif-item ${n.leida?'':'no-leida'}" ${dest?`style="cursor:pointer" onclick="abrirNotif('${n.tipo}')"`:''}>
+  return `${dest?`<button type="button" class="btn-plano notif-item ${n.leida?'':'no-leida'}" onclick="abrirNotif('${n.tipo}')">`:`<div class="notif-item ${n.leida?'':'no-leida'}">`}
     <div style="font-weight:600">${escHtml(n.titulo)}</div>${n.texto?`<div class="muted small">${escHtml(n.texto)}</div>`:''}
-    ${accion?`<div class="small" style="color:var(--primary);font-weight:600;margin-top:4px">${accion}</div>`:''}</div>`;
+    ${accion?`<div class="small" style="color:var(--primary);font-weight:600;margin-top:4px">${accion}</div>`:''}${dest?'</button>':'</div>'}`;
 }
 // El backend ya paginaba de 50 en 50 y mandaba hayMas (notificaciones.js:79-92);
 // esta pantalla simplemente nunca lo miró, así que pasadas 50 notificaciones las
