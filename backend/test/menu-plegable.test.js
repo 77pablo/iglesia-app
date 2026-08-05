@@ -642,3 +642,16 @@ test('el CSS del punto vive dentro del @media y se calla con el tema abierto', (
   assert.ok(/aria-expanded="true"\][^{]*\.con-sin-leer|\.con-sin-leer[^{]*\[aria-expanded="true"\]/.test(movil),
     'el punto no se oculta con el tema abierto: se veria a la vez que el badge, diciendo lo mismo dos veces');
 });
+
+test('el punto de sin-leer es ROJO, el mismo del badge que representa', () => {
+  // Decision del dueno (5-ago): mismo dato, mismo color. El punto y el badge
+  // salen del mismo numero (Chat._sinLeer); si un dia no combinan, quien
+  // aprendio "rojo = mensajes sin leer" deja de reconocerlo en el menu.
+  const n = anchoMovilDelJs();
+  const inicio = hoja.indexOf(`@media (max-width:${n}px){`);
+  assert.ok(inicio >= 0, 'no se encontro el @media del movil en styles.css');
+  const regla = hoja.slice(inicio).match(/\.nav-sec\.con-sin-leer::after\{[^}]*\}/);
+  assert.ok(regla, 'no se encontro la regla del punto de sin-leer en el @media del movil');
+  assert.ok(regla[0].includes('var(--red)'),
+    'el punto de sin-leer no usa var(--red): punto y badge dicen lo mismo con dos colores');
+});
