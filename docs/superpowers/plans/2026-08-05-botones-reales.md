@@ -2,7 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Los 21 controles `<div onclick>`/`<span onclick>` fuera del menú pasan a `<button type="button">` reales, usables con Tab/Enter/Espacio, sin cambio visual.
+**Goal:** Los 22 controles clicables que no son `<button>`/`<a>` fuera del menú pasan a `<button type="button">` reales, usables con Tab/Enter/Espacio, sin cambio visual.
+
+> **Enmienda (5-ago, aprobada por el dueño tras la review de la Task 1):** el barrido
+> original miraba solo `<div`/`<span` en una sola línea y se le escaparon dos
+> controles: el `<b class="mus-himnario">` (ahora se convierte, en la Task 4) y el
+> chip `cal-ev` del calendario (queda como **excepción con motivo**: vive dentro de
+> la celda que se vuelve botón — anidar botones está prohibido — y su contenido
+> completo se alcanza por teclado vía celda → panel del día, que pinta título,
+> hora, lugar y estado con botones reales). El barrido pasa a ser multilínea y a
+> cazar cualquier etiqueta clicable que no sea `<button>`/`<a>`. Verificado contra
+> el fuente: 29 coincidencias = 6 guardas puras de modal + 22 a convertir + 1
+> excepción.
 
 **Architecture:** Una clase de reseteo `.btn-plano` en `web/styles.css` neutraliza la apariencia nativa del botón; cada conversión conserva las clases y el `onclick` existentes. Un barrido-candado (`backend/test/botones-reales.test.js`) lleva una lista `PENDIENTES` con la deuda: cada tarea quita sus entradas (RED) y convierte (GREEN); al final la lista queda vacía y el candado impide `<div onclick>` nuevos para siempre.
 
@@ -90,20 +101,35 @@ const PENDIENTES = [
   `onclick="obTesoreria(`,
   `onclick="obPredica(`,
   `onclick="Org.abrir(`,
+  `onclick="abrirHimnario()`,
 ];
 
-// Cada <div ...onclick= / <span ...onclick= con lo que le sigue en su linea.
-function tagsClicables() {
-  return fuente.match(/<(?:div|span)[^\r\n>]*onclick=[^\r\n]*/g) || [];
-}
+// Excepciones con motivo escrito: clicables que NO se convierten a proposito.
+const EXCEPCIONES = [
+  // El chip de evento del calendario vive DENTRO de la celda del dia, que ya
+  // es un <button> (anidar botones esta prohibido y el navegador los desanida
+  // rompiendo el layout). Su contenido completo se alcanza con teclado:
+  // celda -> panel del dia, que pinta titulo, hora, lugar y estado con
+  // botones reales. El chip queda como atajo de raton.
+  `onclick="event.stopPropagation();abrirEvento(`,
+];
 
-test('ningun <div>/<span> clicable fuera de la deuda declarada', () => {
-  const usados = new Set();
+// Cualquier etiqueta clicable que NO sea <button> ni <a>, aunque ocupe varias
+// lineas del fuente. El match llega hasta la comilla que cierra el onclick.
+function tagsClicables() {
+  return fuente.match(/<(?!button\b|a\b|\/)[a-z0-9]+\b[^>]*onclick="[^"]*"/gi) || [];
+}
+const esGuardaPura = t => /onclick="event\.stopPropagation\(\)"$/.test(t);
+
+test('ningun clicable fuera de <button>/<a>, salvo deuda y excepciones declaradas', () => {
+  const usados = new Set(), excUsadas = new Set();
   for (const tag of tagsClicables()) {
-    if (tag.includes('stopPropagation')) continue;   // se cuentan aparte abajo
+    if (esGuardaPura(tag)) continue;   // guardas de modal, contadas aparte abajo
+    const exc = EXCEPCIONES.find(e => tag.includes(e));
+    if (exc) { excUsadas.add(exc); continue; }
     const p = PENDIENTES.find(p => tag.includes(p));
     assert.ok(p,
-      'Control clicable nuevo como <div>/<span>:\n  ' + tag.slice(0, 120) +
+      'Control clicable nuevo fuera de <button>/<a>:\n  ' + tag.replace(/\s+/g, ' ').slice(0, 120) +
       '\nUsa <button type="button" class="btn-plano ..."> — Tab, Enter y el ' +
       'lector de pantalla vienen gratis. No agregues entradas a PENDIENTES.');
     usados.add(p);
@@ -112,15 +138,19 @@ test('ningun <div>/<span> clicable fuera de la deuda declarada', () => {
     assert.ok(usados.has(p),
       `La entrada ya se convirtio (o cambio de forma): quitala de PENDIENTES -> ${p}`);
   }
+  for (const e of EXCEPCIONES) {
+    assert.ok(excUsadas.has(e),
+      `La excepcion ya no existe en el fuente: quitala (y su motivo) -> ${e}`);
+  }
 });
 
-test('los onclick de stopPropagation son exactamente los 6 de los modales', () => {
+test('las guardas puras de stopPropagation son exactamente las 6 de los modales', () => {
   // No son controles: solo evitan que el clic dentro del modal lo cierre.
   // Si agregas un modal nuevo con esta tecnica, sube el numero A PROPOSITO.
-  const n = tagsClicables().filter(t => t.includes('stopPropagation')).length;
+  const n = tagsClicables().filter(esGuardaPura).length;
   assert.equal(n, 6,
-    `hay ${n} onclick de stopPropagation y se esperaban 6 — si es un modal ` +
-    'nuevo legitimo, actualiza este numero; si no, algo se colo');
+    `hay ${n} guardas puras de stopPropagation y se esperaban 6 — si es un ` +
+    'modal nuevo legitimo, actualiza este numero; si no, algo se colo');
 });
 
 test('.btn-plano existe y tiene foco visible', () => {
@@ -325,21 +355,22 @@ git commit -m "feat(a11y): asistencia con aria-pressed, cuidado, predicas, clase
 
 ---
 
-### Task 4: Musica, himnario y panel del obispo (8 controles)
+### Task 4: Musica, himnario y panel del obispo (9 controles)
 
 **Files:**
-- Modify: `web/app.js` (~líneas 1935, 1965, 2012, 2178, 3267, 3298, 3299, 3303 del commit `58e221c`)
+- Modify: `web/app.js` (~líneas 1935, 1965, 2012, 2061, 2178, 3267, 3298, 3299, 3303 del commit `58e221c`)
 - Modify: `backend/test/botones-reales.test.js` (solo quitar entradas — quedan 0)
 
 **Interfaces:**
 - Consumes: `.btn-plano` de la Task 1.
 
-- [ ] **Step 1: RED — quitar de `PENDIENTES` las 8 entradas restantes**
+- [ ] **Step 1: RED — quitar de `PENDIENTES` las 9 entradas restantes**
 
 ```
 `onclick="abrirVisorCancion(`,
 `onclick="abrirVisorSetlist(`,
 `onclick="quitarIntegrante(`,
+`onclick="abrirHimnario()`,
 `onclick="himnarioSel(`,
 `onclick="verIglesiaObispo(`,
 `onclick="obAsistencia(`,
@@ -350,9 +381,18 @@ git commit -m "feat(a11y): asistencia con aria-pressed, cuidado, predicas, clase
 El array queda `const PENDIENTES = [];` — **conserva el array y su comentario**: vacío, es el candado permanente.
 
 Run: `cd backend && node --test test/botones-reales.test.js`
-Expected: FAIL para los 8.
+Expected: FAIL para los 9.
 
-- [ ] **Step 2: Convertir los 8**
+- [ ] **Step 2: Convertir los 9**
+
+El `🎵` que abre el himnario desde Material (era `<b>`; la negrita la daba la
+etiqueta, así que se conserva con `font-weight:700` — `.mus-himnario` no la
+trae; cierre `</b>` → `</button>`):
+
+```
+<b class="mus-himnario" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</b>
+<button type="button" class="btn-plano mus-himnario" style="font-weight:700" onclick="abrirHimnario()">🎵 ${escHtml(m.titulo)}</button>
+```
 
 ⚠️ Canción y setlist: se convierte **solo la zona clicable interna** (el div con `flex:1`) — la tarjeta que la envuelve tiene botones al lado y un botón no puede anidar otro.
 
@@ -429,19 +469,26 @@ Añadir al principio (después de la línea 2 de cabecera y su `---`) esta secci
 ## 🆕 5 DE AGOSTO DE 2026 — ⌨️ toda la app se usa con teclado: los 21 divs clicables son botones
 
 La otra mitad de la brecha de accesibilidad que dejó anotada el menú (su punto
-4 de "sigue sin resolver") quedó cerrada: **los 21 controles que eran
-`<div onclick>` (y un `<span>`) fuera del menú son ahora `<button
-type="button">` de verdad** — panel de inicio, celdas del calendario,
-notificaciones, asistencia (el toggle de presente lleva `aria-pressed`),
-música (el × de quitar integrante ganó `aria-label`), himnario, cuidado
-pastoral, Escuela Dominical, prédicas, panel del obispo y hojas de
-Organización. Visual idéntico: la clase `.btn-plano` (`web/styles.css`)
-neutraliza el estilo nativo y las clases de siempre mandan.
+4 de "sigue sin resolver") quedó cerrada: **los 22 controles clicables que no
+eran `<button>` fuera del menú lo son ahora, de verdad** — panel de inicio,
+celdas del calendario, notificaciones, asistencia (el toggle de presente lleva
+`aria-pressed`), música (el × de quitar integrante ganó `aria-label`, y el 🎵
+del himnario era un `<b>`), himnario, cuidado pastoral, Escuela Dominical,
+prédicas, panel del obispo y hojas de Organización. Visual idéntico: la clase
+`.btn-plano` (`web/styles.css`) neutraliza el estilo nativo y las clases de
+siempre mandan.
 
-**El candado es un barrido** (`backend/test/botones-reales.test.js`): cualquier
-`<div`/`<span` con `onclick` que no sea uno de los 6 `stopPropagation` de los
-modales rompe la suite con un mensaje que dice qué usar. La lista `PENDIENTES`
-del barrido quedó vacía y así se queda.
+**El candado es un barrido multilínea** (`backend/test/botones-reales.test.js`):
+cualquier etiqueta clicable que no sea `<button>`/`<a>` rompe la suite con un
+mensaje que dice qué usar, salvo las 6 guardas puras de `stopPropagation` de
+los modales y **una excepción con motivo escrito**: el chip `cal-ev` del
+calendario, que vive dentro de la celda-botón (anidar botones está prohibido)
+y cuyo contenido completo se alcanza por teclado vía celda → panel del día.
+La lista `PENDIENTES` del barrido quedó vacía y así se queda.
+⚠️ La primera versión del barrido era de una sola línea y solo `div`/`span`:
+así se escaparon el `<b>` del himnario y el chip — lo cazó la review de la
+primera tarea. Si un barrido futuro filtra por forma, que busque la forma
+del fallo, no la forma del ejemplo.
 
 **Fuera de alcance, a propósito:** el overlay del cajón del menú (es fondo, no
 control), `kiosko.html`/`inscribir.html` (despliegue facial aparte) y las
