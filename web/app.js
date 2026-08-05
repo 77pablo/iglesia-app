@@ -63,7 +63,10 @@ function agruparNav(claves){
   if(claves.length < NAV_UMBRAL_GRUPOS) return [{titulo:null, claves:[...claves]}];
   return GRUPOS_NAV
     .map(g=>({titulo:g.titulo, claves:g.claves.filter(k=>claves.includes(k))}))
-    .filter(g=>g.claves.length);   // un encabezado sin nada debajo es ruido
+    .filter(g=>g.claves.length)    // un encabezado sin nada debajo es ruido
+    // Y un encabezado con UNA sola cosa debajo tambien (decision del dueno,
+    // 5-ago): titulo null = "sin encabezado", que buildNav ya sabe pintar.
+    .map(g=>g.claves.length===1 ? {titulo:null, claves:g.claves} : g);
 }
 // Render minimalista de un auditorio/iglesia moderno (líneas rectas, luz difusa) para Anuncios.
 const IMG_AUDITORIO=`<svg viewBox="0 0 400 180" preserveAspectRatio="xMidYMid slice" style="width:100%;height:150px;display:block">
@@ -719,8 +722,16 @@ function buildNav(){
     return;
   }
 
+  let primerGrupo=null;   // el fallback del acordeon: el primer tema REAL
   secciones.forEach((seccion,i)=>{
     const id=`nav-g-${i+1}`;
+    // Tema de una sola entrada (titulo null): la entrada va suelta, en el
+    // lugar del tema, sin acordeon que abrir para una sola cosa.
+    if(!seccion.titulo){
+      seccion.claves.forEach(k=>nav.appendChild(conActiva(k)));
+      return;
+    }
+    if(primerGrupo===null) primerGrupo=id;
     const h=document.createElement('button');
     h.type='button';
     h.className='nav-sec';
@@ -746,7 +757,7 @@ function buildNav(){
   // querySelector/querySelectorAll -- y grupoActivo() usa el primero antes de
   // que abrirGrupo() use el segundo, asi que el guardia tiene que cubrir los dos.
   if(typeof document.querySelector==='function' && typeof document.querySelectorAll==='function'){
-    abrirGrupo(grupoActivo()||'nav-g-1');
+    abrirGrupo(grupoActivo()||primerGrupo);
     // El menu se acaba de repintar: el punto de sin-leer se perdio con el DOM
     // anterior. Se reaplica con el ultimo dato conocido, sin volver a pedirlo.
     if(typeof Chat!=='undefined'&&Chat._sinLeer) Chat.actualizarBadgeNav(Chat._sinLeer);

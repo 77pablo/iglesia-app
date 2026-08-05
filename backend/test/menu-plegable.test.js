@@ -120,7 +120,7 @@ function crearElementoDeJuguete(tag) {
 // '.nav-item.active' ANTES de borrar el DOM (linea :679) para restaurar esa
 // misma clave en la entrada nueva. Sin este parametro ese camino nunca se
 // ejercita -- toda esta suite corre como si fuera siempre el primer pintado.
-function ejecutarBuildNav(movil, claveActivaPrevia) {
+function ejecutarBuildNav(movil, claveActivaPrevia, tieneModulo) {
   const nav = { innerHTML: '', children: [], appendChild(el) { this.children.push(el); return el; } };
   const doc = {
     createElement: (tag) => crearElementoDeJuguete(tag),
@@ -168,7 +168,7 @@ function ejecutarBuildNav(movil, claveActivaPrevia) {
   const fn = new Function('$', 'document', 'tieneModulo', 'labelDe', 'iconDe', 'navTo', 'esMovil', cuerpo)(
     (id) => (id === 'nav' ? nav : null),
     doc,
-    () => true,            // el pastor: ve las 19 entradas
+    tieneModulo || (() => true),   // por defecto, el pastor: ve las 19 entradas
     (k) => k,
     () => '',
     () => {},
@@ -219,6 +219,37 @@ test('en MOVIL cada tema es un contenedor de verdad con sus entradas dentro', ()
   // Ninguna entrada queda suelta fuera de un contenedor.
   assert.equal(clavesDe(nav.children).length, 0,
     'hay entradas fuera de todo contenedor: no se podrian plegar');
+});
+
+test('en MOVIL un tema que queda con UNA entrada se pinta suelto, sin encabezado', () => {
+  // Decision del dueno (5-ago): un acordeon de un solo elemento cuesta un toque
+  // y no ahorra nada. El caso real: el lider de cuerpo ve 12 modulos y
+  // "Pastoreo" le quedaba con solo `asistencia` debajo.
+  const DOCE = ['inicio', 'calendario', 'anuncios', 'mensajes', 'directorio', 'predica',
+    'mi_servicio', 'mi_grupo', 'ajustes', 'asistencia', 'servicio_gestion', 'organizacion'];
+  const nav = ejecutarBuildNav(true, null, (k) => DOCE.includes(k));
+
+  // "Pastoreo" quedaria con una sola entrada: ni encabezado ni contenedor.
+  const encabezados = nav.children.filter(e => e.className === 'nav-sec');
+  assert.ok(!encabezados.some(h => h.textContent === 'Pastoreo'),
+    'un tema con una sola entrada sigue llevando encabezado');
+
+  // Su entrada esta SUELTA en el nav, y no ademas dentro de un grupo.
+  const sueltas = clavesDe(nav.children);
+  assert.deepEqual(sueltas, ['asistencia'],
+    'la entrada del tema de uno no quedo suelta en el lugar del tema');
+  const agrupadas = nav.children.filter(e => e.className === 'nav-grupo')
+    .flatMap(g => clavesDe(g.children));
+  assert.ok(!agrupadas.includes('asistencia'), 'asistencia esta dos veces: suelta y agrupada');
+
+  // Nada se pierde: sueltas + agrupadas = los 12 modulos visibles.
+  assert.deepEqual([...sueltas, ...agrupadas].sort(), [...DOCE].sort(),
+    'al soltar el tema de uno se perdio o duplico una entrada');
+
+  // Los demas temas siguen siendo acordeon de verdad.
+  assert.ok(encabezados.length >= 3, 'los temas con 2+ entradas perdieron su encabezado');
+  assert.equal(encabezados.length, nav.children.filter(e => e.className === 'nav-grupo').length,
+    'cada encabezado necesita su contenedor');
 });
 
 test('en MOVIL cada encabezado apunta al id de SU contenedor', () => {
