@@ -114,3 +114,59 @@ test('crear una clase deja apunte (el hueco del 30-jul se cierra)', async () => 
   assert.equal(res.status, 200);
   assert.equal(apuntes('crear_clase').length, 1);
 });
+
+const crearLeccion = (claseId, campos = {}) => Number(dbDirecta.prepare(
+  'INSERT INTO leccion (iglesia_id, clase_id, titulo, fecha, versiculo, material_url) VALUES (?,?,?,?,?,?)'
+).run(campos.iglesia_id ?? SEM.iglesiaId, claseId, campos.titulo ?? 'El arca',
+      campos.fecha ?? null, campos.versiculo ?? null, campos.material_url ?? null).lastInsertRowid);
+
+test('corregir una leccion: solo cambios auditados, y material_url se ignora', async () => {
+  const cl = crearClase();
+  const id = crearLeccion(cl, { titulo: 'El arka', material_url: '/uploads/leccion.pdf' });
+  const res = await llamar('PATCH', `/api/ninos/material/${id}`,
+    { titulo: 'El arca', material_url: '/uploads/otro.pdf' });
+  assert.equal(res.status, 200);
+  const l = dbDirecta.prepare('SELECT * FROM leccion WHERE id = ?').get(id);
+  assert.equal(l.titulo, 'El arca');
+  assert.equal(l.material_url, '/uploads/leccion.pdf',
+    'el documento NO se cambia por PATCH: se borra la leccion y se sube de nuevo');
+  const a = apuntes('editar_leccion');
+  assert.equal(a.length, 1);
+  assert.ok(a[0].detalle.includes('El arka') && a[0].detalle.includes('El arca'));
+});
+
+test('PATCH de leccion con lo mismo: cero apuntes; ajena: 404', async () => {
+  const cl = crearClase();
+  const id = crearLeccion(cl, { titulo: 'El arca' });
+  assert.equal((await llamar('PATCH', `/api/ninos/material/${id}`, { titulo: 'El arca' })).status, 200);
+  assert.equal(apuntes('editar_leccion').length, 0);
+  const otra = Number(dbDirecta.prepare(
+    "INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra3','OTRA3')").run().lastInsertRowid);
+  const clAjena = crearClase({ iglesia_id: otra });
+  const ajena = crearLeccion(clAjena, { iglesia_id: otra });
+  assert.equal((await llamar('PATCH', `/api/ninos/material/${ajena}`, { titulo: 'X' })).status, 404);
+});
+
+test('borrar una leccion: propia 200 con apunte, ajena 404', async () => {
+  const cl = crearClase();
+  const id = crearLeccion(cl, { titulo: 'El arca' });
+  const res = await llamar('DELETE', `/api/ninos/material/${id}`);
+  assert.equal(res.status, 200);
+  assert.equal(dbDirecta.prepare('SELECT COUNT(*) AS n FROM leccion WHERE id = ?').get(id).n, 0);
+  const a = apuntes('eliminar_leccion');
+  assert.equal(a.length, 1);
+  assert.ok(a[0].detalle.includes('El arca'));
+  const otra = Number(dbDirecta.prepare(
+    "INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra4','OTRA4')").run().lastInsertRowid);
+  const clAjena = crearClase({ iglesia_id: otra });
+  const ajena = crearLeccion(clAjena, { iglesia_id: otra });
+  assert.equal((await llamar('DELETE', `/api/ninos/material/${ajena}`)).status, 404);
+});
+
+test('inscribir un nino y subir una leccion dejan apunte', async () => {
+  const cl = crearClase();
+  await llamar('POST', '/api/ninos/ninos', { clase_id: cl, nombre: 'Sofi' });
+  await llamar('POST', '/api/ninos/material', { clase_id: cl, titulo: 'El arca' });
+  assert.equal(apuntes('inscribir_nino').length, 1);
+  assert.equal(apuntes('crear_leccion').length, 1);
+});

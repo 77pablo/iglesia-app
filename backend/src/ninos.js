@@ -54,15 +54,7 @@ r.patch('/clases/:id', soloEncargado, validar(editarClaseSchema), (req, res) => 
   const c = db.prepare('SELECT id, nombre, edad FROM clase_ed WHERE id = ? AND iglesia_id = ?')
     .get(req.params.id, req.user.iglesia_id);
   if (!c) return res.status(404).json({ error: 'Clase no encontrada' });
-  const norm = v => (v === '' ? null : v);
-  const sets = [], vals = [], cambios = [];
-  const pedir = (col, nuevo, viejo) => {
-    if (nuevo === undefined) return;
-    const n = norm(nuevo);
-    if (n === (viejo ?? null)) return;
-    sets.push(`${col} = ?`); vals.push(n);
-    cambios.push(`${col}: ${viejo ?? '(vacio)'} -> ${n ?? '(vacio)'}`);
-  };
+  const { pedir, sets, vals, cambios } = soloCambios();
   pedir('nombre', req.body.nombre, c.nombre);
   pedir('edad', req.body.edad, c.edad);
   if (!sets.length) return res.json({ ok: true, sinCambios: true });
@@ -108,6 +100,22 @@ function claseDeIglesia(claseId, iglesiaId) {
   return db.prepare('SELECT id FROM clase_ed WHERE id = ? AND iglesia_id = ?').get(claseId, iglesiaId);
 }
 
+// Arma un UPDATE que solo toca los campos que de verdad cambiaron, y la
+// bitacora "col: antes -> despues" para auditar(). Usado por los PATCH de
+// clase y de leccion: misma regla, "solo se audita lo que cambio de verdad".
+function soloCambios() {
+  const norm = v => (v === '' ? null : v);
+  const sets = [], vals = [], cambios = [];
+  const pedir = (col, nuevo, viejo) => {
+    if (nuevo === undefined) return;
+    const n = norm(nuevo);
+    if (n === (viejo ?? null)) return;
+    sets.push(`${col} = ?`); vals.push(n);
+    cambios.push(`${col}: ${viejo ?? '(vacio)'} -> ${n ?? '(vacio)'}`);
+  };
+  return { pedir, sets, vals, cambios };
+}
+
 // --- Niños ---
 r.get('/clase/:id/ninos', (req, res) => {
   if (!claseDeIglesia(req.params.id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
@@ -126,6 +134,7 @@ r.post('/ninos', soloEncargado, validar(ninoSchema), (req, res) => {
   if (!claseDeIglesia(clase_id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
   db.prepare('INSERT INTO nino (iglesia_id, clase_id, nombre, edad, familia, alergias, autorizados) VALUES (?,?,?,?,?,?,?)')
     .run(req.user.iglesia_id, clase_id, nombre, edad || null, familia || null, alergias || null, autorizados || null);
+  auditar(req.user.iglesia_id, req.user.persona_id, 'inscribir_nino', 'ninos', nombre);
   res.json({ ok: true });
 });
 
@@ -202,6 +211,50 @@ r.post('/material', soloEncargado, validar(materialSchema), (req, res) => {
   if (!claseDeIglesia(clase_id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
   db.prepare('INSERT INTO leccion (iglesia_id, clase_id, fecha, titulo, versiculo, material_url) VALUES (?,?,?,?,?,?)')
     .run(req.user.iglesia_id, clase_id, fecha || null, titulo, versiculo || null, material_url || null);
+  auditar(req.user.iglesia_id, req.user.persona_id, 'crear_leccion', 'ninos', titulo);
+  res.json({ ok: true });
+});
+
+// Corregir una leccion: titulo, fecha, versiculo. El documento NO se cambia
+// por esta via (un archivo equivocado se arregla borrando la leccion y
+// subiendola de nuevo): material_url no esta en el esquema y validar() lo
+// descarta en silencio — un test lo fija.
+const editarLeccionSchema = z.object({
+  titulo: z.string().trim().min(1, 'falta el titulo').optional(),
+  fecha: z.string().trim().optional(),
+  versiculo: z.string().trim().optional()
+}).refine(b => b.titulo !== undefined || b.fecha !== undefined || b.versiculo !== undefined,
+  { message: 'no viene ningun campo que cambiar' });
+r.patch('/material/:id', soloEncargado, validar(editarLeccionSchema), (req, res) => {
+  // leccion.iglesia_id existe: el acotado va directo, sin pasar por la clase.
+  const l = db.prepare('SELECT id, titulo, fecha, versiculo FROM leccion WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, req.user.iglesia_id);
+  if (!l) return res.status(404).json({ error: 'Lección no encontrada' });
+  const { pedir, sets, vals, cambios } = soloCambios();
+  pedir('titulo', req.body.titulo, l.titulo);
+  pedir('fecha', req.body.fecha, l.fecha);
+  pedir('versiculo', req.body.versiculo, l.versiculo);
+  if (!sets.length) return res.json({ ok: true, sinCambios: true });
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE leccion SET ${sets.join(', ')} WHERE id = ? AND iglesia_id = ?`)
+      .run(...vals, l.id, req.user.iglesia_id);
+    auditar(req.user.iglesia_id, req.user.persona_id, 'editar_leccion', 'ninos', cambios.join(' · '),
+      { tabla: 'leccion', id: l.id });
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  res.json({ ok: true });
+});
+
+// Borrar una leccion. El archivo subido queda huerfano en /uploads: asumido,
+// como en el resto de la app.
+r.delete('/material/:id', soloEncargado, (req, res) => {
+  const l = db.prepare('SELECT id, titulo FROM leccion WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, req.user.iglesia_id);
+  if (!l) return res.status(404).json({ error: 'Lección no encontrada' });
+  db.prepare('DELETE FROM leccion WHERE id = ? AND iglesia_id = ?').run(l.id, req.user.iglesia_id);
+  auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_leccion', 'ninos', l.titulo,
+    { tabla: 'leccion', id: l.id });
   res.json({ ok: true });
 });
 
