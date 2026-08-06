@@ -263,3 +263,53 @@ test('_destinoNotif manda "contacto_publico" a la bandeja del portal', () => {
   assert.match(cuerpo, /contacto_publico\s*:\s*'mensajes_portal'/,
     'sin este mapeo la notificacion del portal no se puede pulsar');
 });
+
+// ---------- Tanda E: borrar un mensaje ----------
+// Spec: docs/superpowers/specs/2026-08-06-bandeja-borrar-y-bloque-design.md
+
+const borrar = (persona, id, iglesiaId) => fetch(base + '/api/publico/mensajes/' + id, {
+  method: 'DELETE', headers: H(persona, iglesiaId)
+});
+
+test('el pastor borra un mensaje: la fila desaparece y queda apunte con el nombre', async () => {
+  const id = mensaje('Quiero saber los horarios');
+
+  const res = await borrar(SEM.pastor, id);
+  assert.equal(res.status, 200);
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM contacto_publico WHERE id = ?').get(id).n,
+    0, 'la fila ya no esta');
+  const apunte = db.prepare(
+    "SELECT * FROM auditoria WHERE accion = 'borrar_mensaje_portal'").all();
+  assert.equal(apunte.length, 1, 'la unica destruccion sin vuelta de la bandeja deja rastro');
+  assert.ok(apunte[0].detalle.includes('Visitante Quiero saber los horarios'),
+    'el apunte dice de quien era el mensaje que ya no se puede leer');
+});
+
+test('borrar vale para cualquier estado: tambien un atendido y un previo', async () => {
+  const atendido = mensaje('Resuelto', SEM.iglesiaId, 'atendido');
+  const previo = mensaje('De hace meses', SEM.iglesiaId, 'previo');
+  assert.equal((await borrar(SEM.pastor, atendido)).status, 200);
+  assert.equal((await borrar(SEM.pastor, previo)).status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM contacto_publico').get().n, 0);
+});
+
+test('el pastor de OTRA iglesia recibe 404 al borrar y la fila sigue', async () => {
+  const otraIg = Number(db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRADEL')").run().lastInsertRowid);
+  const pastor2 = { id: Number(db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, es_pastor, activo) VALUES (?,'p2d','Pastor Dos','x',1,1)"
+  ).run(otraIg).lastInsertRowid) };
+  const mio = mensaje('Mio');
+
+  const res = await borrar(pastor2, mio, otraIg);
+  assert.equal(res.status, 404, 'un 403 confirmaria que ese id existe en alguna parte');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM contacto_publico WHERE id = ?').get(mio).n,
+    1, 'que la fila siga es parte de la prueba, no solo el codigo de error');
+});
+
+test('un miembro sin rol de pastor no puede borrar: 403 y la fila sigue', async () => {
+  const id = mensaje('Hola');
+  const res = await borrar(SEM.miembro1, id);
+  assert.equal(res.status, 403);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM contacto_publico WHERE id = ?').get(id).n, 1);
+});
