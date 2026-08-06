@@ -1988,7 +1988,7 @@ async function cargarSetlist(eventoId){
     let html = items.length
       ? '<div class="list">'+items.map((s,i)=>`<div class="item-card flex">
           <span class="mini-date" style="min-width:34px"><b>${i+1}</b></span>
-          <button type="button" class="btn-plano" style="flex:1" onclick="abrirVisorSetlist(${s.cancion_id},${escJsAttr(s.tono_dia||'')})" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
+          <button type="button" class="btn-plano" style="flex:1" onclick="abrirVisorSetlist(${Number(s.cancion_id)},${escJsAttr(s.tono_dia||'')})" title="Ver y transponer"><b>${escHtml(s.titulo)}</b> <span class="estado-chip">${escHtml(s.tono_dia||s.tono||'—')}</span>${(s.letra||'').trim()?' 🎸':''}
           <div class="muted small">${escHtml(s.autor||'')}</div></button>
           ${lider?`<button class="link" onclick="quitarSetlist(${s.id})">Quitar</button>`:''}</div>`).join('')+'</div>'
       : '<p class="muted small">Sin canciones en este servicio.</p>';
@@ -2297,7 +2297,7 @@ function editarLetraCancion(id){
     <label for="vc-letra" style="margin-top:10px">Acordes / letra</label>
     <textarea id="vc-letra" rows="14" style="width:100%;font-family:monospace;white-space:pre">${escHtml(c.letra||'')}</textarea>
     <div class="row" style="margin-top:10px">
-      <button class="btn small-btn" onclick="guardarLetraCancion(${id})">Guardar</button>
+      <button class="btn small-btn" onclick="guardarLetraCancion(${Number(id)})">Guardar</button>
       <button class="btn ghost small-btn" onclick="renderVisorCancion()">Cancelar</button></div>`;
 }
 async function guardarLetraCancion(id){
@@ -2370,8 +2370,8 @@ async function verCaso(id){
       <select id="ct-tipo"><option value="llamada">📞 Llamada</option><option value="visita">🏠 Visita</option>
         <option value="mensaje">💬 Mensaje</option><option value="oracion">🙏 Oración</option></select>
       <textarea id="ct-nota" placeholder="Nota (opcional)" style="margin-top:10px"></textarea>
-      <div class="row" style="margin-top:12px"><button class="btn" onclick="agregarContacto(${id})">Guardar contacto</button>
-        ${d.caso.estado!=='atendido'?`<button class="btn ghost" onclick="atenderCaso(${id})">Marcar atendido</button>`:''}</div>
+      <div class="row" style="margin-top:12px"><button class="btn" onclick="agregarContacto(${Number(id)})">Guardar contacto</button>
+        ${d.caso.estado!=='atendido'?`<button class="btn ghost" onclick="atenderCaso(${Number(id)})">Marcar atendido</button>`:''}</div>
     </div>`;
   }catch(e){ $('caso-det').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
@@ -2852,8 +2852,8 @@ function formAporte(id){
     <label for="ap-monto-${id}">Monto</label><input id="ap-monto-${id}" type="number" min="0.01" step="0.01" placeholder="0" />
     <p id="ap-error-${id}" class="error"></p>
     <div class="row" style="margin-top:12px">
-      <button class="btn small-btn" onclick="guardarAporte(${id})">Guardar</button>
-      <button class="btn ghost small-btn" onclick="$('aporte-form-${id}').innerHTML=''">Cancelar</button></div></div>`;
+      <button class="btn small-btn" onclick="guardarAporte(${Number(id)})">Guardar</button>
+      <button class="btn ghost small-btn" onclick="$('aporte-form-${Number(id)}').innerHTML=''">Cancelar</button></div></div>`;
 }
 async function guardarAporte(id){
   const monto=$('ap-monto-'+id).value;
@@ -3061,7 +3061,7 @@ function formNino(id){ const z=$('form-nino'); if(z.innerHTML && !id){z.innerHTM
     <label for="n-autorizados" style="margin-top:10px">Quién puede retirarlo</label>
     <input id="n-autorizados" maxlength="300" placeholder="Ej. Ana Rojas (abuela), Juan Pérez (papá)" value="${escHtml(x.autorizados||'')}"/>
     <p class="muted small" style="margin-top:4px">Nombre y parentesco. No hace falta teléfono ni RUT.</p>
-    <button class="btn small-btn" style="margin-top:10px" onclick="guardarNino(${id||0})">${id?'Guardar cambios':'Guardar'}</button></div>`;
+    <button class="btn small-btn" style="margin-top:10px" onclick="guardarNino(${Number(id)||0})">${id?'Guardar cambios':'Guardar'}</button></div>`;
   z.scrollIntoView({behavior:'smooth',block:'center'}); }
 async function guardarNino(id){
   const nombre=$('n-nombre').value.trim();
@@ -3389,7 +3389,7 @@ async function verPredica(id){
   $('prd').className='';
   $('prd').innerHTML=`<div id="form-predica"></div>
   <div class="card">
-    <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${id})">✏️ Editar</button><button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar predicación" onclick="borrarPredica(${id})">🗑️</button></div>`:''}</div>
+    <div class="head-row"><h2 style="font-size:20px;margin:0">${escHtml(d.titulo)}</h2>${edit?`<div class="row" style="width:auto;gap:10px"><button class="link" onclick="formPredica(${Number(id)})">✏️ Editar</button><button class="link icon-only" style="color:var(--red-tx)" aria-label="Eliminar predicación" onclick="borrarPredica(${Number(id)})">🗑️</button></div>`:''}</div>
     <div class="muted small" style="margin-top:4px">${d.fecha?'📅 '+fechaTxt(d.fecha):''}${d.predicador?' · 🎤 '+escHtml(d.predicador):''}</div>
     ${d.notas?`<div style="margin-top:14px;white-space:pre-wrap;line-height:1.5">${escHtml(d.notas)}</div>`:'<p class="muted small" style="margin-top:10px">Sin notas.</p>'}
   </div>
@@ -3413,7 +3413,7 @@ async function formPredica(id){
     <label for="pp-predicador">Predicador</label><input id="pp-predicador" value="${escHtml(p.predicador||'')}" placeholder="Quién predicó"/>
     <label for="pp-notas">Notas / bosquejo</label><textarea id="pp-notas" style="min-height:150px">${escHtml(p.notas||'')}</textarea>
     <p id="pp-error" class="error"></p>
-    <button class="btn" style="margin-top:12px" onclick="guardarPredica(${id||0})">${id?'Guardar cambios':'Crear prédica'}</button></div>`;
+    <button class="btn" style="margin-top:12px" onclick="guardarPredica(${Number(id)||0})">${id?'Guardar cambios':'Crear prédica'}</button></div>`;
 }
 async function guardarPredica(id){
   const body={titulo:$('pp-titulo').value.trim(),fecha:fechaSelectValor('pp'),predicador:$('pp-predicador').value.trim(),notas:$('pp-notas').value};
@@ -3512,14 +3512,14 @@ async function verIglesiaObispo(id, mes){
     <div class="head-row" style="margin:16px 0;gap:10px;flex-wrap:wrap;align-items:center">
       <span class="muted small">Iglesia:</span> ${selIglesia}
       <span class="muted small" style="margin-left:8px">Mes:</span>
-      <input type="month" value="${escHtml(d.mes)}" onchange="verIglesiaObispo(${id}, this.value)" style="max-width:170px"/>
+      <input type="month" value="${escHtml(d.mes)}" onchange="verIglesiaObispo(${Number(id)}, this.value)" style="max-width:170px"/>
     </div>
     <div class="widgets" style="margin-bottom:18px">
       <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${d.miembros}</div></div>
-      <button type="button" class="btn-plano widget" onclick="obAsistencia(${id})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></button>
-      <button type="button" class="btn-plano widget" onclick="obTesoreria(${id})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></button>
+      <button type="button" class="btn-plano widget" onclick="obAsistencia(${Number(id)})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></button>
+      <button type="button" class="btn-plano widget" onclick="obTesoreria(${Number(id)})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></button>
     </div>
-    ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green-tx)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red-tx)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${id})">Ver movimientos ›</button>`)}
+    ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green-tx)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red-tx)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${Number(id)})">Ver movimientos ›</button>`)}
     ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${escHtml(e.grupo||'')} · ${escHtml(e.estado)}</div></div><span class="estado-chip">✅ ${e.asistencia}</span></div>`, 'Sin eventos este mes.'))}
     ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<button type="button" class="btn-plano item-card flex" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${escHtml(p.predicador||'')}</div></div><span class="muted" style="font-size:18px">›</span></button>`, 'Sin prédicas este mes.'))}
     <div class="widgets" style="margin-bottom:16px">
@@ -3820,7 +3820,7 @@ function renderAdmin(){
   const usuarios=d.usuarios.map(u=>{
     const chips=u.roles.length
       ? u.roles.map(r=>`<span class="estado-chip" style="margin:2px 4px 2px 0">${escHtml(r.grupo)} · ${escHtml(rolLabel(r.rol))}
-          <a href="javascript:adminQuitarRol(${r.pertenencia_id})" style="color:var(--red-tx);margin-left:4px" title="Quitar">✕</a></span>`).join('')
+          <a href="javascript:adminQuitarRol(${Number(r.pertenencia_id)})" style="color:var(--red-tx);margin-left:4px" title="Quitar">✕</a></span>`).join('')
       : '<span class="muted small">Sin roles</span>';
     // anonimizada: la persona ejercio su derecho ARCO a eliminar su cuenta
     // (cuenta.js). El dato lo manda el backend (u.anonimizada), no se adivina
@@ -3848,10 +3848,10 @@ function renderAdmin(){
           ${esCuentaDeSistema?'<span class="muted small">Cuenta de sistema</span>':
             u.anonimizada?'<span class="muted small">Eliminó su cuenta: no se puede modificar</span>':`
           <button class="btn ghost small-btn" onclick="adminFormRol(${u.id})">+ Rol</button>
-          <button class="link" onclick="adminTogglePastor(${u.id},${u.es_pastor})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
+          <button class="link" onclick="adminTogglePastor(${u.id},${Number(u.es_pastor)})">${u.es_pastor?'Quitar pastor':'Hacer pastor'}</button>
           <button class="link" onclick="adminCorregirNombre(${u.id})">✏️ Corregir nombre</button>
           ${puedeResetear?`<button class="link" onclick="adminResetClave(${u.id})">🔑 Restablecer contraseña</button>`:''}
-          <button class="link" style="color:${u.activo?'var(--red-tx)':'var(--green-tx)'}" onclick="adminToggleActivo(${u.id},${u.activo})">${u.activo?'Desactivar':'Activar'}</button>`}
+          <button class="link" style="color:${u.activo?'var(--red-tx)':'var(--green-tx)'}" onclick="adminToggleActivo(${u.id},${Number(u.activo)})">${u.activo?'Desactivar':'Activar'}</button>`}
         </div>
       </div>
       <div id="adm-rolform-${u.id}"></div>
@@ -3916,9 +3916,9 @@ function adminFormRol(personaId){
   const z=$('adm-rolform-'+personaId); if(!z) return; if(z.innerHTML){ z.innerHTML=''; return; }
   z.innerHTML=`<div style="background:var(--bg);padding:12px;border-radius:12px;margin-top:10px">
     <div class="row" style="gap:8px;flex-wrap:wrap">
-      <select id="ar-rol-${personaId}" onchange="adminPreviewRol(${personaId})">${window._admRolesOpts}</select>
+      <select id="ar-rol-${personaId}" onchange="adminPreviewRol(${Number(personaId)})">${window._admRolesOpts}</select>
       <select id="ar-grupo-${personaId}">${window._admGruposOpts}</select>
-      <button class="btn small-btn" onclick="adminAsignarRol(${personaId})">Asignar</button>
+      <button class="btn small-btn" onclick="adminAsignarRol(${Number(personaId)})">Asignar</button>
     </div>
     <p class="muted small" id="ar-acc-${personaId}" style="margin:8px 0 0"></p></div>`;
   adminPreviewRol(personaId);
@@ -4011,7 +4011,7 @@ function adminFormGrupo(id){
       <input id="ag-nombre" placeholder="Nombre del grupo" value="${escHtml(g.nombre||'')}"/>
       <input id="ag-color" type="color" value="${safeColor(g.color,'#1C61A6')}" style="max-width:60px;padding:4px"/></div>
     <p id="ag-err" class="error"></p>
-    <button class="btn small-btn" style="margin-top:8px" onclick="adminGuardarGrupo(${id})">${id?'Guardar':'Crear'}</button></div>`;
+    <button class="btn small-btn" style="margin-top:8px" onclick="adminGuardarGrupo(${Number(id)})">${id?'Guardar':'Crear'}</button></div>`;
 }
 async function adminGuardarGrupo(id){
   const body={nombre:$('ag-nombre').value.trim(),color:$('ag-color').value};
@@ -5406,7 +5406,7 @@ const Org = {
     try{ personas=await api('/directorio'); }
     catch(e){ return toast((e&&e.message)||'No se pudo cargar la lista'); }
     const opciones=personas.map(p=>`<button class="link org-persona" style="display:block;padding:10px 0;text-align:left;width:100%"
-        onclick="Org.guardarResponsable(${cosaId}, ${p.id})">${escHtml(p.nombre)}</button>`).join('')
+        onclick="Org.guardarResponsable(${Number(cosaId)}, ${p.id})">${escHtml(p.nombre)}</button>`).join('')
       || '<p class="muted small">No hay personas en el directorio.</p>';
     const root=$('modal-root');
     root.innerHTML=`<div class="modal-bg"><div class="modal"><h3>¿Quién lo trae?</h3>
@@ -5414,7 +5414,7 @@ const Org = {
       <div id="org-personas" style="max-height:46vh;overflow:auto;margin-top:10px">${opciones}</div>
       <div class="row" style="margin-top:12px">
         <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-        <button class="btn" onclick="Org.guardarResponsable(${cosaId}, null)">Quitar responsable</button>
+        <button class="btn" onclick="Org.guardarResponsable(${Number(cosaId)}, null)">Quitar responsable</button>
       </div></div></div>`;
     root.classList.add('show');
   },

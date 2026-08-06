@@ -269,6 +269,34 @@ export function partirConcat(expr) {
   return partes;
 }
 
+// Divide "A || B" / "A && B" de NIVEL SUPERIOR. El resultado de || y && es
+// SIEMPRE uno de sus operandos (JS devuelve el operando, no un booleano), asi
+// que si todos los operandos son seguros, la expresion entera lo es. Nacio en
+// la tanda G para `Number(id)||0`.
+export function partirLogico(expr) {
+  const partes = [];
+  let profundidad = 0;
+  let comilla = null;
+  let inicio = 0;
+  let huboMas = false;
+  for (let k = 0; k < expr.length; k++) {
+    const c = expr[k];
+    if (comilla) { if (c === '\\') { k++; continue; } if (c === comilla) comilla = null; continue; }
+    if (c === '"' || c === "'" || c === '`') { comilla = c; continue; }
+    if (c === '(' || c === '[' || c === '{') profundidad++;
+    else if (c === ')' || c === ']' || c === '}') profundidad--;
+    else if ((c === '|' || c === '&') && expr[k + 1] === c && profundidad === 0) {
+      partes.push(expr.slice(inicio, k));
+      inicio = k + 2;
+      k++;
+      huboMas = true;
+    }
+  }
+  if (!huboMas) return null;
+  partes.push(expr.slice(inicio));
+  return partes;
+}
+
 export function esExprSegura(expr, ayudantes = AYUDANTES_SEGUROS) {
   const e = expr.trim();
   if (e === '') return true;
@@ -280,6 +308,8 @@ export function esExprSegura(expr, ayudantes = AYUDANTES_SEGUROS) {
   if (envueltaPorAyudante(e, ayudantes)) return true;
   const tern = partirTernario(e);
   if (tern) return esExprSegura(tern.a, ayudantes) && esExprSegura(tern.b, ayudantes);
+  const logico = partirLogico(e);
+  if (logico) return logico.every(p => esExprSegura(p, ayudantes));
   const partes = partirConcat(e);
   if (partes) return partes.every(p => esExprSegura(p, ayudantes));
   return false;
