@@ -70,6 +70,7 @@ r.post('/:id/contacto', soloPastor, validar(contactoSchema), (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[cuidado] registrar contacto fallo:', e);
     return res.status(500).json({ error: 'No se pudo registrar el contacto' });
   }
   auditar(req.user.iglesia_id, req.user.persona_id, 'contacto_cuidado', 'cuidado', 'caso ' + caso.id);

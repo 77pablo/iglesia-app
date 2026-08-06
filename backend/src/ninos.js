@@ -92,7 +92,7 @@ r.delete('/clases/:id', soloEncargado, (req, res) => {
     auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_clase', 'ninos',
       `${c.nombre} (${lecciones} leccion(es))`, { tabla: 'clase_ed', id: c.id });
     db.exec('COMMIT');
-  } catch (e) { db.exec('ROLLBACK'); return res.status(500).json({ error: 'No se pudo borrar la clase' }); }
+  } catch (e) { db.exec('ROLLBACK'); console.error('[ninos] borrar clase fallo:', e); return res.status(500).json({ error: 'No se pudo borrar la clase' }); }
   res.json({ ok: true });
 });
 
@@ -202,6 +202,7 @@ r.delete('/ninos/:id', soloEncargado, (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[ninos] eliminar nino fallo:', e);
     return res.status(500).json({ error: 'No se pudo eliminar al niño' });
   }
   auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_nino', 'ninos', nino.nombre);
@@ -275,7 +276,7 @@ r.delete('/material/:id', soloEncargado, (req, res) => {
     auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_leccion', 'ninos', l.titulo,
       { tabla: 'leccion', id: l.id });
     db.exec('COMMIT');
-  } catch (e) { db.exec('ROLLBACK'); return res.status(500).json({ error: 'No se pudo borrar la lección' }); }
+  } catch (e) { db.exec('ROLLBACK'); console.error('[ninos] borrar leccion fallo:', e); return res.status(500).json({ error: 'No se pudo borrar la lección' }); }
   res.json({ ok: true });
 });
 

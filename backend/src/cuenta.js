@@ -209,6 +209,7 @@ r.post('/eliminar', (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[cuenta] eliminar cuenta fallo:', e);
     return res.status(500).json({ error: 'No se pudo completar la eliminación' });
   }
 
