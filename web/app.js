@@ -2579,6 +2579,7 @@ async function vistaTesoreria(){
     const movs=Array.isArray(movResp)?movResp:(movResp.items||[]);
     const hayMas=Array.isArray(movResp)?false:!!movResp.hayMas;
     $('tz').className='';
+    window._movsTz = movs;
     $('tz').innerHTML=`
       <div class="widgets" style="margin-bottom:18px">
         <div class="widget"><div class="widget-head">💰 Saldo actual</div><div class="stat-num">${money(res.saldo)}</div></div>
@@ -2619,10 +2620,51 @@ async function vistaTesoreria(){
   }catch(e){ $('tz').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
 function filaMov(m){
-  return `<div class="item-card flex">
+  return `<div class="item-card"><div class="flex">
     <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${m.campania_nombre?escHtml(m.campania_nombre):escHtml(cap(m.categoria||m.tipo))}</b>
     <div class="muted small">${escHtml(m.descripcion||'')} · ${escHtml(m.fecha)}${m.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(m.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div>
-    <b style="color:${m.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b></div>`;
+    <b style="color:${m.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b>
+    ${esTesoreroUI()?`<button class="btn-ico" title="Corregir este movimiento" onclick="formCorregirMov(${m.id})">✏️</button>`:''}
+  </div><div id="mov-corregir-${m.id}"></div></div>`;
+}
+// Corregir un movimiento: panel en sitio (la convencion de los 17). Se
+// prellena de la fila que la lista acaba de leer, y el PATCH manda SOLO lo
+// que quedo distinto del original — mandar el formulario entero es el fallo
+// que este proyecto ya cerro cinco veces (el "Juan Perez -> Juan Perez").
+function formCorregirMov(id){
+  const z=$('mov-corregir-'+id); if(!z) return;
+  if(z.innerHTML){ z.innerHTML=''; return; }   // segundo toque: cerrar
+  const m=(window._movsTz||[]).find(x=>x.id===id); if(!m) return;
+  z.innerHTML=`<div class="card" style="margin-top:8px">
+    <label for="mc-monto-${Number(id)}">Monto</label>
+    <input id="mc-monto-${Number(id)}" type="number" min="0.01" step="0.01" value="${Number(m.monto)}" />
+    <label for="mc-desc-${Number(id)}">Descripción</label>
+    <input id="mc-desc-${Number(id)}" value="${escHtml(m.descripcion||'')}" />
+    <label for="mc-cat-${Number(id)}">Categoría</label>
+    <input id="mc-cat-${Number(id)}" value="${escHtml(m.categoria||'')}" />
+    <p id="mc-error-${Number(id)}" class="error"></p>
+    <div class="row" style="margin-top:10px">
+      <button class="btn small-btn" onclick="guardarCorreccionMov(${id})">Guardar corrección</button>
+      <button class="btn ghost small-btn" onclick="formCorregirMov(${id})">Cancelar</button>
+    </div></div>`;
+}
+async function guardarCorreccionMov(id){
+  const m=(window._movsTz||[]).find(x=>x.id===id); if(!m) return;
+  const body={};
+  const monto=Number($('mc-monto-'+id).value);
+  if(!(monto>0)){ $('mc-error-'+id).textContent='Monto inválido'; return; }
+  if(monto!==Number(m.monto)) body.monto=monto;
+  const desc=$('mc-desc-'+id).value.trim();
+  if(desc!==(m.descripcion||'')) body.descripcion=desc;
+  const cat=$('mc-cat-'+id).value.trim();
+  if(cat!==(m.categoria||'')) body.categoria=cat;
+  if(!Object.keys(body).length){ toast('No cambiaste nada'); return; }
+  await conBoton(botonActual(), async()=>{
+    try{
+      await api('/tesoreria/movimientos/'+id,{method:'PATCH',body:JSON.stringify(body)});
+      toast('✏️ Corregido'); vistaTesoreria();
+    }catch(e){ $('mc-error-'+id).textContent=e.message; }
+  });
 }
 // Una campania activa. Sin meta NO se pinta barra: con el codigo anterior
 // saldria "$50.000 / $0" y una barra al 0%, que se lee como un error.
@@ -2663,6 +2705,7 @@ async function cargarMasMovimientos(){
       const items=Array.isArray(resp)?resp:(resp.items||[]);
       const hayMas=Array.isArray(resp)?false:!!resp.hayMas;
       _movOffset=offsetSiguiente;
+      window._movsTz = (window._movsTz||[]).concat(items);
       $('mov-list').insertAdjacentHTML('beforeend', items.map(filaMov).join(''));
       if(!hayMas){ const b=$('mov-mas'); if(b) b.remove(); }
     }catch(e){ toast(e.message); }

@@ -8,6 +8,7 @@
 // -----------------------------------------------------------------------------
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { cargarDb, reiniciar, sembrarMinimo } from './helpers.js';
 
 let dbDirecta, srv, base, signToken, SEM, tesorero;
@@ -182,4 +183,13 @@ test('el detalle del obispo trae `correcciones` por fila', async () => {
   const filas = await r.json();
   assert.ok(filas.some(f => f.correcciones === 1),
     'el obispo no ve la marca: la mitad de la decision 2 de la spec');
+});
+
+test('el frontend manda SOLO lo tocado: guardarCorreccionMov compara contra el original', () => {
+  const fuente = fs.readFileSync(new URL('../../web/app.js', import.meta.url), 'utf8');
+  const fn = fuente.match(/async function guardarCorreccionMov\([\s\S]*?\n\}/);
+  assert.ok(fn, 'no se encontro guardarCorreccionMov en web/app.js');
+  assert.ok(/if\s*\(\s*monto\s*!==\s*Number\(m\.monto\)\s*\)/.test(fn[0]),
+    'el monto viaja siempre: volveria el formulario que reenvia lo que nadie toco');
+  assert.ok(!fn[0].includes('tipo'), 'el frontend no debe ofrecer cambiar el tipo');
 });
