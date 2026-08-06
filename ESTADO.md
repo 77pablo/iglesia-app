@@ -155,7 +155,10 @@ el guardado; si nada cambió, la respuesta es `ok` y **no se escribe ni se
 audita nada**. Es la sexta aparición del mismo fallo en este proyecto —el
 formulario que reenvía entero lo que nadie tocó, el "Juan Pérez → Juan Pérez"—
 y esta vez la regla venía escrita en la spec **antes** que la ruta, con su test
-propio (*"PATCH con los MISMOS valores: 200 y CERO apuntes nuevos"*). El `UPDATE` y
+propio (*"PATCH con los MISMOS valores: 200 y CERO apuntes nuevos"*). El detalle
+de auditoría escribe el número crudo (`monto: 5000 -> 50000`), **no**
+formateado con `money()` — a propósito, libre de formato de locale; que nadie
+lo "arregle" después. El `UPDATE` y
 el apunte van **en la misma transacción** (la convención fijada el 31-jul: una
 corrección de dinero no puede quedar aplicada sin rastro), y el `SET` se arma
 desde una **lista blanca de tres columnas**, jamás desde las claves del cuerpo.
