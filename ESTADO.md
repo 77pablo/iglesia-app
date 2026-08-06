@@ -186,12 +186,14 @@ tecleo.
 
 **El plan también se revisa.** Dos divergencias corregidas contra el código, no
 contra el papel: el plan citaba `escJsAttr` para el `value=` de un `<input>`, y
-el ayudante correcto **en esa posición** es `escHtml` (verificado contra los 26
-sitios del repo que ya lo hacían así); y un `${id}` pelado dentro del panel
-tropezó el barrido XSS — se resolvió con `Number(id)`, ayudante que **ya estaba
-en su lista blanca**, sin añadir ninguna excepción nueva. Cuando un candado se
-queja, la salida barata es ensanchar su lista de excepciones; la correcta es que
-el código deje de merecer la queja.
+el ayudante correcto **en esa posición** es `escHtml` — verificado contra los
+**24** sitios que `main` ya tenía así (`grep -o 'value="${escHtml(' web/app.js`
+sobre `main`; en esta rama salen 26 porque el panel nuevo pone dos, y contar
+esos dos como precedente habría sido citarse a uno mismo). Y un `${id}` pelado
+dentro del panel tropezó el barrido XSS — se resolvió con `Number(id)`,
+ayudante que **ya estaba en su lista blanca**, sin añadir ninguna excepción
+nueva. Cuando un candado se queja, la salida barata es ensanchar su lista de
+excepciones; la correcta es que el código deje de merecer la queja.
 
 ⚠️ **Consecuencias asumidas, escritas para que nadie las descubra de sorpresa:**
 borrar un aporte de campaña corregido deja su historial **huérfano** en
