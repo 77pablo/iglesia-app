@@ -1,12 +1,12 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 6 de agosto de 2026, segunda pasada (por la mañana: tanda D fusionada, Pablo la subió y quedó verificada; después: **tanda E fusionada** — bandeja: borrar y atender en bloque — y **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de la tanda E — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 6 de agosto de 2026, tercera pasada (tanda D fusionada y subida por la mañana; **tandas E y G fusionadas** después — bandeja con borrar/en-bloque, y el barrido XSS extendido a manejadores y cuerpo; **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de las tandas E y G — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
 ## 👉 POR DÓNDE RETOMAR (6-ago)
 
 **Lo primero es de Pablo, no de código:**
-1. **Push** de los commits de la tanda E con GitHub Desktop (la tanda D ya subió esa misma mañana; verificar el despliegue buscando `atenderTodosPortal` en el `app.js` que sirve Render).
+1. **Push** de los commits de las tandas E y G con GitHub Desktop (la tanda D ya subió esa misma mañana; verificar el despliegue buscando `atenderTodosPortal` en el `app.js` que sirve Render).
 2. **Comprobaciones de navegador pendientes** que ninguna prueba de Node pudo hacer: las tres del 5-ago (como `raquel`, corregir un movimiento de Tesorería; como `marta`, editar/borrar clases y lecciones y leer el 409; como `pastor`, ver historiales sin lápiz) **ya se pueden hacer contra producción**. Y una nueva de la tanda E: como `pastor`, borrar un mensaje de la bandeja (ver la tarjeta irse sin que la sección de anteriores se pliegue) y marcar todos como atendidos (ver la lista repintada).
 3. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
 
@@ -14,7 +14,7 @@
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
 - ~~**Tanda E — bandeja del portal:** poder borrar un mensaje y marcar atendido en bloque (pendiente 3 de la bandeja).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. Spec: `docs/superpowers/specs/2026-08-06-bandeja-borrar-y-bloque-design.md`.
 - **Tanda F — pantalla de auditoría general para el pastor** (hoy el rastro solo se ve hoja por hoja; con lo del 5-ago hay MÁS rastro que nunca esperando una pantalla).
-- **Tanda G — extender el barrido XSS** a manejadores de evento (95) y cuerpo de texto (676). Dos leftovers ya anotados para esta tanda: `id="mov-corregir-${m.id}"` sin `Number()` y los `onclick` de `filaMov`.
+- ~~**Tanda G — extender el barrido XSS** a manejadores de evento (95) y cuerpo de texto (676). Dos leftovers ya anotados para esta tanda: `id="mov-corregir-${m.id}"` sin `Number()` y los `onclick` de `filaMov`.~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ Los dos leftovers **ya estaban arreglados** (la lista envejeció otra vez), y en cambio aparecieron cosas que nadie tenía anotadas: tres formateadores de fecha devolvían texto crudo en sus fallbacks, y `cap()` iba sin escapar en 6 sitios. 🔥 **Deja deuda explícita:** 199 firmas en el trinquete `PENDIENTES` de `xss-cuerpo.test.js`, para quemar por lotes (ver el plan).
 - **Tanda H — eventos que se repiten** ("todos los domingos"; conecta con la columna `repetir` de `fecha_no_disp` que hoy no hace nada).
 - **Backlog que dejaron las reviews del 5-ago:** `PATCH /ninos/:id` sigue reenviando todo y auditando sin diff (contradice la regla nueva del propio módulo — candidato natural para `soloCambios()`); barrido de `catch` sin `console.error(e)`; el `FakeSelect` de `organizacion-pagador-selector.test.js` con el punto ciego del `remove()`; `z.coerce.number()` acepta booleanos (POST y PATCH de tesorería).
 
@@ -60,6 +60,49 @@ comentario en `admin.js`).
 Suite: **662** (misma cifra que ayer: se invirtieron dos tests, no se sumaron;
 medida con `cd backend && npm test`; caduca con la próxima rama — no la repitas
 de memoria).
+
+---
+
+## 🆕 6 DE AGOSTO DE 2026 (3) — 🛡️ el barrido XSS ya cubre las tres categorías
+
+**Tanda G, fusionada a `main` el mismo día** (merge `--no-ff`, rama
+`feat/barrido-xss-total` borrada). **Sin subir a GitHub** al escribirse esto —
+compruébalo. Spec (escrita al cierre, tras medir):
+`docs/superpowers/specs/2026-08-06-barrido-xss-total-design.md`; el plan deja
+anotada la deuda.
+
+**Lo más valioso no fue el barrido, fueron sus hallazgos.** Tres formateadores
+devolvían texto **CRUDO** en sus fallbacks: `parseFecha` aceptaba cualquier
+cosa con dos guiones (así que `fechaTxt('a-b-<img...>')` y `chipFecha`
+soltaban el tercer trozo sin escapar al HTML), y `fechaDeUTC` devolvía los 10
+primeros caracteres crudos de lo que no parseara. Arreglados **en el helper**,
+no sitio por sitio: `parseFecha` exige `\d{4}-\d{2}-\d{2}` (toda fecha real de
+la app es ISO), `fechaTxt` descarta fallbacks peligrosos (descarta, NO escapa
+— escapar doblaría el escape de los llamadores), y `fechaDeUTC` solo deja
+pasar forma de fecha. Tres candados fijan los arreglos. Además `cap()` iba
+crudo en 6 sitios (ahora `escHtml(cap(...))`). ⚠️ Y los dos leftovers que esta
+tanda tenía anotados **ya estaban arreglados** — novena vez de la misma
+lección.
+
+**El mecanismo:** el tokenizador se extrajo a `xss-analisis.js` (un solo
+mecanismo para los tres barridos, no tres copias). `xss-manejadores.test.js`
+cubre onclick/onchange/href-javascript **con rigor completo**: 22 sitios
+numéricos envueltos con `Number()`, regla nueva `X||Y` (el resultado siempre
+es un operando), 10 excepciones con motivo y los de más peso con prueba
+propia. `xss-cuerpo.test.js` cubre el cuerpo con reglas más anchas, cada una
+verificada: template anidado como contenedor (sus `${}` internos se barren
+aparte — hay autocomprobación), tablas `MAYUSCULAS[...]` (un test exige que
+se declaren con puros literales), y 16 ayudantes leídos uno a uno.
+
+🔥 **La deuda, explícita y con candado:** la cola del cuerpo que no se pudo
+clasificar con rigor mecánico (HTML en variables locales, en su mayoría) son
+**199 firmas** en `PENDIENTES` de `xss-cuerpo.test.js`, y es un **trinquete**:
+el código nuevo tiene que salir limpio (una interpolación cruda nueva rompe la
+suite), y una firma cuyo sitio desaparece también rompe — la lista **solo
+puede encoger**. Quemarla por lotes de 20-30 (el plan lo deja anotado).
+
+Suite: **689** (671 + 18; medida al cerrar la rama; caduca con la próxima rama
+que se fusione — no la repitas de memoria).
 
 ---
 
