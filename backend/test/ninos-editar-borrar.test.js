@@ -222,3 +222,34 @@ test('borrar queda auditado', async () => {
   assert.equal(log.modulo, 'ninos');
   assert.match(log.detalle, /Sofia/);
 });
+
+// ---------- Backlog 5-ago: el PATCH del nino tambien usa soloCambios() ----------
+// La regla nueva del propio modulo (editar clase/leccion) decia "solo se
+// audita lo que cambio de verdad", y este PATCH la contradecia: reenviaba
+// todo y auditaba sin diff — la septima aparicion del "Juan Perez -> Juan
+// Perez" esperando su turno.
+
+test('PATCH del nino con los MISMOS valores: 200 y CERO apuntes nuevos', async () => {
+  conEncargada();
+  const { ninoId } = claseConNino('Sofia', 'Ana (abuela)');
+
+  const res = await editar(SEM.lider, ninoId, { nombre: 'Sofia', autorizados: 'Ana (abuela)' });
+  assert.equal(res.status, 200);
+
+  const apuntes = db.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE accion = 'editar_nino'").get().n;
+  assert.equal(apuntes, 0, 'reenviar lo igual no es una correccion y no debe ensuciar el rastro');
+});
+
+test('PATCH del nino con un cambio real: audita "antes -> despues" y nombra al nino', async () => {
+  conEncargada();
+  const { ninoId } = claseConNino('Sofia', 'Ana (abuela)');
+
+  const res = await editar(SEM.lider, ninoId, { autorizados: 'Pedro (tio)', nombre: 'Sofia' });
+  assert.equal(res.status, 200);
+
+  const logs = db.prepare("SELECT detalle FROM auditoria WHERE accion = 'editar_nino'").all();
+  assert.equal(logs.length, 1, 'un solo apunte por la correccion');
+  assert.match(logs[0].detalle, /Sofia/, 'el apunte dice de quien es la ficha');
+  assert.match(logs[0].detalle, /autorizados: Ana \(abuela\) -> Pedro \(tio\)/, 'y que cambio de verdad');
+  assert.doesNotMatch(logs[0].detalle, /nombre:/, 'el nombre reenviado igual NO aparece como cambio');
+});
