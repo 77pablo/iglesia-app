@@ -47,7 +47,10 @@ r.get('/movimientos', (req, res) => {
   // mantenerla sincronizada, y eso es exactamente el problema que este trabajo
   // viene a quitar de la tesoreria.
   const rows = db.prepare(
-    `SELECT m.*, c.nombre AS campania_nombre
+    `SELECT m.*, c.nombre AS campania_nombre,
+            (SELECT COUNT(*) FROM auditoria a
+              WHERE a.ref_tabla = 'movimiento' AND a.ref_id = m.id
+                AND a.accion = 'movimiento_corregir') AS correcciones
        FROM movimiento m LEFT JOIN campania c ON c.id = m.campania_id
       WHERE m.iglesia_id = ?
       ORDER BY m.fecha DESC, m.id DESC LIMIT ? OFFSET ?`
@@ -137,6 +140,25 @@ r.patch('/movimientos/:id', soloTesorero, limiterSensible, validar(correccionSch
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   res.json({ ok: true });
+});
+
+// El historial de correcciones de UN movimiento. Lo ve quien ve el modulo
+// (tesorera, pastor, obispo): el gate del router ya lo garantiza. Se pide al
+// tocar la marca, no viaja con el listado.
+r.get('/movimientos/:id/historial', (req, res) => {
+  const ig = req.user.iglesia_id;
+  const m = db.prepare('SELECT id FROM movimiento WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, ig);
+  if (!m) return res.status(404).json({ error: 'Movimiento no encontrado' });
+  // LEFT JOIN: si el actor ejercio ARCO y su fila quedo anonimizada, el apunte
+  // sigue valiendo con el nombre que tenga; si la fila no existe, actor null.
+  res.json(db.prepare(
+    `SELECT a.fecha, a.detalle, p.nombre AS actor
+       FROM auditoria a LEFT JOIN persona p ON p.id = a.actor_id
+      WHERE a.ref_tabla = 'movimiento' AND a.ref_id = ? AND a.accion = 'movimiento_corregir'
+        AND a.iglesia_id = ?
+      ORDER BY a.id DESC`
+  ).all(m.id, ig));
 });
 
 // --- Campañas ---

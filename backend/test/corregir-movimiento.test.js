@@ -128,3 +128,58 @@ test('descripcion vacia se guarda como NULL (misma normalizacion que el POST)', 
   assert.equal(movDe(id).descripcion, null);
   assert.equal(apuntesDe(id).length, 1);
 });
+
+test('categoria vacia se guarda como NULL, simetrica con descripcion', async () => {
+  const id = crearMov({ categoria: 'ofrenda' });
+  const res = await patchMov(id, { categoria: '' });
+  assert.equal(res.status, 200);
+  assert.equal(movDe(id).categoria, null);
+  assert.equal(apuntesDe(id).length, 1);
+});
+
+test('GET /movimientos trae `correcciones` por fila: 0 y el conteo real', async () => {
+  const limpio = crearMov();
+  const tocado = crearMov({ monto: 100 });
+  await patchMov(tocado, { monto: 200 });
+  await patchMov(tocado, { monto: 300 });
+  const r = await fetch(`${base}/api/tesoreria/movimientos`, { headers: H(tesorero) });
+  const { items } = await r.json();
+  assert.equal(items.find(x => x.id === limpio).correcciones, 0);
+  assert.equal(items.find(x => x.id === tocado).correcciones, 2);
+});
+
+test('el historial devuelve los apuntes con el nombre del actor', async () => {
+  const id = crearMov({ monto: 100 });
+  await patchMov(id, { monto: 200 });
+  const r = await fetch(`${base}/api/tesoreria/movimientos/${id}/historial`, { headers: H(SEM.pastor) });
+  assert.equal(r.status, 200, 'el pastor VE el historial (supervisa, no toca)');
+  const filas = await r.json();
+  assert.equal(filas.length, 1);
+  assert.equal(filas[0].actor, tesorero.nombre);
+  assert.ok(filas[0].detalle.includes('100') && filas[0].detalle.includes('200'));
+  assert.ok(filas[0].fecha, 'sin fecha no hay rastro que valga');
+});
+
+test('historial de un movimiento de otra iglesia -> 404', async () => {
+  const otra = Number(dbDirecta.prepare(
+    "INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra2','OTRA2')").run().lastInsertRowid);
+  const ajeno = crearMov({ iglesia_id: otra });
+  const r = await fetch(`${base}/api/tesoreria/movimientos/${ajeno}/historial`, { headers: H(tesorero) });
+  assert.equal(r.status, 404);
+});
+
+test('el detalle del obispo trae `correcciones` por fila', async () => {
+  const obispoId = Number(dbDirecta.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, es_pastor, rol_global, activo) VALUES (NULL,'obispo2','Obispo','x',0,'obispo',1)"
+  ).run().lastInsertRowid);
+  const id = crearMov({ monto: 100 });
+  await patchMov(id, { monto: 200 });
+  const mes = dbDirecta.prepare("SELECT strftime('%Y-%m', fecha) AS m FROM movimiento WHERE id = ?").get(id).m;
+  const r = await fetch(`${base}/api/obispo/iglesia/${SEM.iglesiaId}/tesoreria?mes=${mes}`, {
+    headers: { Authorization: 'Bearer ' + signToken({ id: obispoId, iglesia_id: null }) }
+  });
+  assert.equal(r.status, 200);
+  const filas = await r.json();
+  assert.ok(filas.some(f => f.correcciones === 1),
+    'el obispo no ve la marca: la mitad de la decision 2 de la spec');
+});
