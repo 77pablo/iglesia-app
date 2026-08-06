@@ -38,7 +38,10 @@ import { clasificarInterpolaciones, esExprSegura, AYUDANTES_SEGUROS } from './xs
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_JS = path.join(__dirname, '..', '..', 'web', 'app.js');
-const fuente = fs.readFileSync(APP_JS, 'utf8');
+// CRLF -> LF: git puede sacar web/app.js con uno u otro fin de linea segun
+// la maquina, y las firmas del barrido llevan posiciones/contexto del texto
+// (sin normalizar, el mismo codigo daria firmas distintas segun el checkout).
+const fuente = fs.readFileSync(APP_JS, 'utf8').replace(/\r\n/g, '\n');
 
 // Cada nombre extra esta VERIFICADO leyendo su definicion en web/app.js:
 const AYUDANTES_CUERPO = [...AYUDANTES_SEGUROS,

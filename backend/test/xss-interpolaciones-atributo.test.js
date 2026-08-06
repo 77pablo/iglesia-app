@@ -67,7 +67,10 @@ import { hallarAtributos, interpolacionesDelArchivo, esExprSegura } from './xss-
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_JS = path.join(__dirname, '..', '..', 'web', 'app.js');
-const fuente = fs.readFileSync(APP_JS, 'utf8');
+// CRLF -> LF: git puede sacar web/app.js con uno u otro fin de linea segun
+// la maquina, y las firmas del barrido llevan posiciones/contexto del texto
+// (sin normalizar, el mismo codigo daria firmas distintas segun el checkout).
+const fuente = fs.readFileSync(APP_JS, 'utf8').replace(/\r\n/g, '\n');
 // ------------------------------------------------------------
 //  Excepciones: solo para lo que la regla mecánica no puede demostrar sin
 //  rastrear de dónde viene la variable. Cada entrada se valida por la FIRMA
