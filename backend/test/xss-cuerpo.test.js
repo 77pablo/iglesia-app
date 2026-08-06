@@ -60,9 +60,14 @@ const AYUDANTES_CUERPO = [...AYUDANTES_SEGUROS,
   'accionesBtns',   // template propio, barrido; args fijados por tests (atributos + manejadores)
   'errCargar',      // template propio; reintentar fijado por test en xss-manejadores
   'chipMensajePortal',       // tres ramas literales
-  'botonBorrarMensajePortal' // Number(id) + booleano
+  'botonBorrarMensajePortal', // Number(id) + booleano
+  // Callbacks de .map(...).join() verificados para la regla mapJoin (lote 2):
+  'filaMov',      // escHtml/money/Number en todo dato; su template lo barren estos archivos
+  'filaAsist',    // escHtml(m.nombre) y escHtml(m.grupos); resto literales
+  'filaCampania', // escHtml(c.nombre), money(), pct de Math.round
+  'filaNotif'     // escHtml(n.titulo/n.texto); el onclick tiene su excepcion en xss-manejadores
 ];
-const OPTS = { templatesComoLiteral: true, tablasMayusculas: true };
+const OPTS = { templatesComoLiteral: true, tablasMayusculas: true, mapJoin: true };
 
 // Verificadas una a una en el lote 1 (6-ago): sitios que NO son HTML o son
 // internos de helpers ya demostrados. Cada firma debe seguir existiendo en el
@@ -125,7 +130,6 @@ const PENDIENTES_LISTA = [
 " stroke-linejoin=\"round\">⟨⟩p",
 "' ')[0])} 👋</h2> <p>⟨⟩ME.iglesia?ME.iglesia.nombre:''",
 "?ME.iglesia.nombre:''} · ⟨⟩$('u-rol').textContent",
-"tes.length})</div> ⟨⟩pendientes.map(a=>`<div class=\"item-card flex\" style=\"margin-top:10px\"> <div style=\"flex:1\"><b>${TIPO_ICON[a.tipo]||'📋'} ${escHtml(cap(a.tipo))}</b> <div class=\"muted small\">${escHtml(a.evento)} · ${fechaTxt(a.fecha)}${a.lugar?' · 📍 '+escHtml(a.lugar):''}</div></div> <div class=\"row\" style=\"width:auto\"> <button class=\"btn small-btn\" onclick=\"responderDash(${a.id},'aceptar')\">✅ Acepto</button> <button class=\"btn ghost small-btn\" onclick=\"responderDash(${a.id},'rechazar')\">❌ No puedo</button> </div></div>`).join('')",
 "\">${escHtml(e.grupo||'')}⟨⟩e.hora_inicio?' · '+e.hora_inicio:''",
 "📅 Próximos eventos</div>⟨⟩listaEventos",
 " Anuncios recientes</div>⟨⟩listaAnuncios",
@@ -162,20 +166,14 @@ const PENDIENTES_LISTA = [
 "\">📅 ${fechaTxt(m.fecha)}⟨⟩m.hora_inicio?' · 🕐 '+m.hora_inicio:''",
 "\"pintarNoDispServicio()\">⟨⟩ev",
 "><select id=\"sv-persona\">⟨⟩ps",
-"er + `<div id=\"ln-lista\">⟨⟩d.items.map(filaNotif).join('')",
 "ight:600;margin-top:4px\">⟨⟩accion",
 "ist-prev\">Última vez: <b>⟨⟩d.ultimaVez",
 "3> <div class=\"list\">⟨⟩asistieron.length? asistieron.map(m=>filaAsist(m,true)).join('') : '<p class=\"muted small\">Nadie marcado aún.</p>'",
 "3> <div class=\"list\">⟨⟩ausentes.length? ausentes.map(m=>filaAsist(m,false)).join('') : '<p class=\"muted small\">¡Todos asistieron! 🎉</p>'",
-"${p.length})</div> ⟨⟩p.map(e=>`<div class=\"item-card flex\" style=\"margin-top:10px\"> <div style=\"flex:1\"><b>${escHtml(e.titulo)}</b><div class=\"muted small\">${fechaTxt(e.fecha)} · ${escHtml(e.grupo||'')} · pidió ${escHtml(e.solicitante||'')}</div></div> <div class=\"row\" style=\"width:auto\"> <button class=\"btn small-btn\" onclick=\"aprobarFecha(${e.id})\">Aprobar</button> <button class=\"btn ghost small-btn\" onclick=\"rechazarFecha(${e.id})\">Rechazar</button> </div></div>`).join('')",
-"\" style=\"margin-top:8px\">⟨⟩h.slice(0,30).map(x=>`<div class=\"item-card flex\"> <div style=\"flex:1\"><b>${escHtml(x.evento_titulo||'')}</b> ${x.accion==='aprobado'?'<span class=\"estado-chip estado-aceptado\">Aprobado</span>':'<span class=\"estado-chip estado-rechazado\">Rechazado</span>'} <div class=\"muted small\">${x.grupo?escHtml(x.grupo)+' · ':''}${escHtml(x.fecha_evento||'')}${x.motivo?' · '+escHtml(x.motivo):''}</div></div> <span class=\"muted small\">${escHtml(fechaDeUTC(x.creado_en))}</span></div>`).join('')",
 "iltrarPanel(this.value)\">⟨⟩opts",
 "iv><div class=\"stat-num\">⟨⟩d.ultima?d.ultima.total:'—'",
-"asistencia</div> ⟨⟩d.reuniones.length? d.reuniones.map(r=>`<div class=\"trend-row\"> <span class=\"trend-label\">${fechaTxt(r.fecha)}</span> <div class=\"trend-track\"><div class=\"trend-bar\" style=\"width:${Math.round(r.total/max*100)}%\">${Number(r.total)}</div></div> </div>`).join('') : '<p class=\"muted small\">Aún no hay asistencia registrada.</p>'",
-"n alejando</div> ⟨⟩d.ausentes.length? '<div class=\"list\" style=\"margin-top:6px\">'+d.ausentes.map(a=>`<div class=\"item-card flex\"> <div style=\"flex:1\"><b>${escHtml(a.nombre)}</b><div class=\"muted small\">No asistió a la última reunión</div></div> <span class=\"estado-chip estado-rechazado\">Ausente</span></div>`).join('')+'</div>' : '<p class=\"muted small\" style=\"margin-top:6px\">Nadie ausente en la última reunión 🎉</p>'",
 "iv><div class=\"stat-num\">⟨⟩ultimaAsis?ultimaAsis.total:'—'",
 "<select id=\"set-cancion\">⟨⟩opts",
-"x;vertical-align:middle\">⟨⟩p.items.map(it=> `<span class=\"estado-chip\">${escHtml(it.instrumento||'—')}${lider?` <button type=\"button\" class=\"btn-plano\" title=\"Quitar\" aria-label=\"Quitar del equipo\" style=\"color:var(--red-tx);font-weight:700;margin-left:2px\" onclick=\"quitarIntegrante(${it.id})\">×</button>`:''}</span>`).join('')",
 " style=\"max-width:200px\">⟨⟩popts",
 " style=\"max-width:150px\">⟨⟩iopts",
 "-titulo\">🗓️ Ensayo</div>⟨⟩ensayoHtml",
@@ -185,40 +183,27 @@ const PENDIENTES_LISTA = [
 "chip\">📌 Fijo</span>':''}⟨⟩sub",
 "ass=\"estado-chip ${cls}\">⟨⟩si",
 "stado-chip ${cls}\">${si} ⟨⟩sl",
-"select id=\"caso-persona\">⟨⟩personas.map(p=>`<option value=\"${p.id}\">${escHtml(p.nombre)}</option>`).join('')",
-"\" style=\"margin-top:8px\">⟨⟩d.contactos.length? d.contactos.map(x=>`<div class=\"item-card\"> <b>${CT_LABEL[x.tipo]||escHtml(x.tipo)}</b> <span class=\"muted small\">${escHtml(fechaDeUTC(x.fecha))}</span> ${x.nota?`<div class=\"muted small\">${escHtml(x.nota)}</div>`:''}</div>`).join('') : '<p class=\"muted small\">Sin contactos aún.</p>'",
 "accion-${m.id}\"> ⟨⟩chip",
 "${m.id}\"> ${chip}⟨⟩boton",
 " : ''; z.innerHTML=`⟨⟩btnTodos",
 "Todos}<div id=\"mp-lista\">⟨⟩lista",
 " más</button>':''} ⟨⟩previos",
 "true})}); toast(`✅ ⟨⟩d.atendidos",
-"orm\"></div>`:''} ⟨⟩camps.filter(c=>!c.cerrada_en).length ? camps.filter(c=>!c.cerrada_en).map(filaCampania).join('') : `<p class=\"muted small\">Todavía no hay campañas.${esTesoreroUI()?' Una campaña sirve para juntar para algo concreto —el techo, un viaje misionero— y ver cuánto falta.':''}</p>`",
 "radas</div> ⟨⟩camps.filter(c=>c.cerrada_en).map(filaCampaniaCerrada).join('')",
 "</span><span class=\"val\">⟨⟩pct",
 ".saldo)}</b></p> ⟨⟩trans.porCategoria.length ? trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0; return `<div class=\"dato-row\"><span>${escHtml(cap(g.categoria))}</span><span class=\"val\">${pct}% · ${money(g.monto)}</span></div>`;}).join('') : '<p class=\"muted small\">Cuando se registren gastos, aquí se verá en qué se fue el dinero.</p>'",
-"\" style=\"margin-top:8px\">⟨⟩movs.length ? movs.map(filaMov).join('') : `<p class=\"muted small\">Todavía no hay movimientos registrados.${esTesoreroUI()?' Toca «+ Ingreso» para anotar la primera ofrenda.':''}</p>`",
 "r\" style=\"width:${pct}%\">⟨⟩pct",
-"\" style=\"margin-top:8px\">⟨⟩c.aportes.map(a=>` <div class=\"item-card flex\"> <span class=\"muted small\">${escHtml(fechaTxt(a.fecha))}</span> <b style=\"flex:1;text-align:right\">${money(a.monto)}</b> ${esTesoreroUI()?`<button class=\"btn-ico\" title=\"Borrar este aporte\" onclick=\"borrarAporte(${c.id},${a.id})\">🗑️</button>`:''} </div>`).join('')",
-"abel><select id=\"mv-cat\">⟨⟩cats.map(c=>`<option value=\"${c}\">${escHtml(cap(c))}</option>`).join('')",
 "${escHtml(x.edad||'')} · ⟨⟩x.ninos",
 " small\">No se pudo cargar⟨⟩que?' '+que:''",
-" style=\"max-width:220px\">⟨⟩grupos.map(x=>`<option value=\"${x.id}\" ${x.id===g.id?'selected':''}>${escHtml(x.nombre)}</option>`).join('')",
 "n-items:center;gap:10px\">⟨⟩sel",
-"ue=\"\">📣 A todos</option>⟨⟩ms.map(m=>`<option value=\"${m.id}\">${escHtml(m.nombre)}</option>`).join('')",
-"mg-nuevo\" style=\"flex:1\">⟨⟩libres.map(p=>`<option value=\"${p.id}\">${escHtml(p.nombre)}</option>`).join('')",
-" style=\"max-width:220px\">⟨⟩ms.map(m=>`<option value=\"${m.id}\">${escHtml(m.nombre)}</option>`).join('')",
 "escHtml(p.predicador):''}⟨⟩p.recursos?' · 📎 '+p.recursos+' recurso(s)':''",
 "\"><div style=\"flex:1\"><b>⟨⟩ic",
 "span class=\"muted small\">⟨⟩link",
 "\" style=\"margin-top:8px\">⟨⟩recs||'<p class=\"muted small\">Sin recursos.</p>'",
-" style=\"max-width:200px\">⟨⟩personas.map(p=>`<option value=\"${p.id}\">${escHtml(p.nombre)}</option>`).join('')",
 "ignar</button></div> ⟨⟩fallo?'<p class=\"error small\">No se pudo cargar la lista de predicadores · <a href=\"javascript:cargarPredicadores()\" class=\"link\" style=\"display:inline;padding:0\">Reintentar</a></p>' :(list.length?'<div class=\"list\">'+list.map(x=>`<div class=\"item-card flex\"><div style=\"flex:1\"><b>${escHtml(x.nombre)}</b> ${x.vigente?'<span class=\"estado-chip estado-aceptado\">Vigente</span>':'<span class=\"estado-chip\">Inactivo</span>'}<div class=\"muted small\">${fechaTxt(x.desde)} → ${fechaTxt(x.hasta)}</div></div><button class=\"link\" style=\"color:var(--red-tx)\" onclick=\"quitarPredicador(${x.id})\">Quitar</button></div>`).join('')+'</div>':'<p class=\"muted small\">Nadie con rol predicador todavía.</p>')",
 "n class=\"estado-chip\">👥 ⟨⟩i.miembros",
 "n class=\"estado-chip\">📅 ⟨⟩i.eventos",
 "=\"estado-chip\">📊 asist. ⟨⟩i.asistenciaPromedio",
-" style=\"margin-top:18px\">⟨⟩list.map(i=>` <button type=\"button\" class=\"btn-plano module-card\" style=\"text-align:left;align-items:stretch\" onclick=\"verIglesiaObispo(${i.id})\"> <div style=\"display:flex;justify-content:space-between;align-items:center\"> <div class=\"label\" style=\"font-size:16px\">⛪ ${escHtml(i.nombre)}</div><span class=\"estado-chip\">${escHtml(i.codigo_unico)}</span></div> <div class=\"muted small\" style=\"margin:6px 0 10px\">Pastor: ${escHtml(i.pastor||'—')}</div> <div class=\"row\" style=\"gap:8px;flex-wrap:wrap\"> <span class=\"estado-chip\">👥 ${i.miembros}</span> <span class=\"estado-chip\">📅 ${i.eventos}</span> <span class=\"estado-chip\">📊 asist. ${i.asistenciaPromedio}</span> <span class=\"estado-chip\">💰 ${money(i.saldo)}</span> </div></button>`).join('')",
-" style=\"max-width:220px\">⟨⟩igs.map(i=>`<option value=\"${i.id}\" ${i.id===id?'selected':''}>${escHtml(i.nombre)}</option>`).join('')",
 "<div class=\"widget-head\">⟨⟩titulo",
 "get-head\">${titulo}</div>⟨⟩inner",
 ":`<p class=\"muted small\">⟨⟩vacio",
@@ -238,19 +223,15 @@ const PENDIENTES_LISTA = [
 ">`, 'Sin grupos.'))} ⟨⟩card('⭐ Líderes', lista(d.lideres, l=>`<div class=\"item-card flex\"><div style=\"flex:1\"><b>${escHtml(l.nombre)}</b><div class=\"muted small\">${escHtml(rolLabel(l.rol||''))} · ${escHtml(l.grupo)}</div></div></div>`, 'Sin líderes.'))",
 "=\"flex:1;font-size:16px\">⟨⟩titulo",
 "ding:18px;overflow:auto\">⟨⟩html",
-"tes.length} asist.</span>⟨⟩e.presentes.length?'<div class=\"muted small\" style=\"margin-top:4px\">'+e.presentes.map(escHtml).join(' · ')+'</div>':'<div class=\"muted small\" style=\"margin-top:4px\">Sin registro de asistencia.</div>'",
 "top:8px\">Sin notas.</p>'}⟨⟩recs?'<h3 class=\"section-title\" style=\"margin-top:14px\">Recursos</h3><div class=\"list\">'+recs+'</div>':''",
-"v class=\"dir-cumple-row\">⟨⟩list.map(p=>`<div class=\"dir-cumple-item\">${dirAvatar(p,44)}<div class=\"dir-cumple-nombre\">${escHtml(p.nombre)}</div><div class=\"muted small\">día ${escHtml(String(p.dia==null?'':p.dia))}</div></div>`).join('')",
 ";gap:6px;flex-wrap:wrap\">⟨⟩chips",
 "\" style=\"margin-top:6px\">⟨⟩contacto",
 "tyle=\"margin:8px 0 16px\">⟨⟩msg",
 "=\"${okClase}\" id=\"cf-ok\">⟨⟩okLabel",
 "tyle=\"margin:8px 0 14px\">⟨⟩msg",
 "s=\"reason\" data-r=\"${r}\">⟨⟩r",
-"ass=\"reason-grid\"> ⟨⟩['Trabajo','Viaje','Salud','Familia'].map(r=>`<button class=\"reason\" data-r=\"${r}\">${r}</button>`).join('')",
 "cHtml(u.usuario)}</span> ⟨⟩badges",
 "v style=\"margin-top:6px\">⟨⟩chips",
-"s=\"muted small\">Accesos: ⟨⟩v.acc.map(escHtml).join(' · ')",
 "m-userform\"></div> ⟨⟩usuarios||'<p class=\"muted small\">Sin usuarios.</p>'",
 "-grupoform\"></div> ⟨⟩grupos||'<p class=\"muted small\">Sin grupos.</p>'",
 " al asignarlo.</p> ⟨⟩leyenda",
@@ -270,14 +251,10 @@ const PENDIENTES_LISTA = [
 "Ajuste('${g}','${val}')\">⟨⟩label",
 "<div class=\"ajuste-opts\">⟨⟩Object.entries(ACENTOS).map(([k,v])=>`<button type=\"button\" class=\"swatch ${k===acSel?'sel':''}\" title=\"${v.nombre}\" aria-label=\"Color ${v.nombre}\" aria-pressed=\"${k===acSel}\" style=\"background:linear-gradient(135deg,${v.p} 0%,${v.p} 62%,${v.acc} 62%,${v.acc} 100%)\" onclick=\"setAjuste('acento','${k}')\"></button>`).join('')",
 "dos?`<span class=\"badge\">⟨⟩c.no_leidos",
-" <select id=\"nc-persona\">⟨⟩contactos.map(c=>`<option value=\"${c.id}\">${escHtml(c.nombre)}</option>`).join('')",
 " '+fechaTxt(fecha):''} · ⟨⟩h.n_cosas||0",
 "${escHtml(x.nombre)} <b>×⟨⟩x.cantidad",
 " <div class=\"org-quien\">⟨⟩ed?quien:(x.responsable_nombre?'👤 '+escHtml(x.responsable_nombre):'')",
 "an class=\"muted small\">· ⟨⟩fuenteTxt",
-"rrecciones</b> ⟨⟩h.correcciones.map(c=>`<div class=\"org-row\"><span class=\"muted small\"> ${escHtml(c.actor_nombre||'Alguien')} · ${escHtml(c.detalle||'')}</span> <span class=\"muted small\">${escHtml(fechaDeUTC(c.fecha))}</span></div>`).join('')",
-"/b></div>`:''} ⟨⟩porDevolver.map(a=>`<div class=\"org-row\"><span>Por devolver: ${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')",
-"v>`).join('')} ⟨⟩aportesDonados.map(a=>`<div class=\"org-row\"><span>Aporte donado: ${escHtml(a.nombre)}</span><b>${money(a.total)}</b></div>`).join('')",
 " <div id=\"org-cosas\">⟨⟩cosas",
 " <div id=\"org-gastos\">⟨⟩gastos",
 "tado)}</b></div> ⟨⟩aportes",
@@ -405,4 +382,15 @@ test('autocomprobación: un dato crudo en el cuerpo se marca; envuelto en escHtm
   const externa = exprs.find(e => e.includes('ok?'));
   assert.equal(esExprSegura(externa, AYUDANTES_CUERPO, OPTS), true,
     'el contenedor con HTML fijo sí pasa (su interior se juzga aparte)');
+});
+
+test('autocomprobación mapJoin: la flecha-template y el ayudante pasan; la flecha que devuelve crudo NO', () => {
+  assert.equal(esExprSegura("xs.map(x=>`<b>${escHtml(x.n)}</b>`).join('')", AYUDANTES_CUERPO, OPTS), true,
+    'flecha con template: sus ${} internos se barren aparte');
+  assert.equal(esExprSegura("movs.filter(m=>m.ok).map(filaMov).join('')", AYUDANTES_CUERPO, OPTS), true,
+    'callback nombrado de la lista de ayudantes');
+  assert.equal(esExprSegura("xs.map(x=>x.nombre).join('')", AYUDANTES_CUERPO, OPTS), false,
+    'una flecha que devuelve el dato crudo une nombres sin escapar: tiene que marcarse');
+  assert.equal(esExprSegura("xs.map(fnCualquiera).join('')", AYUDANTES_CUERPO, OPTS), false,
+    'un callback nombrado FUERA de la lista no se da por bueno');
 });

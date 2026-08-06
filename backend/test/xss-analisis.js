@@ -326,6 +326,25 @@ export function esExprSegura(expr, ayudantes = AYUDANTES_SEGUROS, opts = {}) {
   if (/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*\s*[+\-]\s*\d+$/.test(e)) return true;
   if (/^[\w$.]+\s*(===|!==|==|!=)\s*[\w$.]+$/.test(e)) return true;
   if (envueltaPorAyudante(e, ayudantes)) return true;
+  // X.map(CB).join('literal') como contenedor (solo con opts.mapJoin, el
+  // barrido de cuerpo): todo el texto que sale lo produce CB, asi que CB es
+  // lo unico que hay que mirar — el prefijo (array, .filter, .slice) no
+  // aporta texto. CB se acepta SOLO si es (a) una flecha cuyo cuerpo es un
+  // template literal entero (sus ${} internos los recolecta el tokenizador y
+  // el barrido los clasifica aparte), o (b) el nombre pelado de un ayudante
+  // de la lista (filaMov, escHtml...). Una flecha que devuelve el dato crudo
+  // (x=>x.nombre) NO pasa — autocomprobacion en xss-cuerpo.test.js. Con un
+  // .map anidado dentro del callback la regla no matchea y el sitio queda
+  // sin clasificar: fallo conservador, nunca blanquea de mas.
+  if (opts.mapJoin) {
+    const mj = e.match(/^[^]*\.map\(([^]*)\)\s*\.join\(\s*('[^']*'|"[^"]*")\s*\)$/);
+    if (mj) {
+      const cb = mj[1].trim();
+      if (/^[\w$]+$/.test(cb) && ayudantes.includes(cb)) return true;
+      const tick = cb.indexOf('`');
+      if (/^\(?[\w$,\s]*\)?\s*=>\s*`/.test(cb) && tick >= 0 && esTemplateCompleto(cb.slice(tick))) return true;
+    }
+  }
   const tern = partirTernario(e);
   if (tern) return esExprSegura(tern.a, ayudantes, opts) && esExprSegura(tern.b, ayudantes, opts);
   const logico = partirLogico(e);
