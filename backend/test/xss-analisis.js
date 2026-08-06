@@ -297,20 +297,40 @@ export function partirLogico(expr) {
   return partes;
 }
 
-export function esExprSegura(expr, ayudantes = AYUDANTES_SEGUROS) {
+// ¿La expresion es UN template literal entero (`...`)? Para el barrido de
+// cuerpo, un template asi cuenta como literal: sus ${...} internos NO quedan
+// sin mirar — el tokenizador los recolecta por separado y el barrido los
+// clasifica uno a uno. Lo que se da por seguro aqui es solo el HTML fijo
+// entre ellos, que escribio el programador. En el barrido de ATRIBUTOS esta
+// regla no se usa: alli un template anidado entero como valor de atributo no
+// aparece en la practica, y activarla seria ensanchar sin necesidad.
+export function esTemplateCompleto(expr) {
+  const e = expr.trim();
+  if (e[0] !== '`') return false;
+  return saltarTemplate(e, 0, []) === e.length;
+}
+
+export function esExprSegura(expr, ayudantes = AYUDANTES_SEGUROS, opts = {}) {
   const e = expr.trim();
   if (e === '') return true;
   if (/^\d+$/.test(e)) return true;
   if (/^'[^'\\]*'$/.test(e) || /^"[^"\\]*"$/.test(e)) return true;
-  if (/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*\.(id|length)$/.test(e)) return true;
+  if (opts.templatesComoLiteral && esTemplateCompleto(e)) return true;
+  if (/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*\.(id|length|size)$/.test(e)) return true;
+  // Acceso indexado a una tabla de constantes EN MAYUSCULAS (MESES[...],
+  // TIPO_ICON[...]): el resultado solo puede ser un valor de la tabla o
+  // undefined, nunca el indice. Vale SOLO si el barrido que la usa verifica
+  // aparte que esas tablas se declaran con puros literales (hay un test asi
+  // en xss-cuerpo.test.js); por eso la regla se enciende con opts, no sola.
+  if (opts.tablasMayusculas && /^[A-Z][A-Z_0-9]*\[[^\]]+\]$/.test(e)) return true;
   if (/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*\s*[+\-]\s*\d+$/.test(e)) return true;
   if (/^[\w$.]+\s*(===|!==|==|!=)\s*[\w$.]+$/.test(e)) return true;
   if (envueltaPorAyudante(e, ayudantes)) return true;
   const tern = partirTernario(e);
-  if (tern) return esExprSegura(tern.a, ayudantes) && esExprSegura(tern.b, ayudantes);
+  if (tern) return esExprSegura(tern.a, ayudantes, opts) && esExprSegura(tern.b, ayudantes, opts);
   const logico = partirLogico(e);
-  if (logico) return logico.every(p => esExprSegura(p, ayudantes));
+  if (logico) return logico.every(p => esExprSegura(p, ayudantes, opts));
   const partes = partirConcat(e);
-  if (partes) return partes.every(p => esExprSegura(p, ayudantes));
+  if (partes) return partes.every(p => esExprSegura(p, ayudantes, opts));
   return false;
 }

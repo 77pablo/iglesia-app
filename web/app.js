@@ -216,12 +216,23 @@ async function conBoton(btn, fn, texto){
   finally{ soltar(); }
 }
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
-function parseFecha(f){ const p=String(f||'').split('-'); return (p.length===3)?{a:p[0],m:p[1],d:p[2]}:null; }
+// Estricto A PROPÓSITO (tanda G): antes bastaba con dos guiones, así que
+// cualquier texto "a-b-<img...>" se "parseaba" y fechaTxt/chipFecha devolvían
+// su tercer trozo CRUDO al HTML. Con el formato ISO exigido, d/m/a solo pueden
+// ser dígitos y los tres formateadores de fecha pasan a ser seguros por
+// construcción con CUALQUIER entrada (por eso están en la lista de ayudantes
+// del barrido de cuerpo, xss-cuerpo.test.js). Toda fecha real de la app es
+// ISO (SQLite y zod las validan); lo que no parsea cae al fallback de cada
+// formateador, que también es inofensivo desde esta tanda.
+function parseFecha(f){ const m=String(f||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?{a:m[1],m:m[2],d:m[3]}:null; }
 function chipFecha(f){ const x=parseFecha(f); if(!x) return `<div class="mini-date"><b>—</b><span></span></div>`; return `<div class="mini-date"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
 function fechaChip(f){ const x=parseFecha(f); if(!x) return `<div class="fecha-chip"><b>—</b><span></span></div>`; return `<div class="fecha-chip"><b>${x.d}</b><span>${MESES[(+x.m)-1]||''}</span></div>`; }
 // conAnio: cuando el mismo mes-día puede repetirse en años distintos (p.ej.
 // "5 ago" no distingue 2026 de 2027), pasa true para que se vea el año.
-function fechaTxt(f, conAnio){ const x=parseFecha(f); if(!x) return String(f||'—'); return x.d+' '+(MESES[(+x.m)-1]||'')+(conAnio?' '+x.a:''); }
+// El fallback devuelve el texto tal cual SOLO si no lleva nada con lo que se
+// pueda armar HTML; si lo lleva, un guion. No se escapa aquí (los llamadores
+// que ya hacen escHtml(fechaTxt(...)) doblarían el escape): se descarta.
+function fechaTxt(f, conAnio){ const x=parseFecha(f); if(!x){ const s=String(f||'—'); return /^[^<>&"'`]*$/.test(s)?s:'—'; } return x.d+' '+(MESES[(+x.m)-1]||'')+(conAnio?' '+x.a:''); }
 // Duración legible a partir de SEGUNDOS: "45 s", "16 min", "6 h 5 min", "3 d 2 h".
 // Dos unidades y no una a propósito: para decidir si hay que actuar, 16 minutos
 // y 6 horas de retraso son situaciones muy distintas, y redondear a una sola
@@ -938,7 +949,7 @@ async function renderDashboard(){
     accionables=`<div class="card" style="margin-bottom:20px;border-left:4px solid var(--amber)">
       <div class="widget-head">⏳ Te toca confirmar (${pendientes.length})</div>
       ${pendientes.map(a=>`<div class="item-card flex" style="margin-top:10px">
-        <div style="flex:1"><b>${TIPO_ICON[a.tipo]||'📋'} ${cap(a.tipo)}</b>
+        <div style="flex:1"><b>${TIPO_ICON[a.tipo]||'📋'} ${escHtml(cap(a.tipo))}</b>
           <div class="muted small">${escHtml(a.evento)} · ${fechaTxt(a.fecha)}${a.lugar?' · 📍 '+escHtml(a.lugar):''}</div></div>
         <div class="row" style="width:auto">
           <button class="btn small-btn" onclick="responderDash(${a.id},'aceptar')">✅ Acepto</button>
@@ -1316,7 +1327,7 @@ async function vistaMiServicio(){
       const acc=a.estado==='pendiente'?`<div class="row" style="margin-top:12px">
         <button class="btn small-btn" onclick="responder(${a.id},'aceptar')">✅ Acepto</button>
         <button class="btn ghost small-btn" onclick="responder(${a.id},'rechazar')">❌ No puedo</button></div>`:'';
-      return `<div class="item-card"><div class="item-titulo">${TIPO_ICON[a.tipo]||'📋'} ${cap(a.tipo)}</div>
+      return `<div class="item-card"><div class="item-titulo">${TIPO_ICON[a.tipo]||'📋'} ${escHtml(cap(a.tipo))}</div>
         <div class="muted small">${escHtml(a.evento)} · ${fechaTxt(a.fecha)}${a.lugar?' · 📍 '+escHtml(a.lugar):''}</div>
         <span class="estado-chip estado-${a.estado}">${si} ${sl}${a.motivo?' · '+escHtml(a.motivo):''}</span>${acc}</div>`;
     }).join('')+'</div>';
@@ -2332,7 +2343,7 @@ async function cargarCasos(){
     cont.className='list';
     cont.innerHTML=casos.map(c=>{const[si,sl,cls]=CASO_ESTADO[c.estado]||['','',''];
       return `<button type="button" class="btn-plano item-card flex" onclick="verCaso(${c.id})">
-        <div style="flex:1"><b>${MOTIVO_ICON[c.motivo]||'❔'} ${escHtml(c.nombre)}</b><div class="muted small">${cap(c.motivo||'')}</div></div>
+        <div style="flex:1"><b>${MOTIVO_ICON[c.motivo]||'❔'} ${escHtml(c.nombre)}</b><div class="muted small">${escHtml(cap(c.motivo||''))}</div></div>
         <span class="estado-chip ${cls}">${si} ${sl}</span></button>`;}).join('');
   }catch(e){ $('lista-casos').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
@@ -2360,7 +2371,7 @@ async function verCaso(id){
     $('caso-det').className='';
     $('caso-det').innerHTML=`<div class="card">
       <h3>${MOTIVO_ICON[d.caso.motivo]||'❔'} ${escHtml(d.caso.nombre)}</h3>
-      <div class="muted small">Motivo: ${cap(d.caso.motivo||'')} · <span class="estado-chip ${cls}">${si} ${sl}</span></div>
+      <div class="muted small">Motivo: ${escHtml(cap(d.caso.motivo||''))} · <span class="estado-chip ${cls}">${si} ${sl}</span></div>
       ${d.caso.telefono?`<div class="muted small" style="margin-top:4px">📞 ${escHtml(d.caso.telefono)}</div>`:''}
       <div style="margin-top:16px;font-weight:700">Historial de cuidado</div>
       <div class="list" style="margin-top:8px">${d.contactos.length? d.contactos.map(x=>`<div class="item-card">
@@ -2673,7 +2684,7 @@ async function vistaTesoreria(){
         <p class="small" style="margin:6px 0 14px">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
         ${trans.porCategoria.length
           ? trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0;
-              return `<div class="dato-row"><span>${cap(g.categoria)}</span><span class="val">${pct}% · ${money(g.monto)}</span></div>`;}).join('')
+              return `<div class="dato-row"><span>${escHtml(cap(g.categoria))}</span><span class="val">${pct}% · ${money(g.monto)}</span></div>`;}).join('')
           : '<p class="muted small">Cuando se registren gastos, aquí se verá en qué se fue el dinero.</p>'}
       </div>
       <div class="card"><div class="widget-head">Movimientos</div>
@@ -2793,7 +2804,7 @@ function formMov(tipo){
   const z=$('mov-form');
   const cats=tipo==='ingreso'?['ofrenda','diezmo','donacion','otro']:['servicios','eventos','ayuda','otro'];
   z.innerHTML=`<div class="card" style="margin-bottom:16px"><h3>${tipo==='ingreso'?'Nuevo ingreso':'Nuevo gasto'}</h3>
-    <label for="mv-cat">Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c}">${cap(c)}</option>`).join('')}</select>
+    <label for="mv-cat">Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c}">${escHtml(cap(c))}</option>`).join('')}</select>
     <label for="mv-monto">Monto</label><input id="mv-monto" type="number" min="0.01" step="0.01" placeholder="0" />
     <label>Fecha ${tipo==='ingreso'?'del ingreso':'del gasto'}</label><div>${fechaSelectHTML('mv','')}</div>
     <label for="mv-desc">${tipo==='ingreso'?'Descripción / origen':'¿En qué se gastó?'}</label>
@@ -3113,7 +3124,11 @@ function fechaDeUTC(s){
   // fechaTxt, que lo deja opcional): esta lista no borra nada (ver Política
   // de Privacidad 4.9), asi que van a convivir mensajes de años distintos y
   // "28 Jul" no los distingue.
-  return isNaN(d.getTime()) ? String(s).slice(0,10) : d.getDate()+' '+(MESES[d.getMonth()]||'')+' '+d.getFullYear();
+  // El fallback solo deja pasar lo que TIENE forma de fecha (los 10 primeros
+  // caracteres YYYY-MM-DD); cualquier otra cosa, un guion. Antes devolvía los
+  // 10 primeros caracteres crudos, fueran lo que fueran (tanda G).
+  if(isNaN(d.getTime())){ const t=String(s).slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(t)?t:'—'; }
+  return d.getDate()+' '+(MESES[d.getMonth()]||'')+' '+d.getFullYear();
 }
 // Neutraliza URLs peligrosas (javascript:, data:, vbscript:) antes de ponerlas en un href.
 // Deja pasar http/https, rutas relativas y enlaces sin esquema (no rompe links legítimos).
