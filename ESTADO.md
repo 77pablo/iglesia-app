@@ -1,5 +1,24 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 5 de agosto de 2026 (toda la app se usa con teclado — los divs clicables fuera del menú son botones de verdad, **fusionado a `main`**; no queda ninguna rama de trabajo local: `feat/menu-agrupado`, `feat/menu-plegable`, `feat/push-muere-con-sesion` y `feat/botones-reales` ya se fusionaron y se borraron ⚠️ **eso dejó de ser cierto esa misma tarde:** se abrieron `feat/pulido-agosto`, `feat/corregir-movimiento` y `feat/editar-clases-lecciones` — y **al escribirse esta línea de noche las dos primeras YA se fusionaron y se borraron** (merges `0defa3d` y `22dc0a2`), aunque sus propias secciones de más abajo sigan diciendo "sin fusionar": eso caducó, y es el mismo envejecimiento silencioso que este documento se pasó la tarde documentando. **La única rama local sin fusionar es `feat/editar-clases-lecciones`** — ver "5 de agosto · noche (2)". Compruébalo con `git branch --no-merged main`, no te lo creas). ⬆️ **`main` quedó SIN SUBIR ese día** (36 commits sin subir medidos con `git log origin/main..main --oneline` al escribirse esta línea de noche — el push lo hace Pablo con GitHub Desktop). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 5 de agosto de 2026, cierre de la noche (tres tandas fusionadas ese día: pulido de agosto `0defa3d`, corregir movimientos de tesorería `22dc0a2`, clases y lecciones de ED — esta última fusionada al cierre, ver el comando de abajo; **ya no queda NINGUNA rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR** (43 commits medidos al cierre — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (5-ago, cierre)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+
+---
+
+## 👉 POR DÓNDE RETOMAR (5-ago, cierre de la noche)
+
+**Lo primero es de Pablo, no de código:**
+1. **Push** de los ~43 commits con GitHub Desktop (dispara el redespliegue de Render). Verificar el despliegue contra el `app.js` que sirve Render (busca `quitarAusenteDuplicada` o `verHistorialMov`: si están, llegó todo el día).
+2. **Tres comprobaciones de navegador** que ninguna prueba de Node pudo hacer (el detalle exacto está en la sección de cada tanda): como `raquel`, corregir un movimiento de Tesorería (toast, lista, historial); como `marta`, editar una clase, intentar borrar una con niños (leer el 409) y borrar una lección; como `pastor`, comprobar que ve marcas e historiales pero ningún lápiz de edición.
+3. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
+
+**Las tandas que Pablo ya aprobó y quedan por hacer** (el orden lo eligió él el 5-ago; D y E no necesitan más decisiones suyas, F y H sí las van a necesitar durante el brainstorming):
+- **Tanda D — cabos ARCO:** bloquear que "Corregir nombre" del pastor pueda des-anonimizar una cuenta eliminada (la única ruta que puede, punto 3 de los pendientes de corregir-nombre), y limpiar `pertenencia` al eliminar la cuenta (anotado el 1-ago).
+- **Tanda E — bandeja del portal:** poder borrar un mensaje y marcar atendido en bloque (pendiente 3 de la bandeja).
+- **Tanda F — pantalla de auditoría general para el pastor** (hoy el rastro solo se ve hoja por hoja; con lo del 5-ago hay MÁS rastro que nunca esperando una pantalla).
+- **Tanda G — extender el barrido XSS** a manejadores de evento (95) y cuerpo de texto (676). Dos leftovers ya anotados para esta tanda: `id="mov-corregir-${m.id}"` sin `Number()` y los `onclick` de `filaMov`.
+- **Tanda H — eventos que se repiten** ("todos los domingos"; conecta con la columna `repetir` de `fecha_no_disp` que hoy no hace nada).
+- **Backlog que dejaron las reviews del 5-ago:** `PATCH /ninos/:id` sigue reenviando todo y auditando sin diff (contradice la regla nueva del propio módulo — candidato natural para `soloCambios()`); barrido de `catch` sin `console.error(e)`; el `FakeSelect` de `organizacion-pagador-selector.test.js` con el punto ciego del `remove()`; `z.coerce.number()` acepta booleanos (POST y PATCH de tesorería).
+
+El detalle fino de la ejecución de las tres tandas del 5-ago (quién revisó qué, qué cazó cada review) está en `.superpowers/sdd/progress.md`.
 
 ---
 
