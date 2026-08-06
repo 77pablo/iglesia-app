@@ -313,3 +313,63 @@ test('un miembro sin rol de pastor no puede borrar: 403 y la fila sigue', async 
   assert.equal(res.status, 403);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM contacto_publico WHERE id = ?').get(id).n, 1);
 });
+
+// ---------- Tanda E: marcar atendido en bloque ----------
+
+const atenderTodos = (persona, body, iglesiaId) => fetch(base + '/api/publico/mensajes/atender-todos', {
+  method: 'PATCH', headers: H(persona, iglesiaId), body: JSON.stringify(body || {})
+});
+
+test('atender-todos marca SOLO los nuevos y devuelve el conteo; previos y atendidos no se tocan', async () => {
+  mensaje('Uno'); mensaje('Dos');
+  const previo = mensaje('De hace meses', SEM.iglesiaId, 'previo');
+  const yaAtendido = mensaje('Resuelto', SEM.iglesiaId, 'atendido');
+
+  const res = await atenderTodos(SEM.pastor);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).atendidos, 2);
+
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM contacto_publico WHERE estado = 'nuevo'").get().n,
+    0, 'ningun nuevo quedo sin atender');
+  assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(previo).estado,
+    'previo', 'atender en silencio meses que quiza nunca leyo seria afirmar lo que no hizo');
+  assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(yaAtendido).estado,
+    'atendido');
+});
+
+test('atender-todos con previos:true marca SOLO los previos', async () => {
+  const nuevo = mensaje('Recien llegado');
+  mensaje('Mes uno', SEM.iglesiaId, 'previo');
+  mensaje('Mes dos', SEM.iglesiaId, 'previo');
+
+  const res = await atenderTodos(SEM.pastor, { previos: true });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).atendidos, 2);
+
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM contacto_publico WHERE estado = 'previo'").get().n, 0);
+  assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(nuevo).estado,
+    'nuevo', 'el boton de los anteriores no toca la lista principal');
+});
+
+test('atender-todos sin nada que marcar: 200 y atendidos 0, no un 404', async () => {
+  const res = await atenderTodos(SEM.pastor);
+  assert.equal(res.status, 200, 'no es un recurso que no existe; es una orden ya cumplida');
+  assert.equal((await res.json()).atendidos, 0);
+});
+
+test('atender-todos no cruza iglesias: los mensajes de otra congregacion no cambian', async () => {
+  const otraIg = Number(db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRABLK')").run().lastInsertRowid);
+  const ajeno = mensaje('Ajeno', otraIg);
+
+  const res = await atenderTodos(SEM.pastor);
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(ajeno).estado,
+    'nuevo', 'que no cambie es parte de la prueba');
+});
+
+test('un miembro sin rol de pastor no puede atender en bloque: 403', async () => {
+  const id = mensaje('Hola');
+  const res = await atenderTodos(SEM.miembro1);
+  assert.equal(res.status, 403);
+  assert.equal(db.prepare('SELECT estado FROM contacto_publico WHERE id = ?').get(id).estado, 'nuevo');
+});

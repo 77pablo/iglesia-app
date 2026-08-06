@@ -136,6 +136,25 @@ r.patch('/mensajes/:id/atender', authMiddleware, soloPastorBandeja, (req, res) =
   res.json({ ok: true });
 });
 
+// Marcar atendido en bloque (tanda E). Sin body marca los 'nuevo'; con
+// {previos:true}, los 'previo'. Los dos alcances son excluyentes A PROPOSITO:
+// el boton principal no puede atender en silencio meses que el pastor quiza
+// nunca leyo — "marcar atendido es una afirmacion del pastor" (spec 31-jul);
+// los anteriores tienen su propio boton, explicito, dentro de su caja.
+// Sin nada que marcar responde 200 con atendidos:0 (una orden ya cumplida,
+// no un recurso que no existe). No audita, igual que el atender de a uno.
+//
+// No choca con /mensajes/:id/atender: son formas distintas (dos segmentos
+// contra tres), Express no puede confundirlas.
+const atenderTodosSchema = z.object({ previos: z.boolean().optional() });
+r.patch('/mensajes/atender-todos', authMiddleware, soloPastorBandeja, validar(atenderTodosSchema), (req, res) => {
+  const estado = req.body.previos === true ? 'previo' : 'nuevo';
+  const info = db.prepare(
+    "UPDATE contacto_publico SET estado = 'atendido' WHERE iglesia_id = ? AND estado = ?"
+  ).run(req.user.iglesia_id, estado);
+  res.json({ ok: true, atendidos: info.changes });
+});
+
 // Borrar un mensaje (tanda E). Es la unica destruccion sin vuelta atras de la
 // bandeja, asi que deja apunte con el nombre del visitante — despues del
 // borrado ya no habra fila que diga de quien era — y el DELETE y su apunte van
