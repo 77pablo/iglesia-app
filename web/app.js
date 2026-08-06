@@ -2621,11 +2621,24 @@ async function vistaTesoreria(){
 }
 function filaMov(m){
   return `<div class="item-card"><div class="flex">
-    <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${m.campania_nombre?escHtml(m.campania_nombre):escHtml(cap(m.categoria||m.tipo))}</b>
+    <div style="flex:1"><b>${m.tipo==='ingreso'?'↑':'↓'} ${m.campania_nombre?escHtml(m.campania_nombre):escHtml(cap(m.categoria||m.tipo))}</b>${m.correcciones>0?` <button class="btn-plano estado-chip" title="Ver historial de correcciones" onclick="verHistorialMov(${m.id})">✏️ corregido</button>`:''}
     <div class="muted small">${escHtml(m.descripcion||'')} · ${escHtml(m.fecha)}${m.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(m.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div>
     <b style="color:${m.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${m.tipo==='ingreso'?'+':'−'}${money(m.monto)}</b>
     ${esTesoreroUI()?`<button class="btn-ico" title="Corregir este movimiento" onclick="formCorregirMov(${m.id})">✏️</button>`:''}
   </div><div id="mov-corregir-${m.id}"></div></div>`;
+}
+// El historial de correcciones de un movimiento. Fechas con fechaDeUTC():
+// auditoria.fecha es datetime('now') = UTC (ver reportes.js:21-29 antes de
+// tocar cualquier fecha de este proyecto).
+async function verHistorialMov(id){
+  try{
+    const filas=await api('/tesoreria/movimientos/'+id+'/historial');
+    modalDetalle('✏️ Historial de correcciones', filas.length
+      ? '<div class="list">'+filas.map(h=>`<div class="item-card">
+          <div class="muted small">${escHtml(fechaDeUTC(h.fecha))} · ${escHtml(h.actor||'(cuenta eliminada)')}</div>
+          <div>${escHtml(h.detalle)}</div></div>`).join('')+'</div>'
+      : '<p class="muted small">Sin correcciones.</p>');
+  }catch(e){ toast(e.message); }
 }
 // Corregir un movimiento: panel en sitio (la convencion de los 17). Se
 // prellena de la fila que la lista acaba de leer, y el PATCH manda SOLO lo
@@ -3392,7 +3405,7 @@ async function obTesoreria(id){
   try{ const m=await api('/obispo/iglesia/'+id+'/tesoreria'+_qmes());
     const ing=m.filter(x=>x.tipo==='ingreso').reduce((a,b)=>a+b.monto,0), gas=m.filter(x=>x.tipo==='gasto').reduce((a,b)=>a+b.monto,0);
     modalDetalle('💰 Movimientos · '+_obMes, m.length
-      ? `<div class="muted small" style="margin-bottom:10px">↑ ${money(ing)} · ↓ ${money(gas)} · balance ${money(ing-gas)}</div><div class="list">`+m.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.tipo==='ingreso'?'↑':'↓'} ${escHtml(cap(x.categoria||x.tipo))}</b><div class="muted small">${escHtml(x.descripcion||'')} · ${escHtml(x.fecha)}${x.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(x.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div><b style="color:${x.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${x.tipo==='ingreso'?'+':'−'}${money(x.monto)}</b></div>`).join('')+'</div>'
+      ? `<div class="muted small" style="margin-bottom:10px">↑ ${money(ing)} · ↓ ${money(gas)} · balance ${money(ing-gas)}</div><div class="list">`+m.map(x=>`<div class="item-card flex"><div style="flex:1"><b>${x.tipo==='ingreso'?'↑':'↓'} ${escHtml(cap(x.categoria||x.tipo))}</b>${x.correcciones>0?' <span class="estado-chip" title="Este movimiento fue corregido">✏️ corregido</span>':''}<div class="muted small">${escHtml(x.descripcion||'')} · ${escHtml(x.fecha)}${x.comprobante_url?` · 📎 <a href="${escHtml(safeUrl(x.comprobante_url))}" target="_blank">comprobante</a>`:''}</div></div><b style="color:${x.tipo==='ingreso'?'var(--green-tx)':'var(--red-tx)'}">${x.tipo==='ingreso'?'+':'−'}${money(x.monto)}</b></div>`).join('')+'</div>'
       : '<p class="muted small">Sin movimientos este mes.</p>');
   }catch(e){ toast(e.message); }
 }
