@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 5 de agosto de 2026 (toda la app se usa con teclado — los divs clicables fuera del menú son botones de verdad, **fusionado a `main`**; no queda ninguna rama de trabajo local: `feat/menu-agrupado`, `feat/menu-plegable`, `feat/push-muere-con-sesion` y `feat/botones-reales` ya se fusionaron y se borraron). ⬆️ **`main` quedó SIN SUBIR ese día** (11 commits al momento de escribirse esto — el push lo hace Pablo con GitHub Desktop). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 5 de agosto de 2026 (toda la app se usa con teclado — los divs clicables fuera del menú son botones de verdad, **fusionado a `main`**; no queda ninguna rama de trabajo local: `feat/menu-agrupado`, `feat/menu-plegable`, `feat/push-muere-con-sesion` y `feat/botones-reales` ya se fusionaron y se borraron ⚠️ **eso dejó de ser cierto esa misma tarde:** `feat/pulido-agosto` está abierta y **sin fusionar** — ver la sección "5 de agosto · tarde"). ⬆️ **`main` quedó SIN SUBIR ese día** (11 commits al momento de escribirse esto — el push lo hace Pablo con GitHub Desktop). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
@@ -34,6 +34,97 @@ del fallo, no la forma del ejemplo.
 **Fuera de alcance, a propósito:** el overlay del cajón del menú (es fondo, no
 control), `kiosko.html`/`inscribir.html` (despliegue facial aparte) y las
 páginas legales. Spec: `docs/superpowers/specs/2026-08-05-botones-reales-design.md`.
+
+---
+
+## 🆕 5 DE AGOSTO DE 2026 · TARDE — 🧹 pulido de agosto: cinco cabos chicos
+
+Ninguno de los cinco es función nueva: son cabos que **este mismo documento ya
+tenía anotados** y que llevaban semanas envejeciendo. Rama `feat/pulido-agosto`,
+**sin fusionar** al escribirse esto — compruébalo, no te lo creas. Spec:
+`docs/superpowers/specs/2026-08-05-pulido-agosto-design.md`.
+
+**El arnés de pruebas dejó de pisarse a sí mismo.** `seguridad.test.js` y
+`upload-validacion.test.js` levantan cada uno un servidor de verdad, y fijaban
+los puertos **3931 y 3941 escritos a mano**: dos corridas a la vez chocaban y el
+síntoma era *"El servidor de pruebas no respondió a tiempo"*, una frase que no
+apunta a ninguna causa. Estaba anotado como hueco desde el 30 de julio y **hoy
+mordió**: el fallo falso que apareció al abrir esta rama era exactamente eso.
+Ahora los dos piden un puerto libre al sistema operativo
+(`backend/test/puerto-libre.js`). ⚠️ Queda una ventana de carrera aceptada a
+propósito —entre cerrar ese socket y que el proceso hijo abra el suyo— que es
+órdenes de magnitud más chica que el choque determinista de un número fijo.
+
+**Fuera dos restos legacy, y uno se queda con motivo.** La tabla `recurso`
+("espacio/equipo reservable") **nunca la escribió nadie**: cero `INSERT` en toda
+la historia del repo, así que está vacía por construcción en cualquier
+despliegue. Se va con `migrarQuitarRecurso()`, un `DROP TABLE IF EXISTS` que no
+lleva la guarda `PRAGMA` de las otras migraciones porque ya es idempotente por
+sí solo. Y se retira `POST /api/dispositivo`, el registro de token del push
+viejo: nada del frontend lo llamaba nunca. ⚠️ **`dispositivo_push`, la tabla, NO
+se borra**, y la diferencia con `recurso` es toda la diferencia: esa sí pudo
+recibir filas reales de gente que usó la app antes de `push_sub`, y el borrado
+ARCO (`cuenta.js:200`) la sigue limpiando. Murió su endpoint de escritura, no la
+tabla. Candado nuevo: `backend/test/limpieza-legacy.test.js`.
+
+**El punto de sin-leer del menú es rojo**, el mismo rojo del badge que
+representa. Salen del mismo dato (`Chat._sinLeer`) y ahora lo dicen con el mismo
+color (decisión del dueño: mismo dato, mismo color); una aserción fija
+`var(--red)` en `web/styles.css` para que no vuelvan a separarse.
+⚠️ **Y aquí está lo que vale más que el arreglo:** de los dos pendientes que ese
+punto tenía anotados, **uno ya estaba hecho desde hacía dos días y nadie lo
+tachó**. El pendiente 5 pedía un `aria-label` en el encabezado cuando lleva
+mensajes pendientes — y la reescritura del menú del **3 de agosto ya lo había
+puesto, con pruebas** (`menu-plegable.test.js`, commit `67799a3`). La lista
+seguía diciendo que faltaba solo porque nadie volvió a mirarla. **Una lista de
+pendientes envejece sin avisar**, y comprobar un punto cuesta lo mismo que
+creérselo: antes de "arreglar" algo que dice este documento, mira el código.
+
+**Un tema del menú móvil que queda con UNA sola entrada se pinta suelto**, sin
+encabezado ni acordeón (decisión del dueño). El caso real estaba verificado y
+anotado como pendiente 7 de la sección del menú: un líder de cuerpo veía
+"Pastoreo" con `asistencia` debajo y nada más — un encabezado que hay que abrir
+para llegar a una sola cosa. La regla descartaba los grupos **vacíos**; ahora
+`agruparNav()` marca también el grupo de uno con `titulo:null` ("sin
+encabezado", que `buildNav()` ya sabía pintar) y la entrada va suelta, en el
+lugar del tema.
+🔴 **La review cazó un hueco que el plan no vio,** y del tipo que no rompe
+ninguna prueba existente: `toggleSidebar()` tenía **su propio** `'nav-g-1'`
+escrito a mano como tema a abrir. Con un primer tema suelto ese contenedor puede
+no existir, así que abrir el cajón sin pantalla activa dentro de ningún tema
+habría dejado **todos los temas cerrados**. Arreglado con `primerGrupoNav()`,
+que le pregunta al DOM cuál es el primer contenedor real en vez de repetir el
+cálculo de `buildNav()`: **una sola verdad, no dos que sincronizar** — el mismo
+principio que retiró el `--ord` de flexbox el 3 de agosto.
+
+**El rótulo "(cuenta inactiva)" ya no miente en el selector de quién pagó**
+(cierra el pendiente 7 de la fuente del gasto). Mientras `/directorio` viaja, la
+pantalla inyecta una opción provisional para poder representar al pagador de un
+gasto; si el directorio llega y trae a esa misma persona, la inyectada sobra: el
+rótulo pasa a ser falso y el nombre sale dos veces. Antes se reconciliaba **solo
+si estaba seleccionada**, así que quien tocaba el selector a mano mientras tanto
+se quedaba con la mentira en la lista. Ahora `quitarAusenteDuplicada()` la quita
+**siempre** que aparezca su gemela real, conservando la elección. Y si no hay
+gemela **la opción se queda**: ahí la persona está inactiva de verdad y el
+rótulo dice la verdad.
+🔴 **Segunda lección de review, y esta es sobre las pruebas:** el `<select>` de
+juguete que traía el plan imitaba un `remove()` que **no es el del DOM real**.
+En el navegador, quitar la `<option>` seleccionada resetea el selector a su
+primera opción **por identidad de nodo**, aunque otra opción comparta el mismo
+`value` — y es justo eso lo que obliga al `sel.value=valor` del código de
+producción. Con el juguete mal hecho esa línea no se ejercitaba nunca, y el test
+clave **no podía fallar**: se demostró por mutación, borrando esa línea del
+código real, y el test seguía en verde. Corregido el fixture, la mutación ahora
+sí lo rompe. Si un `<select>`, un `<form>` o cualquier otro doble de DOM se
+escribe de memoria, la prueba que cuelga de él no prueba nada.
+⚠️ **El arnés preexistente `organizacion-pagador-selector.test.js` tiene el
+mismo punto ciego** (su `FakeOption.remove()` tampoco toca el `value`
+seleccionado). Queda **anotado y sin tocar**: las pruebas nuevas de este arreglo
+viven en `organizacion-selector.test.js` y sí muerden, pero cualquier prueba que
+se escriba encima de aquel fixture hereda el agujero.
+
+Suite: **636** (medida al cerrar la rama con `cd backend && npm test`; caduca con
+la próxima rama que se fusione — no la repitas de memoria).
 
 ---
 
@@ -175,9 +266,9 @@ Suite aquel 31 de julio: partió en 526, llegó a **536**. Hoy, con el mecanismo
 > 2. **Dos personas de la misma iglesia ven el menú con estructura distinta**, según crucen o no el umbral de 12. Sigue igual: es un paso pequeño sobre algo que ya pasaba (cada rol ve entradas distintas), pero conviene tenerlo escrito antes de que alguien lo reporte como fallo.
 > 3. **El umbral de 12 sigue siendo un número elegido, no medido.** Nadie sabe todavía cómo usa el pastor la app en el teléfono. Cuando haya ese dato, se puede ajustar — o sustituir todo esto por accesos rápidos a lo que de verdad se usa.
 > 4. **(desfasado, resuelto el 5-ago:** ver la sección de esa fecha**)** ~~**El resto de la app sigue sin botones reales.** El menú ya es accesible por teclado; fuera de él quedan cerca de 20 `<div onclick>` (contados hoy con un grep sobre `web/app.js`, sin contar los que solo cortan la propagación de un clic dentro de un modal) que no se alcanzan con Tab. Es la mitad de la brecha de accesibilidad que quedaba anotada aquí; la otra mitad, el menú mismo, ya se cerró.~~
-> 5. **El punto de sin-leer no tiene nombre accesible.** Es un `::after` puramente visual (`content:""`, `web/styles.css:420-421`): un lector de pantalla no anuncia nada distinto en un encabezado con mensajes pendientes. Hoy el punto solo lo ve quien ve. Falta un `aria-label` (o un texto oculto) en el encabezado cuando lleva la clase `con-sin-leer`.
-> 6. **El punto es dorado y el badge que representa es rojo.** Comparten el mismo dato (`Chat._sinLeer`), pero no el mismo color — nadie decidió que debieran combinar, simplemente no combinan.
-> 7. **A un líder de cuerpo se le pinta el encabezado "Pastoreo" con una sola entrada debajo** (verificado a mano: de los 12 módulos que ve ese rol, "Pastoreo" solo trae `asistencia`; "Administración" directamente desaparece, por vacío). La regla descarta grupos **vacíos**, no grupos de uno. Sigue siendo un dato de interfaz, no un defecto: queda decidir si un encabezado para una sola entrada compensa.
+> 5. **(desfasado — y lo estaba desde antes de que nadie lo tocara; comprobado el 5-ago:** el `aria-label` **ya existía desde la reescritura del 3-ago**, con pruebas que lo fijan en `menu-plegable.test.js` (commit `67799a3`). Este punto llevaba dos días diciendo que faltaba algo que ya estaba hecho, porque nadie volvió a mirarlo. Lo único que seguía abierto de verdad era el color, el punto 6**)** ~~**El punto de sin-leer no tiene nombre accesible.** Es un `::after` puramente visual (`content:""`, `web/styles.css:420-421`): un lector de pantalla no anuncia nada distinto en un encabezado con mensajes pendientes. Hoy el punto solo lo ve quien ve. Falta un `aria-label` (o un texto oculto) en el encabezado cuando lleva la clase `con-sin-leer`.~~
+> 6. **(resuelto el 5-ago:** ver la sección de esa fecha**)** ~~**El punto es dorado y el badge que representa es rojo.** Comparten el mismo dato (`Chat._sinLeer`), pero no el mismo color — nadie decidió que debieran combinar, simplemente no combinan.~~
+> 7. **(resuelto el 5-ago:** ver la sección de esa fecha — el dueño decidió, y un tema de una sola entrada se pinta suelto, sin encabezado**)** ~~**A un líder de cuerpo se le pinta el encabezado "Pastoreo" con una sola entrada debajo** (verificado a mano: de los 12 módulos que ve ese rol, "Pastoreo" solo trae `asistencia`; "Administración" directamente desaparece, por vacío). La regla descarta grupos **vacíos**, no grupos de uno. Sigue siendo un dato de interfaz, no un defecto: queda decidir si un encabezado para una sola entrada compensa.~~
 
 ---
 
@@ -763,7 +854,7 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
    > 5. **No se comprueba que la persona esté activa** al anotar o corregir un gasto (sí se comprueba en las cosas a llevar, `organizacion.js:282-284`). Bug preexistente, fuera de alcance.
    > 6. ✅ ~~Corregir un gasto y auditarlo no van en una transacción.~~ **Arreglado en la revisión final:** el `UPDATE` y el `auditar()` van ya en un `BEGIN`/`COMMIT`/`ROLLBACK`, así que una corrección de dinero no puede quedar aplicada sin rastro.
    >    ⚠️ **La razón por la que se había dejado así era falsa** y llegó a estar escrita aquí: *"es la convención del resto del repo, nada de este módulo usa transacciones"*. **La convención es la contraria** — este mismo archivo las usa dos veces (`organizacion.js`, al borrar la hoja y al duplicarla), y también `asistencia.js`, `cuenta.js`, `cuidado.js`, `eventos.js`, `musica.js`, `ninos.js` y `eliminarIglesia.js`. Si vuelves a leer "la convención es no usar transacciones" en algún sitio, es mentira: compruébalo con un `grep -rn "BEGIN" backend/src`.
-   > 7. **Rótulo falso mientras el directorio aún no cargó — arreglado a medias, a propósito.** Al llegar `/directorio`, si la opción inyectada es la **seleccionada**, se reconcilia: se quita el rótulo *"(cuenta inactiva)"* sobre alguien activo y el nombre deja de salir dos veces. Pero si mientras tanto la persona **cambió el selector a mano**, la inyectada sigue en la lista —sin seleccionar, con el rótulo falso y el nombre duplicado—, porque reconciliar ahí le borraría su elección. Elegirla daría el id correcto, así que **no mueve dinero**; es un rótulo mentiroso en una pantalla de plata. Se cierra quitando la inyectada cuando aparezca su gemela real, conservando `sel.value`.
+   > 7. **(resuelto el 5-ago:** ver la sección de esa fecha — `quitarAusenteDuplicada()` quita la inyectada **siempre** que llegue su gemela real, esté seleccionada o no, conservando la elección**)** ~~**Rótulo falso mientras el directorio aún no cargó — arreglado a medias, a propósito.** Al llegar `/directorio`, si la opción inyectada es la **seleccionada**, se reconcilia: se quita el rótulo *"(cuenta inactiva)"* sobre alguien activo y el nombre deja de salir dos veces. Pero si mientras tanto la persona **cambió el selector a mano**, la inyectada sigue en la lista —sin seleccionar, con el rótulo falso y el nombre duplicado—, porque reconciliar ahí le borraría su elección. Elegirla daría el id correcto, así que **no mueve dinero**; es un rótulo mentiroso en una pantalla de plata. Se cierra quitando la inyectada cuando aparezca su gemela real, conservando `sel.value`.~~
    > 8. **Al desplegar, backend y frontend van JUNTOS.** `armarHoja` ya no devuelve `aportes` (ahora son `total_caja` / `por_devolver` / `aportes_donados`). Un `app.js` viejo contra el backend nuevo pinta **el resumen vacío, sin ningún error**: ni en pantalla ni en la consola. No sirve subir solo uno de los dos.
    > 9. **`NULL` y `'devuelve'` se leen igual en el rastro.** `descOrigenGasto(null, X)` y `descOrigenGasto('devuelve', X)` devuelven las dos *"se devuelve a X"* (y el resumen mete a las dos en "Por devolver"). Consecuencia: si alguien abre el ✏️ de un gasto histórico y **toca a propósito** el selector de origen dejándolo en "Se devuelve", el historial anota `se devuelve a X -> se devuelve a X`. Ahí el cambio **sí es real** (pasa de "no se sabe" a una afirmación), pero se ve idéntico. Ya no ocurre sin que nadie toque nada — eso era el fallo, y está cerrado.
    >    ⚠️ **Y ojo con la razón que se dio para aplazarlo, que también era falsa:** se escribió que arreglarlo "cambia cómo se lee el rastro de los gastos ya auditados". **No.** `descOrigenGasto` se llama **solo al escribir** (un único uso en todo el repo) y su salida queda congelada como texto dentro de `auditoria.detalle`; cambiar la función no toca ni una fila guardada, solo los apuntes futuros. Es mucho más barato de lo que decía esa nota. Es la **segunda** razón inventada de este mismo bloque (la otra, la de las transacciones): **compruébalas antes de creerlas**.
@@ -808,8 +899,8 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
 **Huecos verificados que nadie había anotado:**
 - **Nada del módulo de niños se audita** salvo lo que ya se quitó (ver arriba).
 - **Borrar un gasto de Organización no deja auditoría**, a diferencia del resto del módulo.
-- **`upload-validacion.test.js` fija el puerto 3941 a mano** → dos suites a la vez se pisan, y el síntoma ("el servidor de pruebas no respondió a tiempo") no dice nada de la causa.
-- Tablas sin usar: **`recurso`** (cero referencias) y **`dispositivo_push`** (legacy, pero **su endpoint de escritura sigue vivo y expuesto** en `server.js`).
+- **(resuelto el 5-ago:** los dos piden ahora un puerto libre al SO, `backend/test/puerto-libre.js`; ver la sección de esa fecha — el hueco tardó seis días en morder y cuando lo hizo pareció un fallo del código, no del arnés**)** ~~**`upload-validacion.test.js` fija el puerto 3941 a mano** → dos suites a la vez se pisan, y el síntoma ("el servidor de pruebas no respondió a tiempo") no dice nada de la causa.~~
+- **(resuelto el 5-ago, con un matiz que importa:** se fue la tabla `recurso` (vacía por construcción) y se fue `POST /api/dispositivo`, el endpoint de escritura del push viejo — pero **`dispositivo_push` la tabla SIGUE**, a propósito: pudo recibir filas reales y el borrado ARCO la limpia. "Tabla sin usar" era verdad solo para una de las dos**)** ~~Tablas sin usar: **`recurso`** (cero referencias) y **`dispositivo_push`** (legacy, pero **su endpoint de escritura sigue vivo y expuesto** en `server.js`).~~
 
 ---
 

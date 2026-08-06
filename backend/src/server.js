@@ -342,17 +342,9 @@ app.get('/api/me', authMiddleware, (req, res) => {
   });
 });
 
-// --- Registro de token push (1A.5) ---
-const dispositivoSchema = z.object({
-  token: z.string().trim().min(1, 'falta el token push'),
-  plataforma: z.string().trim().max(50).optional()
-});
-app.post('/api/dispositivo', authMiddleware, validar(dispositivoSchema), (req, res) => {
-  const { token, plataforma } = req.body;
-  db.prepare('INSERT INTO dispositivo_push (persona_id, token, plataforma) VALUES (?,?,?)')
-    .run(req.user.persona_id, token, plataforma || 'desconocida');
-  res.json({ ok: true });
-});
+// POST /api/dispositivo (push legacy) se retiro el 5-ago-2026: nada del
+// frontend lo llamaba y el push real usa push_sub (push.js). La tabla
+// dispositivo_push se queda: puede tener filas viejas y ARCO la limpia.
 
 // --- Modulo A: Calendario + Eventos ---
 app.use('/api/eventos', eventosRouter);

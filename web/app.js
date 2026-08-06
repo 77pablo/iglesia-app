@@ -63,7 +63,10 @@ function agruparNav(claves){
   if(claves.length < NAV_UMBRAL_GRUPOS) return [{titulo:null, claves:[...claves]}];
   return GRUPOS_NAV
     .map(g=>({titulo:g.titulo, claves:g.claves.filter(k=>claves.includes(k))}))
-    .filter(g=>g.claves.length);   // un encabezado sin nada debajo es ruido
+    .filter(g=>g.claves.length)    // un encabezado sin nada debajo es ruido
+    // Y un encabezado con UNA sola cosa debajo tambien (decision del dueno,
+    // 5-ago): titulo null = "sin encabezado", que buildNav ya sabe pintar.
+    .map(g=>g.claves.length===1 ? {titulo:null, claves:g.claves} : g);
 }
 // Render minimalista de un auditorio/iglesia moderno (líneas rectas, luz difusa) para Anuncios.
 const IMG_AUDITORIO=`<svg viewBox="0 0 400 180" preserveAspectRatio="xMidYMid slice" style="width:100%;height:150px;display:block">
@@ -719,8 +722,21 @@ function buildNav(){
     return;
   }
 
+  let primerGrupo=null;   // el fallback del acordeon: el primer tema REAL
   secciones.forEach((seccion,i)=>{
+    // El id se calcula para toda seccion, incluida la que se pinta suelta y
+    // no lo usa: por eso puede haber huecos (nav-g-1, nav-g-3, sin nav-g-2) si
+    // el segundo tema quedo de una sola entrada. No es un bug -- aria-controls
+    // siempre sale de esta misma variable, asi que header y contenedor jamas
+    // se desincronizan aunque la numeracion salte.
     const id=`nav-g-${i+1}`;
+    // Tema de una sola entrada (titulo null): la entrada va suelta, en el
+    // lugar del tema, sin acordeon que abrir para una sola cosa.
+    if(!seccion.titulo){
+      seccion.claves.forEach(k=>nav.appendChild(conActiva(k)));
+      return;
+    }
+    if(primerGrupo===null) primerGrupo=id;
     const h=document.createElement('button');
     h.type='button';
     h.className='nav-sec';
@@ -746,7 +762,7 @@ function buildNav(){
   // querySelector/querySelectorAll -- y grupoActivo() usa el primero antes de
   // que abrirGrupo() use el segundo, asi que el guardia tiene que cubrir los dos.
   if(typeof document.querySelector==='function' && typeof document.querySelectorAll==='function'){
-    abrirGrupo(grupoActivo()||'nav-g-1');
+    abrirGrupo(grupoActivo()||primerGrupo);
     // El menu se acaba de repintar: el punto de sin-leer se perdio con el DOM
     // anterior. Se reaplica con el ultimo dato conocido, sin volver a pedirlo.
     if(typeof Chat!=='undefined'&&Chat._sinLeer) Chat.actualizarBadgeNav(Chat._sinLeer);
@@ -773,6 +789,16 @@ function grupoActivo(){
   const activa=document.querySelector('.nav-item.active');
   const cont=activa&&activa.closest('.nav-grupo');
   return cont?cont.id:null;
+}
+
+// El primer tema REAL del menu pintado. Es la respuesta a "que abro si no hay
+// ninguna entrada activa": desde que un tema de una sola entrada se pinta
+// suelto (sin contenedor), el primer contenedor ya no es necesariamente
+// 'nav-g-1' -- se le pregunta al DOM en vez de repetir el calculo de
+// buildNav, para que no haya dos verdades que mantener sincronizadas.
+function primerGrupoNav(){
+  const g=document.querySelector('#nav .nav-grupo');
+  return g?g.id:null;
 }
 
 // Deja abierto exactamente el tema `id` y cierra los demas. Con null, cierra
@@ -863,7 +889,7 @@ function navTo(key){
 function toggleSidebar(){
   const abriendo=!$('sidebar').classList.contains('open');
   $('sidebar').classList.toggle('open'); $('overlay').classList.toggle('show');
-  if(abriendo) abrirGrupo(grupoActivo()||'nav-g-1');
+  if(abriendo) abrirGrupo(grupoActivo()||primerGrupoNav());
 }
 function closeSidebar(){ $('sidebar').classList.remove('open'); $('overlay').classList.remove('show'); }
 
@@ -4629,6 +4655,25 @@ const ORG_ORIGEN = {
   calendario:   { etiqueta:'Calendario',   ir:()=>navTo('calendario') },
 };
 
+// La opcion inyectada "(cuenta inactiva)" del selector de quien pago
+// (Org._opcionAusente) es PROVISIONAL: existe para que el selector pueda
+// representar a un pagador que /directorio aun no trajo. Si el directorio
+// llega y trae a esa misma persona (gemela real, mismo value), la inyectada
+// sobra: su rotulo pasa a ser mentira y el nombre sale dos veces. Se quita
+// SIEMPRE que haya gemela -- no solo si esta seleccionada, que era el hueco
+// (pendiente 7 de la fuente del gasto) -- conservando la eleccion: si la
+// seleccionada era la inyectada, reasignar el mismo value cae en la real.
+// Sin gemela no se toca nada: la persona esta inactiva de verdad.
+function quitarAusenteDuplicada(sel){
+  const ausente=sel.querySelector('option[data-ausente]');
+  if(!ausente) return;
+  const hayGemela=Array.prototype.some.call(sel.options, o=>o!==ausente && o.value===ausente.value);
+  if(!hayGemela) return;
+  const valor=sel.value;
+  ausente.remove();
+  sel.value=valor;
+}
+
 const Org = {
   // Crea una lista suelta (pide título) y la abre.
   nuevaHoja(){
@@ -4824,16 +4869,20 @@ const Org = {
         sel.appendChild(o);
       }
     }catch{ /* sin directorio quedan "Lo puse yo" y "La caja de la iglesia", ya pintadas arriba */ }
+    // El directorio acaba de llegar: si trajo a la persona de la opcion
+    // inyectada, la inyectada sobra -- se quita conservando la eleccion.
+    quitarAusenteDuplicada(sel);
     // Y si aun así hay una corrección en curso cuyo pagador el selector ya no
     // representa, se repone. Dejarlo en blanco es exactamente lo que le
     // adjudicaba la deuda a quien solo venía a corregir una falta de ortografía.
     //
-    // Y se reconcilia TAMBIÉN cuando la opción puesta es la inyectada: si la
-    // persona sí estaba activa y su <option> real acaba de llegar con el
-    // directorio, sin esto se queda para siempre el rótulo falso "(cuenta
-    // inactiva)" sobre alguien activo, y su nombre dos veces en la lista.
-    // _ponerPagador es idempotente: quita la inyectada y solo la repone si de
-    // verdad sigue sin estar.
+    // La gemela ya quedó resuelta arriba, en quitarAusenteDuplicada: si el
+    // directorio trajo a la persona, ahí se le quita el rótulo falso "(cuenta
+    // inactiva)" conservando la elección. Lo que cubre esta condición es lo
+    // que queda: la persona de verdad sigue sin estar, y el innerHTML de más
+    // arriba reconstruyó el selector desde cero, así que hay que volver a
+    // pedirle a _ponerPagador que reponga la inyectada (es idempotente: no
+    // hace nada si ya está).
     //
     // Se exige que la inyectada sea la SELECCIONADA para no pisar a quien haya
     // cambiado el selector a mano mientras el directorio viajaba: en ese caso su

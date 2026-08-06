@@ -15,7 +15,7 @@ for (const t of ['asistencia_nino','leccion','nino','clase_ed','movimiento','cam
                  'tarea_grupo','recurso_grupo','aviso_grupo','predica_recurso','predica','rol_temporal',
                  'biometria_persona','notificacion','dispositivo_push','push_sub','fecha_no_disp',
                  'mensaje','conversacion_miembro','conversacion',
-                 'asistencia','asignacion','evento','anuncio','pertenencia','recurso','grupo','persona','auditoria','iglesia']) {
+                 'asistencia','asignacion','evento','anuncio','pertenencia','grupo','persona','auditoria','iglesia']) {
   try { db.exec(`DELETE FROM ${t};`); } catch (e) { /* tabla puede no existir en BD vieja */ }
 }
 db.exec('PRAGMA foreign_keys = ON;');

@@ -120,7 +120,7 @@ function crearElementoDeJuguete(tag) {
 // '.nav-item.active' ANTES de borrar el DOM (linea :679) para restaurar esa
 // misma clave en la entrada nueva. Sin este parametro ese camino nunca se
 // ejercita -- toda esta suite corre como si fuera siempre el primer pintado.
-function ejecutarBuildNav(movil, claveActivaPrevia) {
+function ejecutarBuildNav(movil, claveActivaPrevia, tieneModulo) {
   const nav = { innerHTML: '', children: [], appendChild(el) { this.children.push(el); return el; } };
   const doc = {
     createElement: (tag) => crearElementoDeJuguete(tag),
@@ -168,7 +168,7 @@ function ejecutarBuildNav(movil, claveActivaPrevia) {
   const fn = new Function('$', 'document', 'tieneModulo', 'labelDe', 'iconDe', 'navTo', 'esMovil', cuerpo)(
     (id) => (id === 'nav' ? nav : null),
     doc,
-    () => true,            // el pastor: ve las 19 entradas
+    tieneModulo || (() => true),   // por defecto, el pastor: ve las 19 entradas
     (k) => k,
     () => '',
     () => {},
@@ -219,6 +219,37 @@ test('en MOVIL cada tema es un contenedor de verdad con sus entradas dentro', ()
   // Ninguna entrada queda suelta fuera de un contenedor.
   assert.equal(clavesDe(nav.children).length, 0,
     'hay entradas fuera de todo contenedor: no se podrian plegar');
+});
+
+test('en MOVIL un tema que queda con UNA entrada se pinta suelto, sin encabezado', () => {
+  // Decision del dueno (5-ago): un acordeon de un solo elemento cuesta un toque
+  // y no ahorra nada. El caso real: el lider de cuerpo ve 12 modulos y
+  // "Pastoreo" le quedaba con solo `asistencia` debajo.
+  const DOCE = ['inicio', 'calendario', 'anuncios', 'mensajes', 'directorio', 'predica',
+    'mi_servicio', 'mi_grupo', 'ajustes', 'asistencia', 'servicio_gestion', 'organizacion'];
+  const nav = ejecutarBuildNav(true, null, (k) => DOCE.includes(k));
+
+  // "Pastoreo" quedaria con una sola entrada: ni encabezado ni contenedor.
+  const encabezados = nav.children.filter(e => e.className === 'nav-sec');
+  assert.ok(!encabezados.some(h => h.textContent === 'Pastoreo'),
+    'un tema con una sola entrada sigue llevando encabezado');
+
+  // Su entrada esta SUELTA en el nav, y no ademas dentro de un grupo.
+  const sueltas = clavesDe(nav.children);
+  assert.deepEqual(sueltas, ['asistencia'],
+    'la entrada del tema de uno no quedo suelta en el lugar del tema');
+  const agrupadas = nav.children.filter(e => e.className === 'nav-grupo')
+    .flatMap(g => clavesDe(g.children));
+  assert.ok(!agrupadas.includes('asistencia'), 'asistencia esta dos veces: suelta y agrupada');
+
+  // Nada se pierde: sueltas + agrupadas = los 12 modulos visibles.
+  assert.deepEqual([...sueltas, ...agrupadas].sort(), [...DOCE].sort(),
+    'al soltar el tema de uno se perdio o duplico una entrada');
+
+  // Los demas temas siguen siendo acordeon de verdad.
+  assert.ok(encabezados.length >= 3, 'los temas con 2+ entradas perdieron su encabezado');
+  assert.equal(encabezados.length, nav.children.filter(e => e.className === 'nav-grupo').length,
+    'cada encabezado necesita su contenedor');
 });
 
 test('en MOVIL cada encabezado apunta al id de SU contenedor', () => {
@@ -547,6 +578,33 @@ test('toggleSidebar, al CERRAR el cajon, NO recalcula nada', () => {
     'al cerrar el cajon, toggleSidebar toco los grupos: solo tiene que tocarlos al abrir');
 });
 
+test('toggleSidebar ya no depende del literal "nav-g-1": usa primerGrupoNav()', () => {
+  // Desde que un tema de una sola entrada se pinta suelto (sin contenedor), el
+  // primer contenedor real del menu ya no es necesariamente 'nav-g-1' -- si
+  // toggleSidebar siguiera con el literal, abrir el cajon sin ninguna entrada
+  // activa podria pedir un id que no existe y dejar los temas todos cerrados.
+  const cuerpo = recortarFuncion('toggleSidebar');
+  assert.ok(cuerpo.includes('primerGrupoNav('),
+    'toggleSidebar ya no llama a primerGrupoNav(): volvio el literal fijo');
+  assert.ok(!cuerpo.includes("'nav-g-1'"),
+    'toggleSidebar todavia tiene el literal nav-g-1 escrito a mano');
+});
+
+test('primerGrupoNav pregunta al DOM por el primer contenedor real, no lo inventa', () => {
+  const cargar = (doc) => new Function('document', `
+    ${recortarFuncion('primerGrupoNav')}
+    return primerGrupoNav;
+  `)(doc);
+
+  const conGrupo = cargar({ querySelector: (sel) => (sel === '#nav .nav-grupo' ? { id: 'nav-g-2' } : null) });
+  assert.equal(conGrupo(), 'nav-g-2',
+    'con un contenedor real en el DOM, primerGrupoNav tiene que devolver su id');
+
+  const sinGrupo = cargar({ querySelector: () => null });
+  assert.equal(sinGrupo(), null,
+    'sin ningun contenedor en el DOM (menu todo suelto), primerGrupoNav tiene que devolver null');
+});
+
 // --- el punto de mensajes sin leer -------------------------------------------
 
 // actualizarBadgeNav NO es `function nombre(...)`: es un metodo de un objeto
@@ -641,4 +699,17 @@ test('el CSS del punto vive dentro del @media y se calla con el tema abierto', (
     'hay una regla del punto fuera del @media: apareceria tambien en escritorio');
   assert.ok(/aria-expanded="true"\][^{]*\.con-sin-leer|\.con-sin-leer[^{]*\[aria-expanded="true"\]/.test(movil),
     'el punto no se oculta con el tema abierto: se veria a la vez que el badge, diciendo lo mismo dos veces');
+});
+
+test('el punto de sin-leer es ROJO, el mismo del badge que representa', () => {
+  // Decision del dueno (5-ago): mismo dato, mismo color. El punto y el badge
+  // salen del mismo numero (Chat._sinLeer); si un dia no combinan, quien
+  // aprendio "rojo = mensajes sin leer" deja de reconocerlo en el menu.
+  const n = anchoMovilDelJs();
+  const inicio = hoja.indexOf(`@media (max-width:${n}px){`);
+  assert.ok(inicio >= 0, 'no se encontro el @media del movil en styles.css');
+  const regla = hoja.slice(inicio).match(/\.nav-sec\.con-sin-leer::after\{[^}]*\}/);
+  assert.ok(regla, 'no se encontro la regla del punto de sin-leer en el @media del movil');
+  assert.ok(regla[0].includes('var(--red)'),
+    'el punto de sin-leer no usa var(--red): punto y badge dicen lo mismo con dos colores');
 });

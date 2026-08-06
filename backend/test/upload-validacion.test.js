@@ -3,7 +3,8 @@
 //  Mismo arnes que seguridad.test.js: arranca src/server.js como proceso
 //  hijo con una BD temporal y SEED_ON_EMPTY=1 (credenciales conocidas).
 //  Diferencias a proposito:
-//   - PUERTO 3941 (3931 lo ocupa seguridad.test.js).
+//   - Puerto dinamico (test/puerto-libre.js): los puertos fijos 3941/3931
+//     hacian que dos corridas a la vez se pisaran.
 //   - DISABLE_RATE_LIMIT=1: /api/upload va detras de limiterSensible
 //     (10 req/IP/15min) y este recorrido sube mas de 10 archivos.
 //   - UPLOADS_DIR propio y temporal: asi se puede comprobar que un archivo
@@ -25,15 +26,16 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { puertoLibre } from './puerto-libre.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_PATH = path.join(__dirname, '..', 'src', 'server.js');
-const PORT = 3941;
+let PORT;            // se pide al SO en before(): ver test/puerto-libre.js
 // IP literal, no "localhost": este arranca con DISABLE_RATE_LIMIT=1 y no le
 // afecta hoy, pero "localhost" resuelve a ::1 y a 127.0.0.1 a la vez y cada
 // conexion compite entre ambas familias (autoSelectFamily). Cualquier cosa que
 // el servidor cuente por IP veria dos clientes distintos. Ver seguridad.test.js.
-const BASE = `http://127.0.0.1:${PORT}`;
+let BASE;            // depende de PORT: se arma en before()
 const SELLO = Date.now();
 const DB_PATH = path.join(os.tmpdir(), `iglesia-test-upload-${SELLO}.db`);
 const UPLOADS_DIR = path.join(os.tmpdir(), `iglesia-test-uploads-${SELLO}`);
@@ -83,6 +85,8 @@ const postJson = (ruta, cuerpo, tk = token) => fetch(BASE + ruta, {
 });
 
 before(async () => {
+  PORT = await puertoLibre();
+  BASE = `http://127.0.0.1:${PORT}`;
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   servidor = spawn(process.execPath, [SERVER_PATH], {
     env: {
