@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 5 de agosto de 2026 (toda la app se usa con teclado — los divs clicables fuera del menú son botones de verdad, **fusionado a `main`**; no queda ninguna rama de trabajo local: `feat/menu-agrupado`, `feat/menu-plegable`, `feat/push-muere-con-sesion` y `feat/botones-reales` ya se fusionaron y se borraron ⚠️ **eso dejó de ser cierto esa misma tarde:** `feat/pulido-agosto` está abierta y **sin fusionar** — ver la sección "5 de agosto · tarde"; y esa misma noche se abrió `feat/corregir-movimiento`, **también sin fusionar**, a la espera de la review final — ver "5 de agosto · noche"). ⬆️ **`main` quedó SIN SUBIR ese día** (26 commits sin subir al escribirse esta línea de noche — el push lo hace Pablo con GitHub Desktop). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 5 de agosto de 2026 (toda la app se usa con teclado — los divs clicables fuera del menú son botones de verdad, **fusionado a `main`**; no queda ninguna rama de trabajo local: `feat/menu-agrupado`, `feat/menu-plegable`, `feat/push-muere-con-sesion` y `feat/botones-reales` ya se fusionaron y se borraron ⚠️ **eso dejó de ser cierto esa misma tarde:** se abrieron `feat/pulido-agosto`, `feat/corregir-movimiento` y `feat/editar-clases-lecciones` — y **al escribirse esta línea de noche las dos primeras YA se fusionaron y se borraron** (merges `0defa3d` y `22dc0a2`), aunque sus propias secciones de más abajo sigan diciendo "sin fusionar": eso caducó, y es el mismo envejecimiento silencioso que este documento se pasó la tarde documentando. **La única rama local sin fusionar es `feat/editar-clases-lecciones`** — ver "5 de agosto · noche (2)". Compruébalo con `git branch --no-merged main`, no te lo creas). ⬆️ **`main` quedó SIN SUBIR ese día** (36 commits sin subir medidos con `git log origin/main..main --oneline` al escribirse esta línea de noche — el push lo hace Pablo con GitHub Desktop). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
@@ -215,6 +215,81 @@ historial pero **NO** el lápiz ✏️.
 
 Suite: **650** (medida al cerrar la rama con `cd backend && npm test`; caduca con
 la próxima rama que se fusione — no la repitas de memoria).
+
+---
+
+## 🆕 5 DE AGOSTO DE 2026 · NOCHE (2) — 👶 las clases y las lecciones ya se corrigen y se borran
+
+El pendiente que la **Fase 13** dejó escrito el 31 de julio —*"siguen sin poder
+editarse ni borrarse las clases ni las lecciones. Solo niños"*— ya está tachado.
+Rama `feat/editar-clases-lecciones`, **sin fusionar** al escribirse esto —
+compruébalo, no te lo creas. Spec:
+`docs/superpowers/specs/2026-08-05-editar-clases-lecciones-design.md`.
+
+**Una clase se corrige (nombre y edades) y se borra, pero SOLO si está vacía.**
+La decisión es del dueño y el motivo cabe en una línea: borrar una clase con
+niños dentro sería **borrar fichas de menores en bloque**, y eso no puede pasar
+por un clic de más. Con niños, el servidor responde **409 con el conteo**
+(*"La clase tiene 3 niño(s): mueve o borra sus fichas primero"*), y ese texto se
+muestra tal cual en la pantalla — el número le dice a la maestra cuánto trabajo
+tiene por delante, no solo que no puede. Borrar niños **ya existe** desde la
+Fase 13: uno a uno, confirmado y auditado. Aquí no se ha quitado ninguna
+capacidad; se ha quitado el atajo peligroso.
+
+**Borrar una clase vacía se lleva sus lecciones y sus filas viejas de
+asistencia**, en una sola transacción. Las de asistencia son huérfanas de niños
+movidos o borrados, y **ese historial ya no lo muestra ninguna pantalla** desde
+que se retiró la asistencia de niños el 30 de julio: es exactamente el
+razonamiento con el que el borrado de un niño se lleva el suyo. ⚠️ **Los
+archivos de las lecciones quedan huérfanos en `/uploads`**, asumido y escrito
+aquí para que nadie lo descubra de sorpresa — como en el resto de la app.
+
+**El documento de una lección NO se cambia por `PATCH`**, y también es decisión,
+no olvido: un archivo equivocado se arregla **borrando la lección y subiéndola
+de nuevo**. `material_url` ni siquiera está en el esquema del PATCH, así que
+`validar()` lo descarta **en silencio** (comportamiento conocido del proyecto),
+y hay un test que fija ese silencio para que nadie lo lea como "se puede". Se
+corrigen título, fecha y versículo.
+
+**Y el módulo de niños por fin deja rastro entero.** Este documento tenía
+anotado desde el 30 de julio, en "Huecos verificados", que *"nada del módulo de
+niños se audita"*. La Fase 13 cerró la mitad —editar y borrar— y quedó abierta
+la otra: **crear**. Ahora crear una clase, inscribir un niño y subir una lección
+dejan apunte (`crear_clase`, `inscribir_nino`, `crear_leccion`). Editar y borrar
+auditan **solo lo que cambió de verdad**: cada campo recibido se compara con el
+guardado, y si nada cambió la respuesta es `ok` y no se escribe ni se audita
+nada — la misma regla que estrenó Tesorería esta misma noche, aquí extraída a un
+ayudante compartido (`soloCambios()` en `backend/src/ninos.js`) que arma a la
+vez el `UPDATE` y la bitácora *"col: antes -> después"*. El `UPDATE` y su apunte
+van en la misma transacción, y el `SET` se construye desde lista blanca, jamás
+desde las claves del cuerpo.
+
+🔴 **La lección de review de esta rama es la séptima aparición del mismo fallo,
+y esta vez el síntoma era peor que las anteriores.** La caché
+`window._clasesEd` —la que prellena el panel de corrección— **no se actualizaba
+al guardar**. Consecuencia real: corregías el nombre de una clase, abrías el ✏️
+otra vez en la misma sesión y el panel te prellenaba **lo viejo**; guardar sin
+tocar ese campo **REVERTÍA en silencio la corrección recién hecha**. No es
+"datos desactualizados en pantalla": es deshacer trabajo ya guardado. Arreglado
+en sitio, y **la prueba se demostró por mutación** antes de creérsela. Los
+candados nuevos son dos y leen el propio `web/app.js`: uno exige que
+`guardarEdicionClase()` toque `_clasesEd` **después** del `await` al PATCH (si
+se escribiera antes, un PATCH que falla dejaría en la caché algo que el servidor
+nunca guardó — el mismo problema al revés); el otro deja escrito **por qué
+`guardarEdicionLeccion()` ya era segura** —llama a `cargarMaterial()`, que
+re-lee la lista entera del servidor— para que si algún día deja de re-leerla,
+algo se caiga. **Verificar por qué algo NO falla vale tanto como arreglar lo que
+falla**: la diferencia entre las dos funciones era invisible hasta que se
+escribió.
+
+⚠️ **Verificación manual pendiente de Pablo** (no hay banco de pruebas de
+navegador; el humo se hizo a nivel de API): entrar como **marta** (maestra de
+Escuela Dominical) y corregir una clase, **intentar borrar una que tenga niños y
+leer el 409 con el conteo**, y borrar una lección; y entrar como **pastor** para
+confirmar que sigue viendo Escuela Dominical **solo de lectura**, sin ✏️ ni 🗑️.
+
+Suite: **662** (medida al cerrar la rama con `cd backend && npm test`, 662 pass /
+0 fail; caduca con la próxima rama que se fusione — no la repitas de memoria).
 
 ---
 
@@ -481,7 +556,7 @@ Otro cajón con la etiqueta puesta y vacío: la columna `nino.autorizados` exist
 - El `UPDATE` del `PATCH` se construye desde una **lista blanca de columnas**, nunca desde las claves del body.
 
 > ⚠️ **Esto dice quién PUEDE retirar al niño, no quién se lo llevó.** Esa mitad (`asistencia_nino.retiro_por`) se fue con la asistencia de niños el 30 jul. Si el papá pregunta el domingo *"¿con quién se fue?"*, la app sigue sin poder responder. Si en uso real hace falta, la conversación es **reabrir lo de la asistencia**, no añadir un campo.
-> ⚠️ **Siguen sin poder editarse ni borrarse las clases ni las lecciones.** Solo niños.
+> ⚠️ ~~**Siguen sin poder editarse ni borrarse las clases ni las lecciones.** Solo niños.~~ **(Resuelto el 5-ago:** las clases y las lecciones ya se corrigen y se borran, con los mismos patrones que estrenó esta fase para los niños. Con una diferencia deliberada: una clase **solo se borra vacía** — con niños dentro responde 409 con el conteo. Ver la sección "5 de agosto · noche (2)"**)**
 
 ### 📜 Se corrigió el texto legal, y hacía falta por dos motivos
 La **Política de Privacidad** no declaraba la categoría de datos que esta fase empieza a recoger (**las personas autorizadas para retirar al niño**, que son datos de **terceros** que no usan la app), y además seguía declarando *"Asistencia — Registro de asistencia a las actividades infantiles"*, **que es falso desde el 30 jul**. Lo mismo en la autorización que firman los padres. Corregidos los cuatro archivos (`legal/*.md` y `web/legal/*.html`): se añadió la categoría nueva diciendo expresamente que se recogen **solo nombre y parentesco**, se quitó la asistencia y se dejó una nota de que los registros anteriores se conservan hasta que se borre la ficha.
@@ -981,13 +1056,13 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
    - ✅ ~~**"No puedo servir ese día"** (`fecha_no_disp`)~~ — **HECHO** el 30 jul (rama `feat/no-puedo-servir`). Ver la sección propia más abajo.
    - ✅ ~~**Retiro seguro de niños**~~ — **HECHO** el 30-31 jul (rama `feat/retiro-seguro-ninos`). Ver la sección propia más abajo.
 3. **Corregir el nombre de una persona** — el documento viejo lo pintaba caro ("queda así para siempre en el directorio, las asistencias y los impresos", que suena a datos duplicados). **Es falso:** el nombre vive solo en `persona.nombre` y todo lo demás llega por `JOIN`. Es añadir una columna a un esquema zod que ya existe.
-4. **Escuela Dominical: ya se pueden editar y borrar NIÑOS** (hecho el 31 jul, ver la fase de abajo). **Siguen sin poder editarse ni borrarse las CLASES ni las LECCIONES**: una clase mal escrita o una lección subida por error se quedan para siempre.
+4. **Escuela Dominical: ya se pueden editar y borrar NIÑOS** (hecho el 31 jul, ver la fase de abajo). ~~**Siguen sin poder editarse ni borrarse las CLASES ni las LECCIONES**: una clase mal escrita o una lección subida por error se quedan para siempre.~~ **(Resuelto el 5-ago:** clase mal escrita se corrige, lección subida por error se borra. Una clase **solo se borra vacía**; y el documento de una lección no se cambia por PATCH —se borra la lección y se sube de nuevo—, a propósito. Ver "5 de agosto · noche (2)"**)**
 5. **El formulario público de visitas no pide ningún dato de contacto** mientras la página promete "te contactaremos pronto", y **no hay ninguna pantalla que liste `contacto_publico`**. Hay mensajes de visitas guardados que nadie ha mirado nunca. *(Matiz: la notificación sí lleva el texto completo, así que no se pierden del todo.)*
 6. **Peticiones de oración** — matiz importante frente a la nota vieja: *sí* se puede pedir oración hoy, por chat directo con el pastor. Lo que no existe es la petición como objeto (estado, lista, anonimato). Es la única propuesta que sirve a **toda** la congregación. Dato sensible: hay que pasar por el consentimiento versionado que ya existe.
 7. **Editar el himnario desde la app** · **eventos que se repiten** · **ficha de membresía** (fecha de bautismo = dato sensible).
 
 **Huecos verificados que nadie había anotado:**
-- **Nada del módulo de niños se audita** salvo lo que ya se quitó (ver arriba).
+- **(resuelto el 5-ago:** el hueco se cerró en dos tiempos — el 31 jul empezaron a auditarse **editar y borrar** un niño, y el 5-ago los tres huecos que quedaban, todos de **creación**: `crear_clase`, `inscribir_nino` y `crear_leccion`. Escribir sin dejar rastro era justo la mitad que faltaba**)** ~~**Nada del módulo de niños se audita** salvo lo que ya se quitó (ver arriba).~~
 - **Borrar un gasto de Organización no deja auditoría**, a diferencia del resto del módulo.
 - **(resuelto el 5-ago:** los dos piden ahora un puerto libre al SO, `backend/test/puerto-libre.js`; ver la sección de esa fecha — el hueco tardó seis días en morder y cuando lo hizo pareció un fallo del código, no del arnés**)** ~~**`upload-validacion.test.js` fija el puerto 3941 a mano** → dos suites a la vez se pisan, y el síntoma ("el servidor de pruebas no respondió a tiempo") no dice nada de la causa.~~
 - **(resuelto el 5-ago, con un matiz que importa:** se fue la tabla `recurso` (vacía por construcción) y se fue `POST /api/dispositivo`, el endpoint de escritura del push viejo — pero **`dispositivo_push` la tabla SIGUE**, a propósito: pudo recibir filas reales y el borrado ARCO la limpia. "Tabla sin usar" era verdad solo para una de las dos**)** ~~Tablas sin usar: **`recurso`** (cero referencias) y **`dispositivo_push`** (legacy, pero **su endpoint de escritura sigue vivo y expuesto** en `server.js`).~~
