@@ -64,19 +64,67 @@ const AYUDANTES_CUERPO = [...AYUDANTES_SEGUROS,
 ];
 const OPTS = { templatesComoLiteral: true, tablasMayusculas: true };
 
-const PENDIENTES_LISTA = ["div class=\"mini-date\"><b>⟨⟩x.d",
-"iv class=\"fecha-chip\"><b>⟨⟩x.d",
-"((s%3600)/60); return m?`⟨⟩h",
-"0)/60); return m?`${h} h ⟨⟩m",
-"urn m?`${h} h ${m} min`:`⟨⟩h",
-"%86400)/3600); return h?`⟨⟩d",
-"/3600); return h?`${d} d ⟨⟩h",
-"eturn h?`${d} d ${h} h`:`⟨⟩d",
+// Verificadas una a una en el lote 1 (6-ago): sitios que NO son HTML o son
+// internos de helpers ya demostrados. Cada firma debe seguir existiendo en el
+// codigo (zombie = fallo), igual que las de PENDIENTES.
+const EXCEPCIONES = [
+  { firma: "div class=\"mini-date\"><b>⟨⟩x.d",
+    motivo: "interno de chipFecha/fechaChip: x.d viene del parseFecha estricto (solo digitos) — el candado de parseFecha esta abajo" },
+  { firma: "iv class=\"fecha-chip\"><b>⟨⟩x.d",
+    motivo: "interno de chipFecha/fechaChip: x.d viene del parseFecha estricto (solo digitos) — el candado de parseFecha esta abajo" },
+  { firma: "((s%3600)/60); return m?`⟨⟩h",
+    motivo: "interno de duracionTxt(): h/m/d/s salen de Math.floor sobre Number(seg) dos lineas arriba, solo numeros" },
+  { firma: "0)/60); return m?`${h} h ⟨⟩m",
+    motivo: "interno de duracionTxt(): h/m/d/s salen de Math.floor sobre Number(seg) dos lineas arriba, solo numeros" },
+  { firma: "urn m?`${h} h ${m} min`:`⟨⟩h",
+    motivo: "interno de duracionTxt(): h/m/d/s salen de Math.floor sobre Number(seg) dos lineas arriba, solo numeros" },
+  { firma: "%86400)/3600); return h?`⟨⟩d",
+    motivo: "interno de duracionTxt(): h/m/d/s salen de Math.floor sobre Number(seg) dos lineas arriba, solo numeros" },
+  { firma: "/3600); return h?`${d} d ⟨⟩h",
+    motivo: "interno de duracionTxt(): h/m/d/s salen de Math.floor sobre Number(seg) dos lineas arriba, solo numeros" },
+  { firma: "eturn h?`${d} d ${h} h`:`⟨⟩d",
+    motivo: "interno de duracionTxt(): h/m/d/s salen de Math.floor sobre Number(seg) dos lineas arriba, solo numeros" },
+  { firma: "w.matchMedia(`(max-width:⟨⟩NAV_MOVIL_MAX",
+    motivo: "media query de matchMedia, no HTML; NAV_MOVIL_MAX es una constante numerica de este archivo" },
+  { firma: "ue) return ''; return `⟨⟩a.value",
+    motivo: "fechaSelectValor() devuelve la cadena YYYY-MM-DD de los <select> que la propia app construyo con digitos, no HTML" },
+  { firma: "''; return `${a.value}-⟨⟩String(m.value).padStart(2,'0')",
+    motivo: "fechaSelectValor() devuelve la cadena YYYY-MM-DD de los <select> que la propia app construyo con digitos, no HTML" },
+  { firma: ".value).padStart(2,'0')}-⟨⟩String(d.value).padStart(2,'0')",
+    motivo: "fechaSelectValor() devuelve la cadena YYYY-MM-DD de los <select> que la propia app construyo con digitos, no HTML" },
+  { firma: "dia++){ const fecha=`⟨⟩y",
+    motivo: "cadena de fecha `${y}-${pad(m+1)}-${pad(dia)}` con enteros del bucle del calendario, no HTML (candado de su forma en xss-manejadores)" },
+  { firma: "h.n; if(!h.id) h.id=`⟨⟩h.seccion",
+    motivo: "construccion del id interno estable de un himno (\"2-45\"), no HTML; h.seccion/h.n son enteros de _normalizarHimnos" },
+  { firma: "h.id) h.id=`${h.seccion}-⟨⟩h.n",
+    motivo: "construccion del id interno estable de un himno (\"2-45\"), no HTML; h.seccion/h.n son enteros de _normalizarHimnos" },
+  { firma: "span class=\"muted small\">⟨⟩_hmTrans>0?'+'+_hmTrans:_hmTrans",
+    motivo: "estado interno del transpositor de acordes (+/- semitonos): entero que solo tocan los botones, mostrado como +N/-N" },
+  { firma: "span class=\"muted small\">⟨⟩_vcTrans>0?'+'+_vcTrans:_vcTrans",
+    motivo: "estado interno del transpositor de acordes (+/- semitonos): entero que solo tocan los botones, mostrado como +N/-N" },
+  { firma: "teriores a esta bandeja (⟨⟩d.previos",
+    motivo: "textContent del contador de mensajes anteriores, no innerHTML: el navegador no interpreta HTML ahi" },
+  { firma: "teriores a esta bandeja (⟨⟩_mpPreviosTotal",
+    motivo: "textContent del contador de mensajes anteriores, no innerHTML: el navegador no interpreta HTML ahi" },
+  { firma: "||h.fecha; let txt=`*⟨⟩titulo",
+    motivo: "texto para el portapapeles del boton compartir de Organizacion (clipboard.writeText); el unico camino a HTML es el fallback, que pasa por escHtml(txt)" },
+  { firma: "_llegada) txt+=`, llegar ⟨⟩h.hora_llegada",
+    motivo: "texto para el portapapeles del boton compartir de Organizacion (clipboard.writeText); el unico camino a HTML es el fallback, que pasa por escHtml(txt)" },
+  { firma: " if(lugar) txt+=`\\n📍 ⟨⟩lugar",
+    motivo: "texto para el portapapeles del boton compartir de Organizacion (clipboard.writeText); el unico camino a HTML es el fallback, que pasa por escHtml(txt)" },
+  { firma: "turn `${c.listo?'✅':'•'} ⟨⟩c.nombre",
+    motivo: "texto para el portapapeles del boton compartir de Organizacion (clipboard.writeText); el unico camino a HTML es el fallback, que pasa por escHtml(txt)" },
+  { firma: "to?'✅':'•'} ${c.nombre} ×⟨⟩c.cantidad",
+    motivo: "texto para el portapapeles del boton compartir de Organizacion (clipboard.writeText); el unico camino a HTML es el fallback, que pasa por escHtml(txt)" },
+  { firma: "{c.nombre} ×${c.cantidad}⟨⟩quien",
+    motivo: "texto para el portapapeles del boton compartir de Organizacion (clipboard.writeText); el unico camino a HTML es el fallback, que pasa por escHtml(txt)" }
+];
+const EXCEPCIONES_MAP = new Map(EXCEPCIONES.map(e => [e.firma, e.motivo]));
+
+const PENDIENTES_LISTA = [
 " stroke-linejoin=\"round\">⟨⟩p",
-"w.matchMedia(`(max-width:⟨⟩NAV_MOVIL_MAX",
 "' ')[0])} 👋</h2> <p>⟨⟩ME.iglesia?ME.iglesia.nombre:''",
 "?ME.iglesia.nombre:''} · ⟨⟩$('u-rol').textContent",
-"imary)':'var(--muted)'}\">⟨⟩sinLeer",
 "tes.length})</div> ⟨⟩pendientes.map(a=>`<div class=\"item-card flex\" style=\"margin-top:10px\"> <div style=\"flex:1\"><b>${TIPO_ICON[a.tipo]||'📋'} ${escHtml(cap(a.tipo))}</b> <div class=\"muted small\">${escHtml(a.evento)} · ${fechaTxt(a.fecha)}${a.lugar?' · 📍 '+escHtml(a.lugar):''}</div></div> <div class=\"row\" style=\"width:auto\"> <button class=\"btn small-btn\" onclick=\"responderDash(${a.id},'aceptar')\">✅ Acepto</button> <button class=\"btn ghost small-btn\" onclick=\"responderDash(${a.id},'rechazar')\">❌ No puedo</button> </div></div>`).join('')",
 "\">${escHtml(e.grupo||'')}⟨⟩e.hora_inicio?' · '+e.hora_inicio:''",
 "📅 Próximos eventos</div>⟨⟩listaEventos",
@@ -90,14 +138,9 @@ const PENDIENTES_LISTA = ["div class=\"mini-date\"><b>⟨⟩x.d",
 "ustarDias('${prefijo}')\">⟨⟩mesOpts",
 "ustarDias('${prefijo}')\">⟨⟩anioOpts",
 "{x===dSel?'selected':''}>⟨⟩x",
-"ue) return ''; return `⟨⟩a.value",
-"''; return `${a.value}-⟨⟩String(m.value).padStart(2,'0')",
-".value).padStart(2,'0')}-⟨⟩String(d.value).padStart(2,'0')",
 "ick=\"toggleFormEvento()\">⟨⟩label",
 "d=>`<div class=\"cal-dow\">⟨⟩d",
-"dia++){ const fecha=`⟨⟩y",
 "();abrirEvento(${e.id})\">⟨⟩e.hora_inicio?'<b>'+e.hora_inicio+'</b> ':''",
-" <div class=\"cal-daynum\">⟨⟩dia",
 "`<div class=\"cal-puntos\">⟨⟩chips",
 "ntos\">${chips}</div>`:''}⟨⟩mas",
 " <h3>${MESES_LARGO[m]} ⟨⟩y",
@@ -117,7 +160,6 @@ const PENDIENTES_LISTA = ["div class=\"mini-date\"><b>⟨⟩x.d",
 "stado-${a.estado}\">${si} ⟨⟩sl",
 "Html(a.motivo):''}</span>⟨⟩acc",
 "\">📅 ${fechaTxt(m.fecha)}⟨⟩m.hora_inicio?' · 🕐 '+m.hora_inicio:''",
-"${escHtml(c.nombre)} <b>×⟨⟩c.cantidad",
 "\"pintarNoDispServicio()\">⟨⟩ev",
 "><select id=\"sv-persona\">⟨⟩ps",
 "er + `<div id=\"ln-lista\">⟨⟩d.items.map(filaNotif).join('')",
@@ -128,42 +170,28 @@ const PENDIENTES_LISTA = ["div class=\"mini-date\"><b>⟨⟩x.d",
 "${p.length})</div> ⟨⟩p.map(e=>`<div class=\"item-card flex\" style=\"margin-top:10px\"> <div style=\"flex:1\"><b>${escHtml(e.titulo)}</b><div class=\"muted small\">${fechaTxt(e.fecha)} · ${escHtml(e.grupo||'')} · pidió ${escHtml(e.solicitante||'')}</div></div> <div class=\"row\" style=\"width:auto\"> <button class=\"btn small-btn\" onclick=\"aprobarFecha(${e.id})\">Aprobar</button> <button class=\"btn ghost small-btn\" onclick=\"rechazarFecha(${e.id})\">Rechazar</button> </div></div>`).join('')",
 "\" style=\"margin-top:8px\">⟨⟩h.slice(0,30).map(x=>`<div class=\"item-card flex\"> <div style=\"flex:1\"><b>${escHtml(x.evento_titulo||'')}</b> ${x.accion==='aprobado'?'<span class=\"estado-chip estado-aceptado\">Aprobado</span>':'<span class=\"estado-chip estado-rechazado\">Rechazado</span>'} <div class=\"muted small\">${x.grupo?escHtml(x.grupo)+' · ':''}${escHtml(x.fecha_evento||'')}${x.motivo?' · '+escHtml(x.motivo):''}</div></div> <span class=\"muted small\">${escHtml(fechaDeUTC(x.creado_en))}</span></div>`).join('')",
 "iltrarPanel(this.value)\">⟨⟩opts",
-"iv><div class=\"stat-num\">⟨⟩d.miembros",
-"iv><div class=\"stat-num\">⟨⟩d.promedio",
 "iv><div class=\"stat-num\">⟨⟩d.ultima?d.ultima.total:'—'",
-"ound(r.total/max*100)}%\">⟨⟩r.total",
-"asistencia</div> ⟨⟩d.reuniones.length? d.reuniones.map(r=>`<div class=\"trend-row\"> <span class=\"trend-label\">${fechaTxt(r.fecha)}</span> <div class=\"trend-track\"><div class=\"trend-bar\" style=\"width:${Math.round(r.total/max*100)}%\">${r.total}</div></div> </div>`).join('') : '<p class=\"muted small\">Aún no hay asistencia registrada.</p>'",
+"asistencia</div> ⟨⟩d.reuniones.length? d.reuniones.map(r=>`<div class=\"trend-row\"> <span class=\"trend-label\">${fechaTxt(r.fecha)}</span> <div class=\"trend-track\"><div class=\"trend-bar\" style=\"width:${Math.round(r.total/max*100)}%\">${Number(r.total)}</div></div> </div>`).join('') : '<p class=\"muted small\">Aún no hay asistencia registrada.</p>'",
 "n alejando</div> ⟨⟩d.ausentes.length? '<div class=\"list\" style=\"margin-top:6px\">'+d.ausentes.map(a=>`<div class=\"item-card flex\"> <div style=\"flex:1\"><b>${escHtml(a.nombre)}</b><div class=\"muted small\">No asistió a la última reunión</div></div> <span class=\"estado-chip estado-rechazado\">Ausente</span></div>`).join('')+'</div>' : '<p class=\"muted small\" style=\"margin-top:6px\">Nadie ausente en la última reunión 🎉</p>'",
 "iv><div class=\"stat-num\">⟨⟩ultimaAsis?ultimaAsis.total:'—'",
-"iv><div class=\"stat-num\">⟨⟩crec.totalActivos",
-"iv><div class=\"stat-num\">⟨⟩altasMesActual",
 "<select id=\"set-cancion\">⟨⟩opts",
 "x;vertical-align:middle\">⟨⟩p.items.map(it=> `<span class=\"estado-chip\">${escHtml(it.instrumento||'—')}${lider?` <button type=\"button\" class=\"btn-plano\" title=\"Quitar\" aria-label=\"Quitar del equipo\" style=\"color:var(--red-tx);font-weight:700;margin-left:2px\" onclick=\"quitarIntegrante(${it.id})\">×</button>`:''}</span>`).join('')",
 " style=\"max-width:200px\">⟨⟩popts",
 " style=\"max-width:150px\">⟨⟩iopts",
 "-titulo\">🗓️ Ensayo</div>⟨⟩ensayoHtml",
-"=\"sub-titulo\">🎸 Equipo (⟨⟩numPersonas",
-"po (${numPersonas})</div>⟨⟩equipoHtml",
-"onas})</div>${equipoHtml}⟨⟩addHtml",
+"mber(numPersonas)})</div>⟨⟩equipoHtml",
+"nas)})</div>${equipoHtml}⟨⟩addHtml",
 " <div style=\"flex:1\">⟨⟩titulo",
 "chip\">📌 Fijo</span>':''}⟨⟩sub",
-"h.n; if(!h.id) h.id=`⟨⟩h.seccion",
-"h.id) h.id=`${h.seccion}-⟨⟩h.n",
-"JsAttr(h.id)})\"> <b>#⟨⟩h.n",
-"ont-size:17px;margin:0\">#⟨⟩_hmSel.n",
-"span class=\"muted small\">⟨⟩_hmTrans>0?'+'+_hmTrans:_hmTrans",
-"span class=\"muted small\">⟨⟩_vcTrans>0?'+'+_vcTrans:_vcTrans",
 "ass=\"estado-chip ${cls}\">⟨⟩si",
 "stado-chip ${cls}\">${si} ⟨⟩sl",
 "select id=\"caso-persona\">⟨⟩personas.map(p=>`<option value=\"${p.id}\">${escHtml(p.nombre)}</option>`).join('')",
 "\" style=\"margin-top:8px\">⟨⟩d.contactos.length? d.contactos.map(x=>`<div class=\"item-card\"> <b>${CT_LABEL[x.tipo]||escHtml(x.tipo)}</b> <span class=\"muted small\">${escHtml(fechaDeUTC(x.fecha))}</span> ${x.nota?`<div class=\"muted small\">${escHtml(x.nota)}</div>`:''}</div>`).join('') : '<p class=\"muted small\">Sin contactos aún.</p>'",
 "accion-${m.id}\"> ⟨⟩chip",
 "${m.id}\"> ${chip}⟨⟩boton",
-"teriores a esta bandeja (⟨⟩d.previos",
 " : ''; z.innerHTML=`⟨⟩btnTodos",
 "Todos}<div id=\"mp-lista\">⟨⟩lista",
 " más</button>':''} ⟨⟩previos",
-"teriores a esta bandeja (⟨⟩_mpPreviosTotal",
 "true})}); toast(`✅ ⟨⟩d.atendidos",
 "orm\"></div>`:''} ⟨⟩camps.filter(c=>!c.cerrada_en).length ? camps.filter(c=>!c.cerrada_en).map(filaCampania).join('') : `<p class=\"muted small\">Todavía no hay campañas.${esTesoreroUI()?' Una campaña sirve para juntar para algo concreto —el techo, un viaje misionero— y ver cuánto falta.':''}</p>`",
 "radas</div> ⟨⟩camps.filter(c=>c.cerrada_en).map(filaCampaniaCerrada).join('')",
@@ -255,14 +283,9 @@ const PENDIENTES_LISTA = ["div class=\"mini-date\"><b>⟨⟩x.d",
 "tado)}</b></div> ⟨⟩aportes",
 " ${aportes} ⟨⟩correcciones",
 "o)}\" de ${money(g.monto)}⟨⟩quien",
-"||h.fecha; let txt=`*⟨⟩titulo",
-"_llegada) txt+=`, llegar ⟨⟩h.hora_llegada",
-" if(lugar) txt+=`\\n📍 ⟨⟩lugar",
 "responsable_nombre ? ` — ⟨⟩c.responsable_nombre",
-"turn `${c.listo?'✅':'•'} ⟨⟩c.nombre",
-"to?'✅':'•'} ${c.nombre} ×⟨⟩c.cantidad",
-"{c.nombre} ×${c.cantidad}⟨⟩quien",
-"ow:auto;margin-top:10px\">⟨⟩opciones"];
+"ow:auto;margin-top:10px\">⟨⟩opciones"
+];
 const PENDIENTES = new Set(PENDIENTES_LISTA);
 
 const firmaDe = (it) =>
@@ -308,6 +331,7 @@ test('barrido: toda interpolación ${...} del cuerpo de texto pasa por un ayudan
   for (const it of malas) {
     const firma = firmaDe(it);
     firmasVistas.add(firma);
+    if (EXCEPCIONES_MAP.has(firma)) continue;
     if (!PENDIENTES.has(firma)) {
       nuevas.push(`línea ${it.linea}: ${JSON.stringify(firma)}`);
     }
@@ -318,6 +342,17 @@ test('barrido: toda interpolación ${...} del cuerpo de texto pasa por un ayudan
   const zombies = PENDIENTES_LISTA.filter(f => !firmasVistas.has(f));
   assert.deepEqual(zombies, [],
     'firmas de PENDIENTES que ya no corresponden a ningún sitio (¿arreglaste o moviste el código? BORRA su firma — la lista solo puede encoger):\n' + zombies.join('\n'));
+
+  const excZombies = EXCEPCIONES.filter(e => !firmasVistas.has(e.firma)).map(e => e.firma);
+  assert.deepEqual(excZombies, [],
+    'excepciones que ya no corresponden a ningún sitio del código: bórralas (una excepción sin sitio blanquea de más):\n' + excZombies.join('\n'));
+});
+
+test('todas las excepciones del cuerpo tienen un motivo real (no solo un nombre)', () => {
+  for (const exc of EXCEPCIONES) {
+    assert.ok(exc.motivo && exc.motivo.trim().length >= 20,
+      `excepción sin motivo suficiente: ${JSON.stringify(exc.firma)}`);
+  }
 });
 
 // ------------------------------------------------------------
