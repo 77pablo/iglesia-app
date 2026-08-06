@@ -201,6 +201,10 @@ r.post('/eliminar', (req, res) => {
     // El motivo de "no puedo servir" es texto libre y puede ser delicado
     // ("operacion de mi mama"): no debe sobrevivir a la baja.
     db.prepare('DELETE FROM fecha_no_disp WHERE persona_id = ?').run(pid);
+    // Las membresias de grupo tambien son un dato de la persona ("estaba en
+    // Jovenes"): la fila anonimizada ya no identifica a nadie, pero dejarlas
+    // era un cabo suelto del borrado (anotado el 1-ago, cerrado en la tanda D).
+    db.prepare('DELETE FROM pertenencia WHERE persona_id = ?').run(pid);
 
     db.exec('COMMIT');
   } catch (e) {

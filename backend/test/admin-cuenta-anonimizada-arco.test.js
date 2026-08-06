@@ -131,14 +131,21 @@ test('una cuenta normal SI admite restablecer la clave y asignar un rol', async 
   assert.equal(res2.status, 200);
 });
 
-// Documenta la decision de NO bloquear esta ruta (ver el comentario en
-// admin.js): borrar un rol no reactiva ni devuelve nada, solo quita datos.
-test('el pastor SI puede quitarle un rol residual a una cuenta ya eliminada (solo borra datos)', async () => {
+// La ruta DELETE /admin/rol sigue SIN guardia de anonimizada a proposito (ver
+// el comentario en admin.js): borrar un rol solo quita datos. Pero desde la
+// tanda D (5-ago) el escenario "rol residual" ya no puede existir: la
+// anonimizacion (cuenta.js) se lleva las pertenencias en su transaccion, y
+// asignar un rol nuevo a una cuenta anonimizada esta bloqueado con 403. Asi
+// que el DELETE del pastor encuentra un 404 honesto — nada que borrar — y no
+// un 403 que sugiera un bloqueo que no existe.
+test('tras eliminar la cuenta no queda rol residual que quitar: el DELETE del pastor da 404, no 403', async () => {
   const pertenencia = db.prepare('INSERT INTO pertenencia (persona_id, grupo_id, rol) VALUES (?,?,?)')
     .run(SEM.miembro1.id, SEM.grupoId, 'musico');
   await eliminarCuentaDe(SEM.miembro1);
+  const quedan = db.prepare('SELECT COUNT(*) AS n FROM pertenencia WHERE persona_id = ?').get(SEM.miembro1.id).n;
+  assert.equal(quedan, 0, 'la anonimizacion se llevo la pertenencia');
   const res = await fetch(base + `/api/admin/rol/${pertenencia.lastInsertRowid}`, { method: 'DELETE', headers: H(SEM.pastor) });
-  assert.equal(res.status, 200);
+  assert.equal(res.status, 404);
 });
 
 // ------------------------------------------------------------

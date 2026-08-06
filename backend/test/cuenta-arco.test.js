@@ -40,9 +40,11 @@ test('POST /api/cuenta/eliminar: anonimiza la persona y escribe revocado', async
   assert.match(p.usuario, /^eliminado_/);
   const c = db.prepare("SELECT * FROM consentimiento WHERE persona_id = ? AND accion = 'revocado'").get(SEM.miembro1.id);
   assert.ok(c, 'se registro la revocacion');
-  // la pertenencia historica NO se borra (queda anonimizada)
+  // la pertenencia se borra con la cuenta (decision del 5-ago, tanda D de
+  // cabos ARCO): la fila anonimizada no identifica a nadie, pero "miembro de
+  // Jovenes" es un dato de la persona y no debe sobrevivir a su baja.
   const per = db.prepare('SELECT COUNT(*) AS n FROM pertenencia WHERE persona_id = ?').get(SEM.miembro1.id).n;
-  assert.equal(per, 1);
+  assert.equal(per, 0, 'ya no quedan pertenencias de la persona eliminada');
 });
 
 test('guarda: el super-admin no puede auto-eliminarse -> 409', async () => {
