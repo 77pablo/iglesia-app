@@ -80,6 +80,7 @@ r.delete('/clases/:id', soloEncargado, (req, res) => {
   const c = db.prepare('SELECT id, nombre FROM clase_ed WHERE id = ? AND iglesia_id = ?')
     .get(req.params.id, req.user.iglesia_id);
   if (!c) return res.status(404).json({ error: 'Clase no encontrada' });
+  // Sin await entre este COUNT y el COMMIT: el handler es sincrono y nada puede inscribir un nino en medio. Si esto se vuelve async algun dia, la comprobacion deja de ser atomica.
   const ninos = db.prepare('SELECT COUNT(*) AS n FROM nino WHERE clase_id = ?').get(c.id).n;
   if (ninos > 0)
     return res.status(409).json({ error: `La clase tiene ${ninos} niño(s): mueve o borra sus fichas primero.` });
@@ -132,9 +133,10 @@ const ninoSchema = z.object({
 r.post('/ninos', soloEncargado, validar(ninoSchema), (req, res) => {
   const { clase_id, nombre, edad, familia, alergias, autorizados } = req.body;
   if (!claseDeIglesia(clase_id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
-  db.prepare('INSERT INTO nino (iglesia_id, clase_id, nombre, edad, familia, alergias, autorizados) VALUES (?,?,?,?,?,?,?)')
+  const info = db.prepare('INSERT INTO nino (iglesia_id, clase_id, nombre, edad, familia, alergias, autorizados) VALUES (?,?,?,?,?,?,?)')
     .run(req.user.iglesia_id, clase_id, nombre, edad || null, familia || null, alergias || null, autorizados || null);
-  auditar(req.user.iglesia_id, req.user.persona_id, 'inscribir_nino', 'ninos', nombre);
+  auditar(req.user.iglesia_id, req.user.persona_id, 'inscribir_nino', 'ninos', nombre,
+    { tabla: 'nino', id: info.lastInsertRowid });
   res.json({ ok: true });
 });
 
@@ -209,9 +211,10 @@ const materialSchema = z.object({
 r.post('/material', soloEncargado, validar(materialSchema), (req, res) => {
   const { clase_id, fecha, titulo, versiculo, material_url } = req.body;
   if (!claseDeIglesia(clase_id, req.user.iglesia_id)) return res.status(404).json({ error: 'Clase no encontrada' });
-  db.prepare('INSERT INTO leccion (iglesia_id, clase_id, fecha, titulo, versiculo, material_url) VALUES (?,?,?,?,?,?)')
+  const info = db.prepare('INSERT INTO leccion (iglesia_id, clase_id, fecha, titulo, versiculo, material_url) VALUES (?,?,?,?,?,?)')
     .run(req.user.iglesia_id, clase_id, fecha || null, titulo, versiculo || null, material_url || null);
-  auditar(req.user.iglesia_id, req.user.persona_id, 'crear_leccion', 'ninos', titulo);
+  auditar(req.user.iglesia_id, req.user.persona_id, 'crear_leccion', 'ninos', titulo,
+    { tabla: 'leccion', id: info.lastInsertRowid });
   res.json({ ok: true });
 });
 
@@ -252,9 +255,13 @@ r.delete('/material/:id', soloEncargado, (req, res) => {
   const l = db.prepare('SELECT id, titulo FROM leccion WHERE id = ? AND iglesia_id = ?')
     .get(req.params.id, req.user.iglesia_id);
   if (!l) return res.status(404).json({ error: 'Lección no encontrada' });
-  db.prepare('DELETE FROM leccion WHERE id = ? AND iglesia_id = ?').run(l.id, req.user.iglesia_id);
-  auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_leccion', 'ninos', l.titulo,
-    { tabla: 'leccion', id: l.id });
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM leccion WHERE id = ? AND iglesia_id = ?').run(l.id, req.user.iglesia_id);
+    auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_leccion', 'ninos', l.titulo,
+      { tabla: 'leccion', id: l.id });
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); return res.status(500).json({ error: 'No se pudo borrar la lección' }); }
   res.json({ ok: true });
 });
 
