@@ -8,6 +8,9 @@
 // -----------------------------------------------------------------------------
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cargarDb, reiniciar, sembrarMinimo } from './helpers.js';
 
 let dbDirecta, srv, base, signToken, SEM, encargada;
@@ -169,4 +172,72 @@ test('inscribir un nino y subir una leccion dejan apunte', async () => {
   await llamar('POST', '/api/ninos/material', { clase_id: cl, titulo: 'El arca' });
   assert.equal(apuntes('inscribir_nino').length, 1);
   assert.equal(apuntes('crear_leccion').length, 1);
+});
+
+// -----------------------------------------------------------------------------
+//  Candado de FUENTE (no de API): guardarEdicionClase() en web/app.js.
+//
+//  window._clasesEd es la cache que cargarClases() llena, y de la que
+//  formEditarClase() SIEMPRE prellena el panel (nunca vuelve a pedirle nada
+//  al servidor). Tras un PATCH exitoso, guardarEdicionClase() repinta con
+//  vistaClase(_claseActual, nombre) -- que NO pasa por cargarClases() -- asi
+//  que si el PATCH no actualiza esa misma cache EN SITIO, la cache se queda
+//  vieja. Un segundo ✏️ en la MISMA sesion volveria a prellenar el
+//  nombre/edad de ANTES del primer guardado; si la encargada solo toca el
+//  otro campo y guarda, el PATCH reenvia el valor viejo del campo que no
+//  toco y REVIERTE en silencio la correccion que ya habia guardado.
+//
+//  Es la septima aparicion documentada en este proyecto de la misma leccion:
+//  un formulario que reenvia entero lo que nadie toco de verdad (la primera
+//  fue el "Juan Perez -> Juan Perez" de tesoreria; ver ESTADO.md, 5-ago
+//  noche). Aqui la variante es peor: no reenvia un valor sin cambios, revive
+//  uno que SI cambio y que el servidor YA habia aceptado.
+// -----------------------------------------------------------------------------
+const APP_JS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'app.js');
+const fuenteApp = fs.readFileSync(APP_JS, 'utf8');
+
+// Saca `function nombre(...){...}` / `async function nombre(...){...}` hasta
+// la `}` que cierra en columna 0 (mismo truco que usan los barridos XSS: las
+// llaves internas del cuerpo van indentadas y no confunden al patron).
+function extraerFuncion(nombre, fuente) {
+  const re = new RegExp(`^(?:async )?function ${nombre}\\([\\s\\S]*?^\\}`, 'm');
+  const m = fuente.match(re);
+  assert.ok(m, `no se encontro ${nombre}() en web/app.js`);
+  return m[0];
+}
+
+test('guardarEdicionClase() actualiza window._clasesEd tras el PATCH (evita revertir una correccion previa)', () => {
+  const cuerpo = extraerFuncion('guardarEdicionClase', fuenteApp);
+  assert.match(cuerpo, /_clasesEd/,
+    'guardarEdicionClase() no toca window._clasesEd: un segundo panel de edicion en la MISMA sesion ' +
+    'prellenaria el nombre/edad VIEJOS de la cache que dejo el primer guardado, y volver a guardar sin ' +
+    'tocar ese campo revertiria en silencio la correccion que ya se habia guardado en el servidor ' +
+    '(la septima aparicion de "un formulario que reenvia lo que nadie toco" en este proyecto)');
+  // Y tiene que pasar DESPUES de que el PATCH ya se resolvio bien, no antes:
+  // si la cache se escribiera antes de saber si el servidor acepto el
+  // cambio, un PATCH que falla (400/409/red caida) dejaria la cache con
+  // datos que el servidor nunca llego a guardar -- el mismo problema, al reves.
+  const idxPatch = cuerpo.indexOf("method:'PATCH'");
+  const idxCache = cuerpo.indexOf('_clasesEd');
+  assert.ok(idxPatch >= 0, 'no se encontro el PATCH dentro de guardarEdicionClase()');
+  assert.ok(idxCache > idxPatch,
+    'la actualizacion de _clasesEd tiene que venir DESPUES del await al PATCH exitoso, no antes');
+});
+
+// guardarEdicionLeccion() no tiene el mismo agujero: tras el PATCH llama a
+// cargarMaterial(), que vuelve a pedirle la lista ENTERA al servidor y
+// reescribe window._materialEd con datos frescos -- no hay cache vieja que
+// pueda sobrevivir a un guardado exitoso. Este candado deja esa verificacion
+// escrita (y no solo asumida) para que si algun dia cargarMaterial() deja de
+// re-pedir la lista, algo aqui se caiga.
+test('guardarEdicionLeccion() se apoya en cargarMaterial() para refrescar window._materialEd (ya es seguro)', () => {
+  const cuerpoGuardar = extraerFuncion('guardarEdicionLeccion', fuenteApp);
+  assert.match(cuerpoGuardar, /cargarMaterial\(\)/,
+    'guardarEdicionLeccion() ya no llama a cargarMaterial() tras el PATCH: si dejo de hacerlo, ' +
+    'window._materialEd puede quedar con datos viejos igual que le paso a _clasesEd -- revisar si ' +
+    'ahora necesita el mismo parche en sitio que guardarEdicionClase()');
+  const cuerpoCargar = extraerFuncion('cargarMaterial', fuenteApp);
+  assert.match(cuerpoCargar, /window\._materialEd\s*=/,
+    'cargarMaterial() ya no reescribe window._materialEd: la garantia de "siempre datos frescos" de ' +
+    'guardarEdicionLeccion() depende de esta linea');
 });

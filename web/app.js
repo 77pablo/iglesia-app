@@ -2863,9 +2863,16 @@ function formEditarClase(){
 async function guardarEdicionClase(){
   const nombre=$('ec-nombre').value.trim();
   if(!nombre) return toast('Pon el nombre');
+  const edad=$('ec-edad').value.trim();
   await conBoton(botonActual(), async()=>{
     try{
-      await api('/ninos/clases/'+_claseActual,{method:'PATCH',body:JSON.stringify({nombre,edad:$('ec-edad').value.trim()})});
+      await api('/ninos/clases/'+_claseActual,{method:'PATCH',body:JSON.stringify({nombre,edad})});
+      // La cache que prellena el panel se actualiza AQUI: sin esto, un segundo
+      // ✏️ en la misma sesion prellenaba lo viejo y guardarlo revertia la
+      // correccion recien hecha -- la septima aparicion de la leccion del
+      // formulario que reenvia lo que nadie toco.
+      const c=(window._clasesEd||[]).find(x=>x.id===_claseActual);
+      if(c){ c.nombre=nombre; c.edad=edad; }
       toast('Clase corregida'); vistaClase(_claseActual,nombre);
     }catch(e){ toast(e.message); }
   },'Guardando…');
