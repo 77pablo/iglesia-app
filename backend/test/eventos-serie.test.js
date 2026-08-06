@@ -48,3 +48,92 @@ test('migraciones: existen serie y evento.serie_id, y fecha_no_disp.repetir YA N
   migrarQuitarRepetir();
   assert.ok(db.prepare('PRAGMA table_info(fecha_no_disp)').all().length >= 4, 'la tabla sobrevive la segunda pasada');
 });
+
+// ---------- Tarea 2: crear la serie y extenderla ----------
+
+// El "hoy" del servidor es la fecha local de Chile (fechas.js).
+async function hoyLocal() {
+  const { fechaLocal } = await import('../src/fechas.js');
+  return fechaLocal();
+}
+function sumarDiasISO(f, n) {
+  const d = new Date(f + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+const crearEvento = (cuerpo, quien = SEM.pastor) =>
+  fetch(base + '/api/eventos', { method: 'POST', headers: H(quien), body: JSON.stringify(cuerpo) });
+
+test('el pastor crea "todos los domingos": ~13 fechas aprobadas, 7 dias entre si, mismo serie_id', async () => {
+  const hoy = await hoyLocal();
+  const res = await crearEvento({ grupo_id: SEM.grupoId, titulo: 'Culto', fecha: hoy, repetir_semanal: true });
+  assert.equal(res.status, 200);
+  const j = await res.json();
+  assert.ok(j.creados >= 12 && j.creados <= 14, `~13 fechas en 90 dias, salieron ${j.creados}`);
+
+  const evs = db.prepare('SELECT fecha, estado, serie_id FROM evento ORDER BY fecha').all();
+  assert.equal(evs.length, j.creados);
+  assert.ok(evs.every(e => e.estado === 'aprobado'), 'todas nacen aprobadas (las crea el pastor)');
+  assert.ok(evs.every(e => e.serie_id === evs[0].serie_id && e.serie_id !== null), 'todas de la misma serie');
+  for (let i = 1; i < evs.length; i++)
+    assert.equal(evs[i].fecha, sumarDiasISO(evs[i - 1].fecha, 7), 'exactamente una semana entre fechas');
+  assert.ok(evs[evs.length - 1].fecha <= sumarDiasISO(hoy, 90), 'nada mas alla de 3 meses');
+
+  const serie = db.prepare('SELECT * FROM serie WHERE id = ?').get(evs[0].serie_id);
+  assert.equal(serie.activa, 1);
+  assert.equal(serie.iglesia_id, SEM.iglesiaId);
+});
+
+test('un lider NO puede crear series: 403 y cero eventos', async () => {
+  const hoy = await hoyLocal();
+  const res = await crearEvento({ grupo_id: SEM.grupoId, titulo: 'Ensayo', fecha: hoy, repetir_semanal: true }, SEM.lider);
+  assert.equal(res.status, 403);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM evento').get().n, 0);
+});
+
+test('una fecha de la serie que choca se salta y las demas se crean', async () => {
+  const hoy = await hoyLocal();
+  const ocupada = sumarDiasISO(hoy, 7);
+  await crearEvento({ grupo_id: SEM.grupoId, titulo: 'Otro', fecha: ocupada, lugar: 'Templo', hora_inicio: '10:00', hora_fin: '12:00' });
+
+  const res = await crearEvento({ grupo_id: SEM.grupoId, titulo: 'Culto', fecha: hoy, lugar: 'Templo',
+    hora_inicio: '10:00', hora_fin: '12:00', repetir_semanal: true });
+  assert.equal(res.status, 200);
+  const j = await res.json();
+
+  const serieEvs = db.prepare('SELECT fecha FROM evento WHERE serie_id IS NOT NULL ORDER BY fecha').all();
+  assert.equal(serieEvs.length, j.creados);
+  assert.ok(!serieEvs.some(e => e.fecha === ocupada), 'la semana ocupada se salto');
+});
+
+test('GET /api/eventos extiende una serie activa que se esta quedando corta; una apagada NO', async () => {
+  const hoy = await hoyLocal();
+  // Serie activa con su ultimo evento a solo 10 dias: le falta horizonte.
+  const sA = Number(db.prepare('INSERT INTO serie (iglesia_id) VALUES (?)').run(SEM.iglesiaId).lastInsertRowid);
+  db.prepare(`INSERT INTO evento (iglesia_id, grupo_id, titulo, fecha, hora_inicio, estado, creado_por, serie_id)
+              VALUES (?,?,?,?,?,'aprobado',?,?)`)
+    .run(SEM.iglesiaId, SEM.grupoId, 'Culto', sumarDiasISO(hoy, 10), '10:00', SEM.pastor.id, sA);
+  // Serie apagada en la misma situacion: la lapida tiene que mandar.
+  const sM = Number(db.prepare('INSERT INTO serie (iglesia_id, activa) VALUES (?, 0)').run(SEM.iglesiaId).lastInsertRowid);
+  db.prepare(`INSERT INTO evento (iglesia_id, grupo_id, titulo, fecha, estado, creado_por, serie_id)
+              VALUES (?,?,?,?,'aprobado',?,?)`)
+    .run(SEM.iglesiaId, SEM.grupoId, 'Vigilia', sumarDiasISO(hoy, 10), SEM.pastor.id, sM);
+
+  const res = await fetch(base + '/api/eventos', { headers: H(SEM.miembro1) });
+  assert.equal(res.status, 200);
+
+  const deA = db.prepare('SELECT fecha, titulo, hora_inicio FROM evento WHERE serie_id = ? ORDER BY fecha').all(sA);
+  assert.ok(deA.length > 1, 'la serie activa se extendio');
+  assert.ok(deA[deA.length - 1].fecha > sumarDiasISO(hoy, 45), 'quedo con horizonte de sobra');
+  assert.ok(deA[deA.length - 1].fecha <= sumarDiasISO(hoy, 90), 'sin pasarse de 3 meses');
+  assert.ok(deA.every(e => e.titulo === 'Culto' && e.hora_inicio === '10:00'), 'copia el ultimo evento de la serie');
+
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM evento WHERE serie_id = ?').get(sM).n, 1,
+    'la serie apagada NO resucita');
+});
+
+test('una serie activa que se quedo sin eventos se apaga (no hay de donde copiar)', async () => {
+  const s = Number(db.prepare('INSERT INTO serie (iglesia_id) VALUES (?)').run(SEM.iglesiaId).lastInsertRowid);
+  await fetch(base + '/api/eventos', { headers: H(SEM.miembro1) });
+  assert.equal(db.prepare('SELECT activa FROM serie WHERE id = ?').get(s).activa, 0);
+});
