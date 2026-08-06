@@ -2407,6 +2407,17 @@ function chipMensajePortal(estado){
     : '<span class="estado-chip estado-pendiente">🆕 Nuevo</span>';
 }
 
+// El 🗑️ vive en un helper porque se pinta desde DOS sitios: filaMensajePortal
+// (al listar) y atenderMensajePortal (que reemplaza el innerHTML del bloque de
+// accion — sin esto, marcar atendido se comería el botón de borrar). esPrevio
+// viaja como booleano al onclick para que borrar sepa si baja el contador de
+// anteriores: se decide con el dato, no oliendo clases del DOM; y un previo ya
+// atendido en sitio se repinta con false, porque el contador ya bajó al atender.
+function botonBorrarMensajePortal(id, esPrevio){
+  return `<button class="btn-ico" title="Borrar este mensaje" aria-label="Borrar este mensaje"
+    onclick="borrarMensajePortal(${Number(id)},${esPrevio===true})">🗑️</button>`;
+}
+
 // El texto de aquí lo escribe un desconocido de internet, sin cuenta y sin
 // moderación: es el dato menos confiable de la app. escHtml SIEMPRE.
 function filaMensajePortal(m){
@@ -2421,7 +2432,7 @@ function filaMensajePortal(m){
         <div class="muted small" style="margin-top:6px">${escHtml(fechaDeUTC(m.creado_en))}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0" id="mp-accion-${m.id}">
-        ${chip}${boton}
+        ${chip}${boton}${botonBorrarMensajePortal(m.id, m.estado==='previo')}
       </div>
     </div>`;
 }
@@ -2435,6 +2446,13 @@ async function vistaMensajesPortal(){
     const lista = d.items.length
       ? d.items.map(filaMensajePortal).join('')
       : '<div class="placeholder"><div class="big">📬</div><p>No hay mensajes del portal.</p></div>';
+    // La condición es EXACTA, no aproximada: el ORDER BY pone lo no atendido
+    // primero, así que si la primera página viene toda atendida, no queda nada
+    // por atender en ninguna otra. Solo marca los NUEVOS: los anteriores tienen
+    // su propio botón dentro de su caja (ver la spec de la tanda E).
+    const btnTodos = d.items.some(x=>x.estado!=='atendido')
+      ? `<button class="btn ghost small-btn" style="margin-bottom:6px" onclick="atenderTodosPortal(false)">✅ Marcar todos como atendidos</button>`
+      : '';
     // La sección de los anteriores nace PLEGADA: es lo que evita que la primera
     // apertura sea un muro de meses acumulados. El número va a la vista para
     // que no se ignoren sin querer.
@@ -2445,7 +2463,7 @@ async function vistaMensajesPortal(){
            <span id="mp-previos-flecha">▸</span> 📥 <span id="mp-previos-txt">Mensajes anteriores a esta bandeja (${d.previos})</span></button>
          <div id="mp-previos" style="display:none"></div>`
       : '';
-    z.innerHTML=`<div id="mp-lista">${lista}</div>
+    z.innerHTML=`${btnTodos}<div id="mp-lista">${lista}</div>
       ${d.hayMas?'<button class="btn ghost small-btn" id="mp-mas" style="margin-top:10px" onclick="cargarMasMensajesPortal()">Ver más</button>':''}
       ${previos}`;
   }catch(e){ $('mp').innerHTML='<p class="error">'+escHtml(e.message||'No se pudieron cargar')+'</p>'; }
@@ -2491,7 +2509,12 @@ async function verPreviosPortal(){
     try{
       const d=await api('/publico/mensajes?previos=1&offset=0');
       _mpPreviosOffset=0; _mpPreviosCargados=true;
-      caja.innerHTML=d.items.map(filaMensajePortal).join('');
+      // Un previo es no-atendido por definición (atenderlo lo saca de esta
+      // consulta), así que el botón en bloque va siempre que haya filas.
+      const btnTodosPrevios = d.items.length
+        ? `<button class="btn ghost small-btn" style="margin-top:8px" onclick="atenderTodosPortal(true)">✅ Marcar todos los anteriores como atendidos</button>`
+        : '';
+      caja.innerHTML=btnTodosPrevios + d.items.map(filaMensajePortal).join('');
       if(d.hayMas) _mpAnadirBotonMasPrevios(caja);
     }catch(e){
       toast(e.message);
@@ -2543,8 +2566,10 @@ async function atenderMensajePortal(id){
     // Se actualiza SOLO esta tarjeta, en vez de recargar toda la vista: una
     // recarga completa reseteaba los offsets de paginacion y volvia a plegar
     // la seccion de "mensajes anteriores" aunque el pastor la hubiera abierto.
+    // El 🗑️ se repinta junto al chip (el innerHTML se lleva el que había) y
+    // con esPrevio=false: si era un anterior, el contador ya baja aquí abajo.
     const acciones=$('mp-accion-'+id);
-    if(acciones) acciones.innerHTML=chipMensajePortal('atendido');
+    if(acciones) acciones.innerHTML=chipMensajePortal('atendido')+botonBorrarMensajePortal(id,false);
 
     // Si el que se atendio era uno de los ANTERIORES, baja el numero de la
     // cabecera. Antes daba igual porque ese numero solo se veia con la seccion
@@ -2557,6 +2582,46 @@ async function atenderMensajePortal(id){
       if(txt) txt.textContent=`Mensajes anteriores a esta bandeja (${_mpPreviosTotal})`;
     }
   }catch(e){ toast(e.message); }
+}
+
+// Borrar un mensaje (tanda E). Quita SOLO la tarjeta, por el mismo motivo que
+// atenderMensajePortal: recargar la vista resetea offsets y pliega la sección
+// de anteriores. esPrevio llega del render (ver botonBorrarMensajePortal):
+// solo un previo sin atender descuenta del contador de la cabecera.
+function borrarMensajePortal(id, esPrevio){
+  modalConfirm('¿Borrar este mensaje del portal? No se puede deshacer.', async()=>{
+    try{
+      await api('/publico/mensajes/'+id,{method:'DELETE'});
+      toast('🗑️ Mensaje borrado');
+      if(esPrevio && _mpPreviosTotal>0){
+        _mpPreviosTotal--;
+        const txt=$('mp-previos-txt');
+        if(txt) txt.textContent=`Mensajes anteriores a esta bandeja (${_mpPreviosTotal})`;
+      }
+      const card=$('mp-msg-'+id);
+      if(card) card.remove();
+    }catch(e){ toast(e.message); }
+  }, {okLabel:'Sí, borrar', danger:true});
+}
+
+// Atender en bloque (tanda E). previos=false marca los nuevos; true, los
+// anteriores — nunca los dos: atender en silencio meses que el pastor quizá
+// nunca leyó sería afirmar lo que no hizo. Tras un bloque cambió todo lo
+// visible, así que aquí sí se repinta la vista entera (a diferencia del
+// atender de a uno; los anteriores recién atendidos pasan a la lista
+// principal y su sección desaparece con el contador en cero).
+function atenderTodosPortal(previos){
+  const msj = previos
+    ? '¿Marcar TODOS los mensajes anteriores como atendidos? No se puede volver a "nuevo".'
+    : '¿Marcar TODOS los mensajes nuevos como atendidos? No se puede volver a "nuevo".';
+  modalConfirm(msj, async()=>{
+    try{
+      const d=await api('/publico/mensajes/atender-todos',
+        {method:'PATCH',body:JSON.stringify({previos:previos===true})});
+      toast(`✅ ${d.atendidos} mensaje(s) marcados como atendidos`);
+      vistaMensajesPortal();
+    }catch(e){ toast(e.message); }
+  }, {okLabel:'Sí, marcar todos', danger:true});
 }
 
 // ============================================================

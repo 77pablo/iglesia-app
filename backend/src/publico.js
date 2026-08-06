@@ -136,6 +136,51 @@ r.patch('/mensajes/:id/atender', authMiddleware, soloPastorBandeja, (req, res) =
   res.json({ ok: true });
 });
 
+// Marcar atendido en bloque (tanda E). Sin body marca los 'nuevo'; con
+// {previos:true}, los 'previo'. Los dos alcances son excluyentes A PROPOSITO:
+// el boton principal no puede atender en silencio meses que el pastor quiza
+// nunca leyo — "marcar atendido es una afirmacion del pastor" (spec 31-jul);
+// los anteriores tienen su propio boton, explicito, dentro de su caja.
+// Sin nada que marcar responde 200 con atendidos:0 (una orden ya cumplida,
+// no un recurso que no existe). No audita, igual que el atender de a uno.
+//
+// No choca con /mensajes/:id/atender: son formas distintas (dos segmentos
+// contra tres), Express no puede confundirlas.
+const atenderTodosSchema = z.object({ previos: z.boolean().optional() });
+r.patch('/mensajes/atender-todos', authMiddleware, soloPastorBandeja, validar(atenderTodosSchema), (req, res) => {
+  const estado = req.body.previos === true ? 'previo' : 'nuevo';
+  const info = db.prepare(
+    "UPDATE contacto_publico SET estado = 'atendido' WHERE iglesia_id = ? AND estado = ?"
+  ).run(req.user.iglesia_id, estado);
+  res.json({ ok: true, atendidos: info.changes });
+});
+
+// Borrar un mensaje (tanda E). Es la unica destruccion sin vuelta atras de la
+// bandeja, asi que deja apunte con el nombre del visitante — despues del
+// borrado ya no habra fila que diga de quien era — y el DELETE y su apunte van
+// en la misma transaccion (la convencion del 31-jul: una destruccion no puede
+// quedar aplicada sin rastro). Se lee la fila antes, acotada por iglesia en la
+// MISMA consulta, y el 404 es 404 (no 403, ver el atender de arriba).
+r.delete('/mensajes/:id', authMiddleware, soloPastorBandeja, (req, res) => {
+  const fila = db.prepare(
+    'SELECT id, nombre FROM contacto_publico WHERE id = ? AND iglesia_id = ?'
+  ).get(Number(req.params.id), req.user.iglesia_id);
+  if (!fila) return res.status(404).json({ error: 'Mensaje no encontrado' });
+
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM contacto_publico WHERE id = ? AND iglesia_id = ?')
+      .run(fila.id, req.user.iglesia_id);
+    auditar(req.user.iglesia_id, req.user.persona_id, 'borrar_mensaje_portal', 'publico',
+      `mensaje de ${fila.nombre}`);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'No se pudo borrar el mensaje' });
+  }
+  res.json({ ok: true });
+});
+
 // La fecha local vive ahora en ./fechas.js, porque la comparte con
 // persistencia.js (la clave diaria del aviso del respaldo). Se re-exporta desde
 // aqui porque este era su sitio original y hay tests que la piden por esta

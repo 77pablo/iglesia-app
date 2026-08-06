@@ -319,6 +319,10 @@ Frontend:
   la página.
 - **No se puede borrar un mensaje**, ni marcar atendido masivamente, ni volver
   a marcar como nuevo uno ya atendido.
+  > *(Nota del 6-ago: los dos primeros puntos caducaron — la tanda E añadió
+  > borrar un mensaje, auditado, y atender en bloque; ver
+  > `2026-08-06-bandeja-borrar-y-bloque-design.md`. Volver a 'nuevo' sigue
+  > fuera, a propósito.)*
 - **No se convierte un mensaje en caso de Cuidado Pastoral.** `caso_cuidado`
   exige un `persona_id` de la iglesia (`db.js:252-259`) y un visitante no lo
   es. Haría falta crear la persona primero: es un proyecto aparte.

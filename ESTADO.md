@@ -1,18 +1,18 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 6 de agosto de 2026 (Pablo subió los 43 commits del 5-ago y Render ya los sirve — verificado contra el `app.js` de producción; tanda D cerrada y fusionada el mismo 6-ago, **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (el merge de la tanda D — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 6 de agosto de 2026, segunda pasada (por la mañana: tanda D fusionada, Pablo la subió y quedó verificada; después: **tanda E fusionada** — bandeja: borrar y atender en bloque — y **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de la tanda E — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
 ## 👉 POR DÓNDE RETOMAR (6-ago)
 
 **Lo primero es de Pablo, no de código:**
-1. **Push** de los commits de la tanda D con GitHub Desktop (los 43 del 5-ago ya subieron y Render ya los sirve — verificado el 6-ago buscando `quitarAusenteDuplicada` en el `app.js` de producción).
-2. **Tres comprobaciones de navegador** que ninguna prueba de Node pudo hacer (el detalle exacto está en la sección de cada tanda del 5-ago): como `raquel`, corregir un movimiento de Tesorería (toast, lista, historial); como `marta`, editar una clase, intentar borrar una con niños (leer el 409) y borrar una lección; como `pastor`, comprobar que ve marcas e historiales pero ningún lápiz de edición. **Ya se pueden hacer contra producción** (el código está desplegado).
+1. **Push** de los commits de la tanda E con GitHub Desktop (la tanda D ya subió esa misma mañana; verificar el despliegue buscando `atenderTodosPortal` en el `app.js` que sirve Render).
+2. **Comprobaciones de navegador pendientes** que ninguna prueba de Node pudo hacer: las tres del 5-ago (como `raquel`, corregir un movimiento de Tesorería; como `marta`, editar/borrar clases y lecciones y leer el 409; como `pastor`, ver historiales sin lápiz) **ya se pueden hacer contra producción**. Y una nueva de la tanda E: como `pastor`, borrar un mensaje de la bandeja (ver la tarjeta irse sin que la sección de anteriores se pliegue) y marcar todos como atendidos (ver la lista repintada).
 3. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
 
-**Las tandas que Pablo ya aprobó y quedan por hacer** (el orden lo eligió él el 5-ago; E no necesita más decisiones suyas, F y H sí las van a necesitar durante el brainstorming):
+**Las tandas que Pablo ya aprobó y quedan por hacer** (el orden lo eligió él el 5-ago; F y H van a necesitar sus decisiones durante el brainstorming):
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
-- **Tanda E — bandeja del portal:** poder borrar un mensaje y marcar atendido en bloque (pendiente 3 de la bandeja).
+- ~~**Tanda E — bandeja del portal:** poder borrar un mensaje y marcar atendido en bloque (pendiente 3 de la bandeja).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. Spec: `docs/superpowers/specs/2026-08-06-bandeja-borrar-y-bloque-design.md`.
 - **Tanda F — pantalla de auditoría general para el pastor** (hoy el rastro solo se ve hoja por hoja; con lo del 5-ago hay MÁS rastro que nunca esperando una pantalla).
 - **Tanda G — extender el barrido XSS** a manejadores de evento (95) y cuerpo de texto (676). Dos leftovers ya anotados para esta tanda: `id="mov-corregir-${m.id}"` sin `Number()` y los `onclick` de `filaMov`.
 - **Tanda H — eventos que se repiten** ("todos los domingos"; conecta con la columna `repetir` de `fecha_no_disp` que hoy no hace nada).
@@ -60,6 +60,58 @@ comentario en `admin.js`).
 Suite: **662** (misma cifra que ayer: se invirtieron dos tests, no se sumaron;
 medida con `cd backend && npm test`; caduca con la próxima rama — no la repitas
 de memoria).
+
+---
+
+## 🆕 6 DE AGOSTO DE 2026 (2) — 📬 la bandeja ya borra mensajes y atiende en bloque
+
+**Tanda E, fusionada a `main` el mismo día** (merge `--no-ff`, rama
+`feat/bandeja-borrar-y-bloque` borrada). **Sin subir a GitHub** al escribirse
+esto — compruébalo. Spec:
+`docs/superpowers/specs/2026-08-06-bandeja-borrar-y-bloque-design.md`, plan
+con casillas en `docs/superpowers/plans/2026-08-06-bandeja-borrar-y-bloque.md`.
+Cierra el pendiente 3 de la bandeja del 31-jul (su "fuera de alcance" caducó
+en dos puntos; la spec vieja lleva nota al pie).
+
+**Borrar un mensaje** (`DELETE /api/publico/mensajes/:id`, solo pastor): es la
+única destrucción sin vuelta atrás de la bandeja, así que **se audita**
+(`borrar_mensaje_portal`, con el nombre del visitante en el detalle — después
+del borrado no queda fila que diga de quién era) y el `DELETE` y su apunte van
+**en la misma transacción**. Acotado por iglesia en la misma consulta; 404 y no
+403. ⚠️ El test cruzado de iglesia pasaba en RED de rebote (una ruta
+inexistente ya da 404), así que **se verificó por mutación**: sin el acotado,
+cae. El atender individual **sigue sin auditar**: no destruye nada.
+
+**Atender en bloque** (`PATCH /api/publico/mensajes/atender-todos`): sin body
+marca los `'nuevo'`; con `{previos:true}`, los `'previo'`. **Nunca los dos** —
+"marcar atendido es una afirmación del pastor" (spec 31-jul): atender en
+silencio meses que quizá nunca leyó sería afirmar lo que no hizo. Cada alcance
+tiene su botón: el principal arriba de la lista (solo si la primera página trae
+algún no-atendido — condición **exacta**, el ORDER BY pone lo no atendido
+primero), el de anteriores dentro de su caja plegable. Sin nada que marcar:
+200 con `atendidos: 0`, una orden ya cumplida, no un 404.
+
+**Los dos detalles finos de la pantalla, para que nadie los rompa sin querer:**
+el 🗑️ vive en un helper (`botonBorrarMensajePortal`) porque se pinta desde
+**dos** sitios — la fila y el repintado en sitio de `atenderMensajePortal`,
+que reemplaza el `innerHTML` del bloque de acción y antes se lo habría comido.
+Y `esPrevio` viaja como **booleano al onclick**: borrar decide con el dato si
+baja el contador de "anteriores", no oliendo clases del DOM; un previo atendido
+en sitio se repinta con `false` porque su contador ya bajó al atender (si no,
+borrarlo descontaría dos veces).
+
+**Fuera de alcance, a propósito:** deshacer un borrado, volver un atendido a
+'nuevo', y **borrar en bloque** (atender en bloque corrige un contador; borrar
+en bloque destruiría el archivo de un clic — nadie lo pidió).
+
+⚠️ **Verificación manual pendiente de Pablo** (no hay banco de pruebas de
+navegador): como `pastor`, borrar un mensaje (la tarjeta se va, la sección de
+anteriores no se pliega, el contador baja solo si era un anterior sin atender)
+y marcar todos como atendidos (confirmación, toast con el conteo, lista
+repintada).
+
+Suite: **671** (662 + 9; medida al cerrar la rama con `cd backend && npm test`;
+caduca con la próxima rama que se fusione — no la repitas de memoria).
 
 ---
 
@@ -1091,7 +1143,7 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
    > **Sigue sin resolver**, a propósito o por quedar fuera de alcance:
    > 1. **No se puede responder desde la app**: el formulario sigue sin pedir correo ni teléfono (decisión del dueño). La única vía es que la persona lo escriba dentro del mensaje.
    > 2. **La sección de mensajes anteriores puede no abrirse nunca.** Están contados y accesibles, pero nada obliga a mirarlos y no generan aviso.
-   > 3. **No se puede borrar un mensaje** ni marcar atendido en bloque.
+   > 3. ~~**No se puede borrar un mensaje** ni marcar atendido en bloque.~~ **(Cerrado el 6-ago, tanda E — ver la sección "6 de agosto (2)".)**
    > 4. **La fecha de Cuidado pastoral (`verCaso()` en `app.js:2102`) sigue con el fallo de UTC** — se ve el día siguiente para lo escrito después de las 20:00. El ayudante `fechaDeUTC` ya existe y lo arregla en una línea; se dejó fuera a propósito para no ensuciar este diff.
    > 5. **La Política de Privacidad 4.9 está en borrador** y necesita al abogado.
 
