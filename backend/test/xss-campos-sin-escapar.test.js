@@ -72,7 +72,7 @@ const escJsAttrSrc = `${escHtmlSrc}\n${fuenteDe('escJsAttr')}`;
 // Sitio 1 (web/app.js:2459) — filaMov(): pantalla del tesorero.
 // ---------------------------------------------------------------
 test('filaMov(): una categoria con <script> llega escapada (cap() no escapa nada)', () => {
-  const filaMov = extraer('filaMov', `${escHtmlSrc}\n${capSrc}\n${moneySrc}\n${safeUrlSrc}`);
+  const filaMov = extraer('filaMov', `${escHtmlSrc}\n${capSrc}\n${moneySrc}\n${safeUrlSrc}\nfunction esTesoreroUI(){ return false; }`);
   const html = filaMov({ tipo: 'gasto', categoria: ATAQUE, monto: 100, fecha: '2026-07-01' });
   assert.ok(!html.includes('<script>'), `la categoria llega sin escapar al tesorero: ${html}`);
   assert.ok(html.includes('&lt;script&gt;'), 'la categoria capitalizada deberia aparecer escapada');

@@ -47,7 +47,10 @@ r.get('/movimientos', (req, res) => {
   // mantenerla sincronizada, y eso es exactamente el problema que este trabajo
   // viene a quitar de la tesoreria.
   const rows = db.prepare(
-    `SELECT m.*, c.nombre AS campania_nombre
+    `SELECT m.*, c.nombre AS campania_nombre,
+            (SELECT COUNT(*) FROM auditoria a
+              WHERE a.ref_tabla = 'movimiento' AND a.ref_id = m.id
+                AND a.accion = 'movimiento_corregir') AS correcciones
        FROM movimiento m LEFT JOIN campania c ON c.id = m.campania_id
       WHERE m.iglesia_id = ?
       ORDER BY m.fecha DESC, m.id DESC LIMIT ? OFFSET ?`
@@ -83,6 +86,79 @@ r.post('/movimientos', soloTesorero, limiterSensible, validar(movimientoSchema),
       .run(req.user.iglesia_id, tipo, categoria || null, montoNum, descripcion || null, req.user.persona_id, comprobante_url || null);
   auditar(req.user.iglesia_id, req.user.persona_id, 'movimiento_' + tipo, 'tesoreria', String(montoNum));
   res.json({ ok: true });
+});
+
+// --- Corregir un movimiento (spec 2026-08-05): monto, descripcion, categoria ---
+// El tipo NO se corrige (cambiarlo es borrar+crear, y borrar esta prohibido) y
+// la fecha tampoco (mueve los totales mensuales; ver reportes.js:21-29 antes de
+// tocar cualquier fecha). validar() descarta esas claves en silencio y el test
+// lo deja fijado.
+const correccionSchema = z.object({
+  monto: z.coerce.number().positive('el monto debe ser un numero mayor que cero').optional(),
+  descripcion: z.string().trim().max(500).optional(),
+  categoria: z.string().trim().max(100).optional()
+}).refine(b => b.monto !== undefined || b.descripcion !== undefined || b.categoria !== undefined,
+  { message: 'no viene ningun campo que corregir' });
+
+r.patch('/movimientos/:id', soloTesorero, limiterSensible, validar(correccionSchema), (req, res) => {
+  const ig = req.user.iglesia_id;
+  // La iglesia va en la MISMA consulta: al movimiento de otra iglesia se le
+  // responde 404, no 403 (no se confirma que exista) — convencion del archivo.
+  const m = db.prepare('SELECT id, monto, descripcion, categoria FROM movimiento WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, ig);
+  if (!m) return res.status(404).json({ error: 'Movimiento no encontrado' });
+
+  // '' significa "borrar el texto": se normaliza a NULL, igual que el POST
+  // (descripcion || null). Sin esto, '' y NULL serian dos vacios distintos.
+  const norm = v => (v === '' ? null : v);
+
+  // El SET se arma desde esta lista blanca, NUNCA desde las claves del body
+  // (regla del repo desde el PATCH de ninos). Y SOLO entra lo que de verdad
+  // es distinto: lo demas ni se escribe ni se audita.
+  const sets = [], vals = [], cambios = [];
+  const pedir = (col, nuevo, viejo) => {
+    if (nuevo === undefined) return;
+    const n = norm(nuevo);
+    if (n === (viejo ?? null)) return;
+    sets.push(`${col} = ?`); vals.push(n);
+    cambios.push(`${col}: ${viejo ?? '(vacio)'} -> ${n ?? '(vacio)'}`);
+  };
+  pedir('monto', req.body.monto, m.monto);
+  pedir('descripcion', req.body.descripcion, m.descripcion);
+  pedir('categoria', req.body.categoria, m.categoria);
+
+  if (!sets.length) return res.json({ ok: true, sinCambios: true });
+
+  // UPDATE y apunte en la MISMA transaccion (convencion fijada el 31-jul):
+  // una correccion de dinero no puede quedar aplicada sin rastro.
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE movimiento SET ${sets.join(', ')} WHERE id = ? AND iglesia_id = ?`)
+      .run(...vals, m.id, ig);
+    auditar(ig, req.user.persona_id, 'movimiento_corregir', 'tesoreria', cambios.join(' · '),
+      { tabla: 'movimiento', id: m.id });
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  res.json({ ok: true });
+});
+
+// El historial de correcciones de UN movimiento. Lo ve quien ve el modulo
+// (tesorera, pastor, obispo): el gate del router ya lo garantiza. Se pide al
+// tocar la marca, no viaja con el listado.
+r.get('/movimientos/:id/historial', (req, res) => {
+  const ig = req.user.iglesia_id;
+  const m = db.prepare('SELECT id FROM movimiento WHERE id = ? AND iglesia_id = ?')
+    .get(req.params.id, ig);
+  if (!m) return res.status(404).json({ error: 'Movimiento no encontrado' });
+  // LEFT JOIN: si el actor ejercio ARCO y su fila quedo anonimizada, el apunte
+  // sigue valiendo con el nombre que tenga; si la fila no existe, actor null.
+  res.json(db.prepare(
+    `SELECT a.fecha, a.detalle, p.nombre AS actor
+       FROM auditoria a LEFT JOIN persona p ON p.id = a.actor_id
+      WHERE a.ref_tabla = 'movimiento' AND a.ref_id = ? AND a.accion = 'movimiento_corregir'
+        AND a.iglesia_id = ?
+      ORDER BY a.id DESC`
+  ).all(m.id, ig));
 });
 
 // --- Campañas ---

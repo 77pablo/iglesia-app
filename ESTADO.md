@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 5 de agosto de 2026 (toda la app se usa con teclado — los divs clicables fuera del menú son botones de verdad, **fusionado a `main`**; no queda ninguna rama de trabajo local: `feat/menu-agrupado`, `feat/menu-plegable`, `feat/push-muere-con-sesion` y `feat/botones-reales` ya se fusionaron y se borraron ⚠️ **eso dejó de ser cierto esa misma tarde:** `feat/pulido-agosto` está abierta y **sin fusionar** — ver la sección "5 de agosto · tarde"). ⬆️ **`main` quedó SIN SUBIR ese día** (11 commits al momento de escribirse esto — el push lo hace Pablo con GitHub Desktop). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 5 de agosto de 2026 (toda la app se usa con teclado — los divs clicables fuera del menú son botones de verdad, **fusionado a `main`**; no queda ninguna rama de trabajo local: `feat/menu-agrupado`, `feat/menu-plegable`, `feat/push-muere-con-sesion` y `feat/botones-reales` ya se fusionaron y se borraron ⚠️ **eso dejó de ser cierto esa misma tarde:** `feat/pulido-agosto` está abierta y **sin fusionar** — ver la sección "5 de agosto · tarde"; y esa misma noche se abrió `feat/corregir-movimiento`, **también sin fusionar**, a la espera de la review final — ver "5 de agosto · noche"). ⬆️ **`main` quedó SIN SUBIR ese día** (26 commits sin subir al escribirse esta línea de noche — el push lo hace Pablo con GitHub Desktop). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira la lista de "POR DÓNDE RETOMAR" más abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
@@ -128,6 +128,96 @@ la próxima rama que se fusione — no la repitas de memoria).
 
 ---
 
+## 🆕 5 DE AGOSTO DE 2026 · NOCHE — ✏️ una ofrenda mal tecleada ya se puede corregir
+
+La pregunta que **este mismo documento** dejó anotada el 1 de agosto —*"¿por qué
+se puede borrar un aporte de campaña y no corregir una ofrenda mal tecleada?"*—
+ya tiene respuesta. Rama `feat/corregir-movimiento`, **sin fusionar** al
+escribirse esto (la fusión va después de la review final) — compruébalo, no te
+lo creas. Spec:
+`docs/superpowers/specs/2026-08-05-corregir-movimiento-design.md`.
+
+**La tesorera corrige monto, descripción y categoría** de cualquier movimiento,
+desde un panel en sitio (la convención de los 17) prellenado con la fila que la
+lista **acaba de leer**, nunca de una caché vieja. El `PATCH` manda **solo lo
+que quedó distinto**: guardar sin tocar nada ni siquiera llama a la API.
+
+**El tipo y la fecha NO se corrigen, y las dos ausencias son decisiones, no
+olvidos.** Cambiar el tipo (ingreso↔gasto) es conceptualmente borrar un
+movimiento y crear otro, y borrar sigue prohibido. Mover la fecha cambia de mes
+los totales, y `movimiento.fecha` es una fecha de calendario pura con la trampa
+documentada en `backend/src/reportes.js:21-29`. `validar()` descarta esas dos
+claves **en silencio** (comportamiento conocido del proyecto) y hay un test que
+lo deja fijado, para que nadie lea el silencio como "se puede".
+
+**Solo se audita lo que cambió de verdad.** Cada campo recibido se compara con
+el guardado; si nada cambió, la respuesta es `ok` y **no se escribe ni se
+audita nada**. Es la sexta aparición del mismo fallo en este proyecto —el
+formulario que reenvía entero lo que nadie tocó, el "Juan Pérez → Juan Pérez"—
+y esta vez la regla venía escrita en la spec **antes** que la ruta, con su test
+propio (*"PATCH con los MISMOS valores: 200 y CERO apuntes nuevos"*). El detalle
+de auditoría escribe el número crudo (`monto: 5000 -> 50000`), **no**
+formateado con `money()` — a propósito, libre de formato de locale; que nadie
+lo "arregle" después. El `UPDATE` y
+el apunte van **en la misma transacción** (la convención fijada el 31-jul: una
+corrección de dinero no puede quedar aplicada sin rastro), y el `SET` se arma
+desde una **lista blanca de tres columnas**, jamás desde las claves del cuerpo.
+Un `''` se normaliza a `NULL` igual que en el `POST`, para que no haya dos
+vacíos distintos.
+
+**La marca "✏️ corregido" y su historial —"antes → después", quién y cuándo— los
+ven la tesorera, el pastor y el obispo.** El lápiz de editar, solo la tesorera.
+⚠️ **Premisa corregida durante el diseño, y vale más que la función:** la
+primera pregunta al dueño hablaba de *"transparencia visible para la
+congregación"*, y esa premisa era **falsa** — el módulo Tesorería entero solo lo
+ven esos tres roles, y la tarjeta Transparencia trae totales por categoría, no
+movimientos. Se re-preguntó **con la premisa corregida** antes de construir
+nada, y la tarjeta no cambió. Una pregunta sobre un mundo que no existe da una
+respuesta que tampoco.
+
+**En la vista mensual del obispo la marca es pasiva** (un `<span>`, no un
+botón). El obispo mira las iglesias por `/obispo/iglesia/:id/tesoreria`, pero el
+historial se resuelve contra **la iglesia de quien pregunta**
+(`req.user.iglesia_id`), no contra la que está mirando: un botón ahí solo podría
+dar 404. Mejor ningún botón que uno que únicamente sabe fallar.
+
+**Los aportes de campaña también se corrigen, y la barra se ajusta sola:** el
+total se **calcula** sumando sus ingresos (decisión del 1-ago), así que no hay
+segunda escritura que sincronizar. Corregir el monto de un aporte no exige que
+la campaña siga abierta — cerrada rechaza aportes *nuevos*, no arreglos de
+tecleo.
+
+**El plan también se revisa.** Dos divergencias corregidas contra el código, no
+contra el papel: el plan citaba `escJsAttr` para el `value=` de un `<input>`, y
+el ayudante correcto **en esa posición** es `escHtml` — verificado contra los
+**24** sitios que `main` ya tenía así (`grep -o 'value="${escHtml(' web/app.js`
+sobre `main`; en esta rama salen 26 porque el panel nuevo pone dos, y contar
+esos dos como precedente habría sido citarse a uno mismo). Y un `${id}` pelado
+dentro del panel tropezó el barrido XSS — se resolvió con `Number(id)`,
+ayudante que **ya estaba en su lista blanca**, sin añadir ninguna excepción
+nueva. Cuando un candado se queja, la salida barata es ensanchar su lista de
+excepciones; la correcta es que el código deje de merecer la queja.
+
+⚠️ **Consecuencias asumidas, escritas para que nadie las descubra de sorpresa:**
+borrar un aporte de campaña corregido deja su historial **huérfano** en
+`auditoria` (los apuntes siguen ahí, sin fila que los muestre) — el borrar ya
+existía y esta rama no lo toca; **no hay control de concurrencia**, como en todo
+el proyecto: dos tesoreras sobre el mismo movimiento, la última gana; y
+`z.coerce.number` acepta booleanos y arrays de un elemento, que es
+**preexistente** (el `POST` de movimientos ya lo hacía) y queda anotado, no
+arreglado aquí.
+
+⚠️ **Verificación manual pendiente de Pablo** (no hay banco de pruebas de
+navegador; el humo de esta rama se hizo a nivel de API): entrar como **raquel**,
+corregir un movimiento y comprobar el toast, la lista repintada y el historial
+con sus dos filas; y entrar como **pastor** para confirmar que ve la marca y su
+historial pero **NO** el lápiz ✏️.
+
+Suite: **650** (medida al cerrar la rama con `cd backend && npm test`; caduca con
+la próxima rama que se fusione — no la repitas de memoria).
+
+---
+
 ## 🆕 4 DE AGOSTO DE 2026 — el menú plegable quedó en `main`, y el hallazgo del 500 del perfil, cerrado
 
 **El menú plegable accesible se fusionó a `main`** (merge `40122f5`, `--no-ff`, rama
@@ -175,7 +265,7 @@ La pantalla anunciaba la función —*"una campaña sirve para juntar para algo 
 
 ⚠️ **`campania.recaudado` sigue en la tabla y NO dice la verdad.** Ningún código la lee ni la escribe; la única excepción es la migración, una sola vez, que convierte un saldo anterior en su ingreso para que esa plata no desaparezca de la barra. Hay una prueba que ensucia esa columna con un valor imposible y exige que la respuesta la ignore.
 
-**Un aporte se puede borrar**, y al borrarlo desaparece del libro también. Es la **única** cosa que se puede deshacer en toda la tesorería: **ningún otro movimiento se puede corregir ni borrar**. Alguien va a preguntar por qué se puede borrar un aporte de campaña y no una ofrenda mal tecleada — la respuesta es que fue una decisión de alcance del dueño, no un olvido, y que lo otro sigue pendiente.
+**Un aporte se puede borrar**, y al borrarlo desaparece del libro también. ~~Es la **única** cosa que se puede deshacer en toda la tesorería: **ningún otro movimiento se puede corregir ni borrar**.~~ Alguien va a preguntar por qué se puede borrar un aporte de campaña y no una ofrenda mal tecleada — la respuesta es que fue una decisión de alcance del dueño, no un olvido, y que lo otro sigue pendiente. **(Desfasado el 5-ago: borrar un aporte sigue siendo lo único que se BORRA, pero ya no es lo único que se deshace — la tesorera corrige monto, descripción y categoría de cualquier movimiento, con rastro en auditoría. La pregunta anotada aquí terminó siendo la spec de esa noche; ver la sección "5 de agosto · noche". Borrar sigue prohibido fuera de los aportes.)**
 
 ⚠️ **La ruta de borrar no puede alcanzar un movimiento normal**, y eso descansa en una sola condición del `WHERE`: `campania_id = ?`. Los movimientos normales tienen `campania_id` NULL y en SQL `NULL = cualquier cosa` **nunca** es cierto. Comprobado quitándola: sin esa condición, la ruta borraba un movimiento cualquiera pasando un id de campaña — era un borrador general de la contabilidad de la iglesia.
 
@@ -969,7 +1059,7 @@ Después de eso: `SMTP_USER`/`SMTP_PASS` y `SUPERADMIN_PASSWORD`.
 - **Consecuencia: el primer paso NO es enlazar tablas.** Hoy el modelo no puede expresar la decisión tomada: `evento_org_gasto.pagado_por` siempre apunta a una persona (`db.js:584`), y no hay forma de decir "esto lo pagó la iglesia". Poder marcar la fuente del gasto es el cambio previo a cualquier otra cosa.
 - **Los aportes no son una tabla:** son un `GROUP BY pagado_por` sobre los gastos (`organizacion.js:87-91`) — cuánto adelantó cada persona, para saber a quién devolverle cuánto. Registrarlos como ingreso inflaría el recaudado de la página pública de transparencia (`tesoreria.js:110`).
 - **Choque de permisos, medido** (`auth.js:264-272`, `tesoreria.js:15-24`): el **tesorero recibe 403 en TODO `/api/organizacion`** (`'tesorero'` no está en `esLiderOAdmin`) y el **obispo también**; el **pastor edita en Organización pero no puede escribir en Tesorería**; el líder que organiza no puede ni leer Tesorería. Son conjuntos casi disjuntos: cualquier botón "enviar a Tesorería" sería un bypass de `soloTesorero`.
-- **Choque de datos:** `evento_org_gasto` no tiene categoría, ni fecha del hecho (solo `creado_en` en **UTC**, mientras `movimiento.fecha` usa `localtime` → un gasto de las 21:00 caería en el mes equivocado a fin de mes), ni comprobante, ni estado. Y `movimiento` **no se puede editar ni borrar por la API**, mientras `DELETE /gastos/:gastoId` borra sin dejar rastro (`organizacion.js:346-353`: sin transacción y sin `auditar()`).
+- **Choque de datos:** `evento_org_gasto` no tiene categoría, ni fecha del hecho (solo `creado_en` en **UTC**, mientras `movimiento.fecha` usa `localtime` → un gasto de las 21:00 caería en el mes equivocado a fin de mes), ni comprobante, ni estado. Y ~~`movimiento` **no se puede editar ni borrar por la API**~~ **(desfasado el 5-ago: `PATCH /api/tesoreria/movimientos/:id` corrige monto, descripción y categoría, con apunte de auditoría en la misma transacción; borrar sigue sin existir)**, mientras `DELETE /gastos/:gastoId` borra sin dejar rastro (`organizacion.js:346-353`: sin transacción y sin `auditar()`).
 - ✅ ~~**Antes de escribir en `movimiento`, probar el papel**~~ — hecho el 29 jul (ver Fase 10, *Rendición*). Queda por saber si en uso real basta con el papel o hace falta la integración; esa respuesta la da la iglesia usándolo, no otro spec.
 - ✅ ~~`zod` en el resto de los routers~~ — **cerrado el 28 jul**. Se creía pendiente por una línea vieja de este documento; al inventariar los 37 routers, 24 ya validaban y el único hueco real era **mensajería** (4 rutas: se colaban `[3]` como id, `{a:1}` guardado como `"[object Object]"` y difundido por SSE + push, y listas de participantes sin tope). Cubierto con 15 tests.
 - ✅ ~~**`POST /api/upload` sigue sin validar**~~ y ✅ ~~**`adjunto_url` acepta hosts externos**~~ — ambos **cerrados el 28 jul** (ver punto 3 de "por dónde retomar").

@@ -110,7 +110,15 @@ r.get('/iglesia/:id/tesoreria', (req, res) => {
   const ig = db.prepare('SELECT id FROM iglesia WHERE id = ?').get(req.params.id);
   if (!ig) return res.status(404).json({ error: 'Iglesia no encontrada' });
   const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : db.prepare("SELECT strftime('%Y-%m','now') AS m").get().m;
-  res.json(db.prepare("SELECT tipo, categoria, monto, descripcion, fecha, comprobante_url FROM movimiento WHERE iglesia_id=? AND strftime('%Y-%m',fecha)=? ORDER BY fecha DESC, id DESC").all(ig.id, mes));
+  res.json(db.prepare(
+    `SELECT m.tipo, m.categoria, m.monto, m.descripcion, m.fecha, m.comprobante_url,
+            (SELECT COUNT(*) FROM auditoria a
+              WHERE a.ref_tabla = 'movimiento' AND a.ref_id = m.id
+                AND a.accion = 'movimiento_corregir') AS correcciones
+       FROM movimiento m
+      WHERE m.iglesia_id = ? AND strftime('%Y-%m', m.fecha) = ?
+      ORDER BY m.fecha DESC, m.id DESC`
+  ).all(ig.id, mes));
 });
 
 // --- Detalle de asistencia del mes (eventos + asistentes) ---

@@ -305,8 +305,10 @@ main{padding:28px 24px;max-width:1060px;width:100%;margin:0 auto;}
 .item-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;
   box-shadow:var(--shadow-xs);transition:border-color .15s,box-shadow .15s,transform .12s;}
 .item-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow);}
-.item-card.flex{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
-.item-card.flex > div{min-width:0;}      /* permite truncar/quebrar texto largo */
+.item-card.flex,.item-card>.flex{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+/* la fila del movimiento pasó a envolver su flex en un div interior para
+   que el panel de corrección (#mov-corregir-ID) viva fuera de la fila */
+.item-card.flex > div,.item-card>.flex > div{min-width:0;}      /* permite truncar/quebrar texto largo */
 .item-titulo{overflow-wrap:anywhere;}
 .fecha-chip{background:var(--primary-50);color:var(--primary-tx);border-radius:var(--r-sm);
   min-width:58px;padding:10px;text-align:center;line-height:1.1;flex-shrink:0;}
