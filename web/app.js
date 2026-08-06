@@ -3902,7 +3902,95 @@ function renderAdmin(){
       <h3 style="font-size:16px;margin-bottom:6px">🔑 Roles y accesos</h3>
       <p class="muted small" style="margin:-2px 0 8px">Qué permisos otorga cada rol al asignarlo.</p>
       ${leyenda}
+    </div>
+    <div class="card" style="margin-top:16px">
+      <button type="button" class="link" id="aud-toggle" aria-expanded="false" aria-controls="aud-zona" onclick="verAuditoria()">
+        <span id="aud-flecha">▸</span> 📜 Registro de actividad</button>
+      <p class="muted small" style="margin:4px 0 0">Quién hizo qué y cuándo, en toda la app. No se puede borrar ni editar.</p>
+      <div id="aud-zona" style="display:none"></div>
     </div>`;
+}
+
+// --- Registro de actividad (tanda F) ---
+// Seccion plegable, nacida cerrada: carga al abrirla por primera vez y plegar
+// no descarta (el patron de los "mensajes anteriores" de la bandeja). El
+// estado de filtros vive aqui; cambiar cualquiera recarga desde offset 0.
+let _audOffset=0, _audCargada=false;
+function verAuditoria(){
+  const zona=$('aud-zona'), flecha=$('aud-flecha'), btn=$('aud-toggle');
+  if(!zona) return;
+  const abierta = zona.style.display!=='none';
+  if(abierta){
+    zona.style.display='none';
+    if(flecha) flecha.textContent='▸';
+    if(btn) btn.setAttribute('aria-expanded','false');
+    return;
+  }
+  zona.style.display='';
+  if(flecha) flecha.textContent='▾';
+  if(btn) btn.setAttribute('aria-expanded','true');
+  // "Ya cargada" se decide mirando el DOM, no solo la bandera: renderAdmin
+  // repinta la pantalla entera tras cada accion (crear usuario, rol...) y se
+  // lleva la zona con lo cargado — la bandera sola diria "ya esta" sobre una
+  // caja vacia (la leccion de _clasesEd: una cache que no mira la realidad).
+  if(_audCargada && $('aud-lista')) return;
+  _audCargada=false;
+  zona.innerHTML='<p class="muted small">Cargando…</p>';
+  cargarAuditoria(true);
+}
+function _audQuery(){
+  const p=$('aud-persona'), m=$('aud-modulo'), t=$('aud-todo');
+  const partes=['offset='+_audOffset];
+  if(p&&p.value) partes.push('persona='+Number(p.value));
+  if(m&&m.value) partes.push('modulo='+encodeURIComponent(m.value));
+  if(t&&t.checked) partes.push('todo=1');
+  return '?'+partes.join('&');
+}
+async function cargarAuditoria(desdeCero){
+  if(desdeCero) _audOffset=0;
+  try{
+    const d=await api('/admin/auditoria'+_audQuery());
+    const zona=$('aud-zona'); if(!zona) return;
+    const filas = d.items.length
+      ? d.items.map(filaAuditoria).join('')
+      : '<p class="muted small" style="margin-top:8px">Nada que mostrar con estos filtros.</p>';
+    const verMas = d.hayMas
+      ? `<button class="btn ghost small-btn" id="aud-mas" style="margin-top:10px" onclick="masAuditoria()">Ver más</button>` : '';
+    if(!_audCargada){
+      // Primera carga: se pintan tambien los controles (d trae actores y
+      // modulos SOLO con offset=0). Despues solo se repinta la lista, para
+      // que los selectores conserven lo elegido.
+      _audCargada=true;
+      zona.innerHTML=`
+        <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
+          <select id="aud-persona" onchange="cargarAuditoria(true)" style="max-width:180px"><option value="">👤 Todas las personas</option>${(d.actores||[]).map(a=>`<option value="${Number(a.id)}">${escHtml(a.nombre)}</option>`).join('')}</select>
+          <select id="aud-modulo" onchange="cargarAuditoria(true)" style="max-width:160px"><option value="">📦 Todos los módulos</option>${(d.modulos||[]).map(m=>`<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('')}</select>
+          <label class="small" style="display:flex;align-items:center;gap:6px;margin:0">
+            <input type="checkbox" id="aud-todo" onchange="cargarAuditoria(true)"/> mostrar también accesos</label>
+        </div>
+        <div id="aud-lista"></div><div id="aud-pie"></div>`;
+    }
+    const lista=$('aud-lista'), pie=$('aud-pie');
+    if(_audOffset===0){ if(lista) lista.innerHTML=filas; }
+    else if(lista) lista.insertAdjacentHTML('beforeend', filas);
+    if(pie) pie.innerHTML=verMas;
+  }catch(e){
+    const zona=$('aud-zona');
+    if(zona&&!_audCargada) zona.innerHTML=errCargar('verAuditoria()','el registro');
+    else toast(e.message);
+  }
+}
+async function masAuditoria(){
+  await conBoton($('aud-mas'), async()=>{ _audOffset+=50; await cargarAuditoria(false); });
+}
+// El detalle trae los "antes -> despues" de las correcciones; la accion se
+// legibiliza quitando guiones bajos, sin tabla de traduccion que mantener.
+function filaAuditoria(a){
+  return `<div class="item-card" style="margin-top:8px">
+    <div><b>${a.actor?escHtml(a.actor):'(cuenta eliminada)'}</b> · ${escHtml(String(a.accion||'').replace(/_/g,' '))}${a.modulo?` <span class="estado-chip" style="margin-left:4px">${escHtml(a.modulo)}</span>`:''}</div>
+    ${a.detalle?`<div class="muted small" style="white-space:pre-wrap;margin-top:4px">${escHtml(a.detalle)}</div>`:''}
+    <div class="muted small" style="margin-top:4px">${escHtml(fechaDeUTC(a.fecha))}</div>
+  </div>`;
 }
 
 // --- Crear usuario ---

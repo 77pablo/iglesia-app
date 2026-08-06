@@ -109,6 +109,59 @@ function bloqueaSiAnonimizada(p, res) {
   return false;
 }
 
+// --- El registro de actividad (tanda F) ---
+// Acciones de acceso/lectura que la pantalla esconde por defecto: un muro de
+// inicios de sesion esconde la correccion de dinero que importa. La lista
+// vive AQUI (no en la pantalla) y hay un test que exige que cada una siga
+// existiendo en el codigo que la escribe — para que no envejezca en silencio.
+export const RUTINARIAS = ['login', 'recuperar_password', 'exportar_reporte',
+  'exportar_asistencia', 'obispo_resumen', 'obispo_informe'];
+
+r.get('/auditoria', (req, res) => {
+  const ig = req.user.iglesia_id;
+  const LIMIT = 50;
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  // Filtros en la MISMA consulta, acotada por iglesia — no se descarga el
+  // registro entero al navegador. Los placeholders se arman desde listas
+  // propias, nunca desde texto del query (el modulo viaja como valor, no
+  // como SQL).
+  const cond = ['a.iglesia_id = ?'];
+  const vals = [ig];
+  if (String(req.query.todo || '') !== '1') {
+    cond.push(`a.accion NOT IN (${RUTINARIAS.map(() => '?').join(',')})`);
+    vals.push(...RUTINARIAS);
+  }
+  if (req.query.persona) { cond.push('a.actor_id = ?'); vals.push(Number(req.query.persona)); }
+  if (req.query.modulo) { cond.push('a.modulo = ?'); vals.push(String(req.query.modulo)); }
+
+  // LEFT JOIN como en tesoreria.js:153: la cuenta anonimizada muestra
+  // "Usuario eliminado" por su propia fila; un actor sin fila sale null y la
+  // pantalla pinta "(cuenta eliminada)". ORDER BY id: la fecha tiene grano de
+  // segundo y dos apuntes del mismo segundo quedarian en orden ambiguo.
+  const filas = db.prepare(
+    `SELECT a.id, a.accion, a.modulo, a.detalle, a.fecha, p.nombre AS actor
+       FROM auditoria a LEFT JOIN persona p ON p.id = a.actor_id
+      WHERE ${cond.join(' AND ')}
+      ORDER BY a.id DESC LIMIT ? OFFSET ?`
+  ).all(...vals, LIMIT + 1, offset);
+  const hayMas = filas.length > LIMIT;
+  const resp = { items: hayMas ? filas.slice(0, LIMIT) : filas, hayMas, offset };
+
+  // Solo con la primera pagina: los datos de los dos selectores (las personas
+  // que aparecen en el registro y los modulos que existen), sin viaje extra.
+  if (offset === 0) {
+    resp.actores = db.prepare(
+      `SELECT DISTINCT a.actor_id AS id, p.nombre FROM auditoria a
+         JOIN persona p ON p.id = a.actor_id
+        WHERE a.iglesia_id = ? ORDER BY p.nombre`
+    ).all(ig);
+    resp.modulos = db.prepare(
+      'SELECT DISTINCT modulo FROM auditoria WHERE iglesia_id = ? AND modulo IS NOT NULL ORDER BY modulo'
+    ).all(ig).map(x => x.modulo);
+  }
+  res.json(resp);
+});
+
 // --- Activar/desactivar, marcar/quitar pastor, o corregir el nombre ---
 const editarUsuarioSchema = z.object({
   activo: z.boolean().optional(),
