@@ -253,6 +253,7 @@ r.delete('/:id', (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[organizacion] borrar hoja fallo:', e);
     return res.status(500).json({ error: 'No se pudo borrar la hoja' });
   }
   auditar(req.user.iglesia_id, req.user.persona_id, 'borrar_org', 'organizacion', org.titulo || ('evento ' + org.evento_id));
@@ -289,6 +290,7 @@ r.post('/:id/duplicar', (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[organizacion] duplicar lista fallo:', e);
     return res.status(500).json({ error: 'No se pudo duplicar la lista' });
   }
   auditar(req.user.iglesia_id, req.user.persona_id, 'duplicar_org', 'organizacion', titulo);
@@ -510,6 +512,7 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[organizacion] corregir gasto fallo:', e);
     return res.status(500).json({ error: 'No se pudo corregir el gasto' });
   }
   res.json({ ok: true });

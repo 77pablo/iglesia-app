@@ -96,7 +96,15 @@ class FakeOption {
   constructor() { this.value = ''; this.textContent = ''; this.dataset = {}; this.padre = null; }
   remove() {
     if (!this.padre) return;
-    this.padre.options.splice(this.padre.options.indexOf(this), 1);
+    const sel = this.padre;
+    sel.options.splice(sel.options.indexOf(this), 1);
+    // DOM real: quitar la <option> SELECCIONADA resetea el select a su
+    // primera opcion. Este fixture NO imitaba eso (el punto ciego anotado el
+    // 5-ago: cualquier prueba escrita encima heredaba el agujero — la linea
+    // `sel.value=valor` de produccion no se ejercitaba nunca). Misma mecanica
+    // que el fixture corregido de organizacion-selector.test.js.
+    if (sel._value === this.value)
+      sel._value = sel.options.length ? sel.options[0].value : '';
     this.padre = null;
   }
 }

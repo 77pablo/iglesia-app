@@ -306,6 +306,7 @@ r.delete('/:id', (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[eventos] eliminar evento fallo:', e);
     return res.status(500).json({ error: 'No se pudo eliminar el evento' });
   }
   auditar(iglesia_id, persona_id, 'eliminar_evento', 'calendario', ev.titulo);

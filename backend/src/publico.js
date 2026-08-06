@@ -176,6 +176,7 @@ r.delete('/mensajes/:id', authMiddleware, soloPastorBandeja, (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[publico] borrar mensaje fallo:', e);
     return res.status(500).json({ error: 'No se pudo borrar el mensaje' });
   }
   res.json({ ok: true });

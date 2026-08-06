@@ -193,3 +193,28 @@ test('el frontend manda SOLO lo tocado: guardarCorreccionMov compara contra el o
     'el monto viaja siempre: volveria el formulario que reenvia lo que nadie toco');
   assert.ok(!fn[0].includes('tipo'), 'el frontend no debe ofrecer cambiar el tipo');
 });
+
+// ---------- Backlog 5-ago: z.coerce.number() aceptaba booleanos y arrays ----------
+// Number(true)=1 y Number([5000])=5000: en la pantalla del dinero, un true
+// perdido se convertia en un movimiento de $1 sin que nadie lo pidiera.
+// Numero o texto numerico, nada mas; un texto numerico sigue valiendo (los
+// formularios mandan strings).
+
+test('POST movimiento con monto booleano o array: 400; con texto numerico: 200', async () => {
+  const post = (monto) => fetch(base + '/api/tesoreria/movimientos', {
+    method: 'POST', headers: H(tesorero),
+    body: JSON.stringify({ tipo: 'ingreso', monto })
+  });
+  assert.equal((await post(true)).status, 400, 'true no es un monto');
+  assert.equal((await post([5000])).status, 400, '[5000] tampoco');
+  assert.equal((await post('5000')).status, 200, 'el texto numerico de un formulario sigue valiendo');
+  const n = dbDirecta.prepare('SELECT COUNT(*) AS n FROM movimiento').get().n;
+  assert.equal(n, 1, 'solo el monto legitimo llego a la tabla');
+});
+
+test('PATCH movimiento con monto booleano: 400 y el movimiento no cambia', async () => {
+  const id = crearMov({ monto: 8000 });
+  const res = await patchMov(id, { monto: true });
+  assert.equal(res.status, 400);
+  assert.equal(dbDirecta.prepare('SELECT monto FROM movimiento WHERE id = ?').get(id).monto, 8000);
+});

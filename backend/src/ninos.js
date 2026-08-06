@@ -92,7 +92,7 @@ r.delete('/clases/:id', soloEncargado, (req, res) => {
     auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_clase', 'ninos',
       `${c.nombre} (${lecciones} leccion(es))`, { tabla: 'clase_ed', id: c.id });
     db.exec('COMMIT');
-  } catch (e) { db.exec('ROLLBACK'); return res.status(500).json({ error: 'No se pudo borrar la clase' }); }
+  } catch (e) { db.exec('ROLLBACK'); console.error('[ninos] borrar clase fallo:', e); return res.status(500).json({ error: 'No se pudo borrar la clase' }); }
   res.json({ ok: true });
 });
 
@@ -152,19 +152,33 @@ const editarNinoSchema = z.object({
 r.patch('/ninos/:id', soloEncargado, validar(editarNinoSchema), (req, res) => {
   // Acotado por iglesia en la MISMA consulta. Resolver primero y comprobar
   // despues es como se colo el borrado que cruzaba iglesias en musica.js.
-  const nino = db.prepare('SELECT id, nombre FROM nino WHERE id = ? AND iglesia_id = ?')
+  const nino = db.prepare('SELECT * FROM nino WHERE id = ? AND iglesia_id = ?')
     .get(req.params.id, req.user.iglesia_id);
   if (!nino) return res.status(404).json({ error: 'Niño no encontrado' });
 
-  // Solo se tocan los campos que vinieron: un PATCH no debe borrar lo que no menciona.
-  const PERMITIDOS = ['nombre', 'edad', 'familia', 'alergias', 'autorizados'];
-  const campos = PERMITIDOS.filter(c => c in req.body);
-  if (!campos.length) return res.status(400).json({ error: 'Datos inválidos: no mandaste nada que cambiar' });
-  const sets = campos.map(c => `${c} = ?`).join(', ');
-  const vals = campos.map(c => (req.body[c] === '' ? null : req.body[c]));
-  db.prepare(`UPDATE nino SET ${sets} WHERE id = ?`).run(...vals, nino.id);
-
-  auditar(req.user.iglesia_id, req.user.persona_id, 'editar_nino', 'ninos', nino.nombre);
+  // Backlog del 5-ago: este PATCH reenviaba todo y auditaba sin diff,
+  // contradiciendo la regla que el propio modulo estreno esa noche (editar
+  // clase/leccion). Misma mecanica ahora: solo se escribe y se audita lo que
+  // cambio de verdad, con la bitacora "col: antes -> despues". El nombre del
+  // nino encabeza el detalle: la bitacora sola no dice de quien es la ficha.
+  const b = req.body;
+  if (!('nombre' in b || 'edad' in b || 'familia' in b || 'alergias' in b || 'autorizados' in b))
+    return res.status(400).json({ error: 'Datos inválidos: no mandaste nada que cambiar' });
+  const { pedir, sets, vals, cambios } = soloCambios();
+  pedir('nombre', b.nombre, nino.nombre);
+  pedir('edad', b.edad, nino.edad);
+  pedir('familia', b.familia, nino.familia);
+  pedir('alergias', b.alergias, nino.alergias);
+  pedir('autorizados', b.autorizados, nino.autorizados);
+  if (!sets.length) return res.json({ ok: true, sinCambios: true });
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE nino SET ${sets.join(', ')} WHERE id = ? AND iglesia_id = ?`)
+      .run(...vals, nino.id, req.user.iglesia_id);
+    auditar(req.user.iglesia_id, req.user.persona_id, 'editar_nino', 'ninos',
+      `${nino.nombre}: ${cambios.join(' · ')}`, { tabla: 'nino', id: nino.id });
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
   res.json({ ok: true });
 });
 
@@ -188,6 +202,7 @@ r.delete('/ninos/:id', soloEncargado, (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[ninos] eliminar nino fallo:', e);
     return res.status(500).json({ error: 'No se pudo eliminar al niño' });
   }
   auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_nino', 'ninos', nino.nombre);
@@ -261,7 +276,7 @@ r.delete('/material/:id', soloEncargado, (req, res) => {
     auditar(req.user.iglesia_id, req.user.persona_id, 'eliminar_leccion', 'ninos', l.titulo,
       { tabla: 'leccion', id: l.id });
     db.exec('COMMIT');
-  } catch (e) { db.exec('ROLLBACK'); return res.status(500).json({ error: 'No se pudo borrar la lección' }); }
+  } catch (e) { db.exec('ROLLBACK'); console.error('[ninos] borrar leccion fallo:', e); return res.status(500).json({ error: 'No se pudo borrar la lección' }); }
   res.json({ ok: true });
 });
 

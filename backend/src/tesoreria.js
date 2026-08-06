@@ -61,10 +61,19 @@ r.get('/movimientos', (req, res) => {
 // Rutas que escriben dinero: ademas de zod, llevan el limitador sensible
 // (10 req/IP/15min) — ver nota de trade-off en server.js sobre por que
 // las lecturas de tesoreria NO llevan este limite.
+// z.coerce.number() a secas tambien "coerciona" booleanos (true->1) y arrays
+// de un elemento ([5000]->5000): en la pantalla del dinero eso convierte un
+// true perdido en un movimiento de $1 (backlog del 5-ago). Numero o texto
+// numerico, nada mas — el texto sigue valiendo porque los formularios mandan
+// strings. El undefined pasa tal cual para que .optional() siga funcionando.
+const numeroEstricto = (msg) => z.preprocess(
+  v => (v === undefined || typeof v === 'number' || typeof v === 'string') ? v : {},
+  z.coerce.number().positive(msg));
+
 const movimientoSchema = z.object({
   tipo: z.enum(['ingreso', 'gasto']),
   categoria: z.string().trim().max(100).optional(),
-  monto: z.coerce.number().positive('el monto debe ser un numero mayor que cero'),
+  monto: numeroEstricto('el monto debe ser un numero mayor que cero'),
   descripcion: z.string().trim().max(500).optional(),
   // Formato fijo YYYY-MM-DD (o vacio/omitido -> usa el default de la BD).
   // Sin este formato, un string cualquiera pasaba a SQLite y strftime()
@@ -94,7 +103,7 @@ r.post('/movimientos', soloTesorero, limiterSensible, validar(movimientoSchema),
 // tocar cualquier fecha). validar() descarta esas claves en silencio y el test
 // lo deja fijado.
 const correccionSchema = z.object({
-  monto: z.coerce.number().positive('el monto debe ser un numero mayor que cero').optional(),
+  monto: numeroEstricto('el monto debe ser un numero mayor que cero').optional(),
   descripcion: z.string().trim().max(500).optional(),
   categoria: z.string().trim().max(100).optional()
 }).refine(b => b.monto !== undefined || b.descripcion !== undefined || b.categoria !== undefined,
@@ -190,7 +199,7 @@ const campaniaSchema = z.object({
   // .max(100) como el resto de los textos cortos del archivo: sin tope, un
   // nombre enorme entra en la base y luego rompe la pantalla que lo pinta.
   nombre: z.string().trim().min(1, 'falta el nombre').max(100, 'el nombre es demasiado largo'),
-  meta: z.coerce.number().optional()
+  meta: numeroEstricto('la meta debe ser un numero mayor que cero').optional()
 });
 r.post('/campanias', soloTesorero, limiterSensible, validar(campaniaSchema), (req, res) => {
   const { nombre, meta } = req.body;
@@ -204,7 +213,7 @@ r.post('/campanias', soloTesorero, limiterSensible, validar(campaniaSchema), (re
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 const aportarSchema = z.object({
-  monto: z.coerce.number().positive('el aporte debe ser un numero mayor que cero')
+  monto: numeroEstricto('el aporte debe ser un numero mayor que cero')
 });
 // Aportar CREA UN INGRESO de verdad. Antes solo sumaba a campania.recaudado, y
 // esa plata no aparecia en ningun libro.

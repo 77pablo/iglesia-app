@@ -92,6 +92,7 @@ r.post('/evento/:id', validar(guardarAsistenciaSchema), (req, res) => {
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
+    console.error('[asistencia] guardar asistencia fallo:', e);
     return res.status(500).json({ error: 'No se pudo guardar la asistencia' });
   }
 
