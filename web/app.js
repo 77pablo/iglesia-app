@@ -2832,7 +2832,7 @@ async function vistaNinos(){
 }
 async function cargarClases(){
   try{
-    const cl=await api('/ninos/clases'); const c=$('clases');
+    const cl=await api('/ninos/clases'); window._clasesEd=cl; const c=$('clases');
     if(!cl.length){ c.className='muted'; c.innerHTML='<div class="placeholder"><div class="big">👶</div><p>No hay clases aún.</p></div>'; return; }
     c.className='grid';
     c.innerHTML=cl.map(x=>`<button type="button" class="btn-plano module-card" onclick="vistaClase(${x.id},${escJsAttr(x.nombre||'')})">
@@ -2849,10 +2849,46 @@ async function guardarClase(){
   try{ await api('/ninos/clases',{method:'POST',body:JSON.stringify({nombre:$('cl-nombre').value.trim(),edad:$('cl-edad').value.trim()})});
     $('form-clase').innerHTML=''; cargarClases(); toast('Clase creada'); }catch(e){ toast(e.message);} }
 
+// Corregir la clase abierta. Prellenado de la cache que acaba de pintar la
+// lista (window._clasesEd) — no de una cache de otra pantalla.
+function formEditarClase(){
+  const z=$('form-editar-clase'); if(!z) return;
+  if(z.innerHTML){ z.innerHTML=''; return; }
+  const c=(window._clasesEd||[]).find(x=>x.id===_claseActual); if(!c) return;
+  z.innerHTML=`<div class="card" style="margin:12px 0">
+    <label for="ec-nombre">Nombre</label><input id="ec-nombre" value="${escHtml(c.nombre||'')}"/>
+    <label for="ec-edad">Edades</label><input id="ec-edad" value="${escHtml(c.edad||'')}"/>
+    <button class="btn small-btn" style="margin-top:10px" onclick="guardarEdicionClase()">Guardar</button></div>`;
+}
+async function guardarEdicionClase(){
+  const nombre=$('ec-nombre').value.trim();
+  if(!nombre) return toast('Pon el nombre');
+  await conBoton(botonActual(), async()=>{
+    try{
+      await api('/ninos/clases/'+_claseActual,{method:'PATCH',body:JSON.stringify({nombre,edad:$('ec-edad').value.trim()})});
+      toast('Clase corregida'); vistaClase(_claseActual,nombre);
+    }catch(e){ toast(e.message); }
+  },'Guardando…');
+}
+// Borrar la clase abierta. El backend rechaza con 409 si tiene ninos — ese
+// mensaje (trae el conteo) se muestra tal cual.
+function borrarClase(){
+  const c=(window._clasesEd||[]).find(x=>x.id===_claseActual);
+  // El nombre lo escribe una persona: escHtml SIEMPRE dentro de modalConfirm
+  // (la trampa que el plan de la Fase 13 metio y la review cazo).
+  modalConfirm(`¿Borrar la clase <b>${escHtml(c?c.nombre:'')}</b>? Se borran también sus lecciones. No se puede deshacer.`, async()=>{
+    try{
+      await api('/ninos/clases/'+_claseActual,{method:'DELETE'});
+      toast('Clase borrada'); vistaNinos();
+    }catch(e){ toast(e.message); }
+  });
+}
+
 async function vistaClase(id,nombre){
   _claseActual=id;
   const editar=esLiderEdUI();
-  $('content').innerHTML=`<button class="link" onclick="vistaNinos()">‹ Clases</button><h2>📚 ${escHtml(nombre||'Clase')}</h2>
+  $('content').innerHTML=`<button class="link" onclick="vistaNinos()">‹ Clases</button><h2>📚 ${escHtml(nombre||'Clase')}${editar?` <button class="btn-plano" style="font-size:16px" aria-label="Corregir la clase" onclick="formEditarClase()">✏️</button> <button class="btn-plano" style="font-size:16px" aria-label="Borrar la clase" onclick="borrarClase()">🗑️</button>`:''}</h2>
+    <div id="form-editar-clase"></div>
     <div class="card" style="margin:12px 0"><div class="head-row"><h3 style="font-size:16px">📖 Material</h3>
       ${editar?`<button class="btn small-btn" onclick="formMaterial()">+ Lección</button>`:''}</div>
       <div id="form-material"></div><div id="material" class="muted">…</div></div>
@@ -2863,11 +2899,16 @@ async function vistaClase(id,nombre){
 }
 async function cargarMaterial(){
   const c=$('material');
-  try{ const m=await api('/ninos/clase/'+_claseActual+'/material');
+  const editar=esLiderEdUI();
+  try{ const m=await api('/ninos/clase/'+_claseActual+'/material'); window._materialEd=m;
     c.className=m.length?'list':'muted';
     c.innerHTML=m.length? m.map(x=>`<div class="item-card"><b>${escHtml(x.titulo)}</b>${x.fecha?' <span class="muted small">· '+fechaTxt(x.fecha)+'</span>':''}
       ${x.versiculo?`<div class="muted small">📖 ${escHtml(x.versiculo)}</div>`:''}
-      ${x.material_url?`<div class="muted small">📎 <a href="${escHtml(safeUrl(x.material_url))}" target="_blank">Ver documento</a></div>`:''}</div>`).join('') : '<p class="small">Sin lecciones.</p>';
+      ${x.material_url?`<div class="muted small">📎 <a href="${escHtml(safeUrl(x.material_url))}" target="_blank">Ver documento</a></div>`:''}
+      ${editar?`<div class="row" style="margin-top:6px;width:auto;gap:8px">
+  <button class="btn ghost small-btn" aria-label="Corregir la lección ${escHtml(x.titulo)}" onclick="formEditarLeccion(${Number(x.id)})">Editar</button>
+  <button class="btn ghost small-btn" aria-label="Borrar la lección ${escHtml(x.titulo)}" onclick="borrarLeccion(${Number(x.id)})">🗑️</button></div>
+<div id="form-leccion-${Number(x.id)}"></div>`:''}</div>`).join('') : '<p class="small">Sin lecciones.</p>';
   }catch{
     if(c){ c.className='muted'; c.innerHTML='<p class="error small">No se pudo cargar · <a href="javascript:cargarMaterial()" class="link" style="display:inline;padding:0">Reintentar</a></p>'; }
   }
@@ -2879,6 +2920,32 @@ function formMaterial(){ const z=$('form-material'); if(z.innerHTML){z.innerHTML
     <label for="m-file" style="margin-top:10px">📎 Subir documento (PDF, imagen, Word…)</label>
     <input id="m-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"/>
     <button class="btn small-btn" style="margin-top:12px" onclick="guardarMaterial()">Guardar</button></div>`; }
+function formEditarLeccion(id){
+  const z=$('form-leccion-'+id); if(!z) return;
+  if(z.innerHTML){ z.innerHTML=''; return; }
+  const x=(window._materialEd||[]).find(l=>l.id===id); if(!x) return;
+  z.innerHTML=`<div class="form-panel">
+    <input id="el-titulo-${Number(id)}" value="${escHtml(x.titulo||'')}"/>
+    <div class="row" style="margin-top:10px;align-items:center">${fechaSelectHTML('el'+id, x.fecha||'', {opcional:true})}<input id="el-vers-${Number(id)}" value="${escHtml(x.versiculo||'')}" placeholder="Versículo"/></div>
+    <button class="btn small-btn" style="margin-top:10px" onclick="guardarEdicionLeccion(${Number(id)})">Guardar</button></div>`;
+}
+async function guardarEdicionLeccion(id){
+  const titulo=$('el-titulo-'+id).value.trim();
+  if(!titulo) return toast('Pon un título');
+  await conBoton(botonActual(), async()=>{
+    try{
+      await api('/ninos/material/'+id,{method:'PATCH',body:JSON.stringify({titulo,fecha:fechaSelectValor('el'+id),versiculo:$('el-vers-'+id).value.trim()})});
+      toast('Lección corregida'); cargarMaterial();
+    }catch(e){ toast(e.message); }
+  },'Guardando…');
+}
+function borrarLeccion(id){
+  const x=(window._materialEd||[]).find(l=>l.id===id);
+  modalConfirm(`¿Borrar la lección <b>${escHtml(x?x.titulo:'')}</b>? No se puede deshacer.`, async()=>{
+    try{ await api('/ninos/material/'+id,{method:'DELETE'}); toast('Lección borrada'); cargarMaterial(); }
+    catch(e){ toast(e.message); }
+  });
+}
 async function guardarMaterial(){
   const titulo=$('m-titulo').value.trim();
   if(!titulo){ toast('Pon un título'); return; }
