@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 6 de agosto de 2026, cuarta pasada (tanda D fusionada y subida por la mañana; **tandas E y G y el backlog de las reviews del 5-ago fusionados** después; **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de las tandas E y G — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 6 de agosto de 2026, quinta pasada (tanda F — Registro de actividad — fusionada al final del día) (tanda D fusionada y subida por la mañana; **tandas E y G y el backlog de las reviews del 5-ago fusionados** después; **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de las tandas E y G — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
@@ -13,7 +13,7 @@
 **Las tandas que Pablo ya aprobó y quedan por hacer** (el orden lo eligió él el 5-ago; F y H van a necesitar sus decisiones durante el brainstorming):
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
 - ~~**Tanda E — bandeja del portal:** poder borrar un mensaje y marcar atendido en bloque (pendiente 3 de la bandeja).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. Spec: `docs/superpowers/specs/2026-08-06-bandeja-borrar-y-bloque-design.md`.
-- **Tanda F — pantalla de auditoría general para el pastor** (hoy el rastro solo se ve hoja por hoja; con lo del 5-ago hay MÁS rastro que nunca esperando una pantalla).
+- ~~**Tanda F — pantalla de auditoría general para el pastor** (hoy el rastro solo se ve hoja por hoja; con lo del 5-ago hay MÁS rastro que nunca esperando una pantalla).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. Spec: `docs/superpowers/specs/2026-08-06-auditoria-general-design.md`.
 - ~~**Tanda G — extender el barrido XSS** a manejadores de evento (95) y cuerpo de texto (676). Dos leftovers ya anotados para esta tanda: `id="mov-corregir-${m.id}"` sin `Number()` y los `onclick` de `filaMov`.~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ Los dos leftovers **ya estaban arreglados** (la lista envejeció otra vez), y en cambio aparecieron cosas que nadie tenía anotadas: tres formateadores de fecha devolvían texto crudo en sus fallbacks, y `cap()` iba sin escapar en 6 sitios. 🔥 **Deja deuda explícita:** el trinquete `PENDIENTES` de `xss-cuerpo.test.js`, para quemar por lotes (ver el plan). Nació con 199 firmas; los lotes 1 y 2 del mismo día la dejaron en **135** (contadores con `Number()`, 25 excepciones verificadas, y la regla `mapJoin` para listas construidas con `.map(...).join()` — el barrido ganó excepciones con motivo, zombie-check y autocomprobaciones nuevas).
 - **Tanda H — eventos que se repiten** ("todos los domingos"; conecta con la columna `repetir` de `fecha_no_disp` que hoy no hace nada).
 - ~~**Backlog que dejaron las reviews del 5-ago:** `PATCH /ninos/:id` sigue reenviando todo y auditando sin diff (contradice la regla nueva del propio módulo — candidato natural para `soloCambios()`); barrido de `catch` sin `console.error(e)`; el `FakeSelect` de `organizacion-pagador-selector.test.js` con el punto ciego del `remove()`; `z.coerce.number()` acepta booleanos (POST y PATCH de tesorería).~~ **Los cuatro cerrados el 6-ago** (rama `feat/backlog-reviews-5ago`, TDD en cada uno): el PATCH del niño usa `soloCambios()` con bitácora "antes -> después"; `numeroEstricto()` en los cuatro esquemas con dinero (true→1 y [5000]→5000 ya no pasan; el texto numérico de un formulario sigue valiendo); el `FakeOption.remove()` viejo imita al DOM real; y **once** `catch` con 500 mudo ahora loguean, con barrido nuevo (`catch-con-log.test.js`) que exige `console.error` o `throw` en todo catch que responda 500 — uno de los once se había escrito **ese mismo día**: una convención sin candado no se sostiene.
@@ -60,6 +60,46 @@ comentario en `admin.js`).
 Suite: **662** (misma cifra que ayer: se invirtieron dos tests, no se sumaron;
 medida con `cd backend && npm test`; caduca con la próxima rama — no la repitas
 de memoria).
+
+---
+
+## 🆕 6 DE AGOSTO DE 2026 (4) — 📜 el pastor ya ve todo el rastro: Registro de actividad
+
+**Tanda F, fusionada a `main` el mismo día** (merge `--no-ff`, rama
+`feat/auditoria-general` borrada). **Sin subir a GitHub** al escribirse esto —
+compruébalo. Brainstorming con Pablo esa misma tarde; sus decisiones (solo el
+pastor; cambios por defecto con casilla para accesos; filtros por persona y
+módulo; dentro de Administración; ni borrar ni editar) en la spec:
+`docs/superpowers/specs/2026-08-06-auditoria-general-design.md`.
+
+**`GET /api/admin/auditoria`** hereda la guardia del router (el obispo queda
+fuera), filtra **en la misma consulta** acotada por iglesia, esconde por
+defecto las acciones **`RUTINARIAS`** (login, recuperar clave, exportaciones,
+consultas del obispo — la lista vive en el servidor con un test que exige que
+cada acción siga existiendo en el código que la escribe), pagina LIMIT+1 y
+manda los datos de los selectores solo con la primera página. El actor
+anonimizado sale "Usuario eliminado" por su propia fila (LEFT JOIN, el
+precedente de tesorería); sin fila, null → "(cuenta eliminada)".
+
+**La pantalla** es una sección plegable al final de Administración, nacida
+cerrada. Detalle que importa: **"ya cargada" se decide mirando el DOM, no solo
+una bandera** — `renderAdmin` repinta la pantalla entera tras cada acción del
+pastor y se lleva la zona; la bandera sola habría dicho "ya está" sobre una
+caja vacía (la lección de `_clasesEd`, aplicada antes de que mordiera).
+
+**Y el trinquete XSS demostró que funciona:** la primera versión de la
+pantalla usaba tres variables locales con HTML (`actores`, `modulos`,
+`quien`) y el barrido de cuerpo la rechazó — el código nuevo no puede
+agregarse a la deuda. Se reescribió en las formas demostrables (map().join()
+inline con flecha-template, ternario con escHtml y literal) y pasó sin
+excepciones nuevas. **El candado obligó a escribir mejor el código el mismo
+día que se estrenó.**
+
+⚠️ **Verificación manual pendiente de Pablo:** como `pastor`, en
+Administración abrir "📜 Registro de actividad", filtrar por `raquel`, marcar
+"mostrar también accesos" y comprobar que aparecen los inicios de sesión.
+
+Suite: **705** (697 + 8; medida al cerrar la rama; caduca con la próxima rama).
 
 ---
 
