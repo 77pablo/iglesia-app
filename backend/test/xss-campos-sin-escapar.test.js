@@ -112,6 +112,7 @@ test('obTesoreria(): una categoria con <script> llega escapada en el panel del o
 test('cargarClases(): una edad con <script> llega escapada al pintar la lista de clases', async () => {
   const dependencias = `
     ${escJsAttrSrc}
+    const window = {};
     let _estado = { className: '', innerHTML: '' };
     function $(id) { return _estado; }
     function api() {
