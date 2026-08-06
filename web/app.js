@@ -939,7 +939,7 @@ async function renderDashboard(){
     </button>
     <button type="button" class="btn-plano widget" onclick="verNotificaciones()">
       <div class="widget-head">🔔 Notificaciones sin leer</div>
-      <div class="stat-num" style="color:${sinLeer?'var(--primary)':'var(--muted)'}">${sinLeer}</div>
+      <div class="stat-num" style="color:${sinLeer?'var(--primary)':'var(--muted)'}">${Number(sinLeer)}</div>
     </button>
   </div>`;
 
@@ -1115,7 +1115,7 @@ function renderCalendario(){
     }).join('');
     const mas=delDia.length>3?`<div class="cal-mas">+${delDia.length-3} más</div>`:'';
     celdas+=`<button type="button" class="btn-plano cal-cell${esHoy?' today':''}${finde?' finde':''}${sel?' sel':''}${delDia.length?' tiene':''}" onclick="verDia('${fecha}')">
-      <div class="cal-daynum">${dia}</div>${chips?`<div class="cal-puntos">${chips}</div>`:''}${mas}</button>`;
+      <div class="cal-daynum">${Number(dia)}</div>${chips?`<div class="cal-puntos">${chips}</div>`:''}${mas}</button>`;
   }
   const resto=(7-((offset+dias)%7))%7;
   for(let i=0;i<resto;i++) celdas+=`<div class="cal-cell empty"></div>`;
@@ -1356,7 +1356,7 @@ async function vistaMiServicio(){
       const donde=c.evento_titulo||c.hoja_titulo||'';
       const fecha=c.evento_fecha||c.fecha;
       return `<div class="item-card flex">
-        <div style="flex:1"><div class="item-titulo ${c.listo?'org-listo':''}">${escHtml(c.nombre)} <b>×${c.cantidad}</b></div>
+        <div style="flex:1"><div class="item-titulo ${c.listo?'org-listo':''}">${escHtml(c.nombre)} <b>×${Number(c.cantidad)}</b></div>
           <div class="muted small">${escHtml(donde)}${fecha?' · '+fechaTxt(fecha):''}${c.hora_llegada?' · 🕐 llegar '+escHtml(c.hora_llegada):''}${c.lugar?' · 📍 '+escHtml(c.lugar):''}</div></div>
         <button class="btn ${c.listo?'ghost ':''}small-btn" onclick="Org.marcarMio(${c.id}, ${c.listo?0:1})">${c.listo?'✓ Listo':'Ya lo tengo'}</button>
       </div>`;
@@ -1698,14 +1698,14 @@ async function vistaPanel(){
         <button class="btn ghost small-btn" onclick="exportarAsistencia()">📥 Exportar CSV</button>
       </div>
       <div class="widgets" style="margin-bottom:18px">
-        <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${d.miembros}</div></div>
-        <div class="widget"><div class="widget-head">📊 Promedio asistencia</div><div class="stat-num">${d.promedio}</div></div>
+        <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${Number(d.miembros)}</div></div>
+        <div class="widget"><div class="widget-head">📊 Promedio asistencia</div><div class="stat-num">${Number(d.promedio)}</div></div>
         <div class="widget"><div class="widget-head">✅ Última reunión</div><div class="stat-num">${d.ultima?d.ultima.total:'—'}</div></div>
       </div>
       <div class="card" style="margin-bottom:18px"><div class="widget-head">📈 Tendencia de asistencia</div>
         ${d.reuniones.length? d.reuniones.map(r=>`<div class="trend-row">
           <span class="trend-label">${fechaTxt(r.fecha)}</span>
-          <div class="trend-track"><div class="trend-bar" style="width:${Math.round(r.total/max*100)}%">${r.total}</div></div>
+          <div class="trend-track"><div class="trend-bar" style="width:${Math.round(r.total/max*100)}%">${Number(r.total)}</div></div>
         </div>`).join('') : '<p class="muted small">Aún no hay asistencia registrada.</p>'}
       </div>
       <div class="card"><div class="widget-head">⚠️ Se están alejando</div>
@@ -1853,8 +1853,8 @@ async function vistaReportes(){
       <div class="widgets cifras" style="margin-bottom:18px">
         <div class="widget"><div class="widget-head">✅ Asistencia último mes</div><div class="stat-num">${ultimaAsis?ultimaAsis.total:'—'}</div></div>
         <div class="widget"><div class="widget-head">💰 Saldo total</div><div class="stat-num">${money(teso.saldoTotal)}</div></div>
-        <div class="widget"><div class="widget-head">👥 Miembros activos</div><div class="stat-num">${crec.totalActivos}</div></div>
-        <div class="widget"><div class="widget-head">🌱 Altas este mes</div><div class="stat-num">${altasMesActual}</div></div>
+        <div class="widget"><div class="widget-head">👥 Miembros activos</div><div class="stat-num">${Number(crec.totalActivos)}</div></div>
+        <div class="widget"><div class="widget-head">🌱 Altas este mes</div><div class="stat-num">${Number(altasMesActual)}</div></div>
       </div>
       <div class="card" style="margin-bottom:18px">
         <div class="widget-head">📈 Tendencia de asistencia (por mes)</div>
@@ -2063,7 +2063,7 @@ async function cargarPlan(eventoId){
     }
     $('plan').className='';
     $('plan').innerHTML=`<div class="sub-bloque"><div class="sub-titulo">🗓️ Ensayo</div>${ensayoHtml}</div>
-      <div class="sub-bloque"><div class="sub-titulo">🎸 Equipo (${numPersonas})</div>${equipoHtml}${addHtml}</div>`;
+      <div class="sub-bloque"><div class="sub-titulo">🎸 Equipo (${Number(numPersonas)})</div>${equipoHtml}${addHtml}</div>`;
   }catch{ $('plan').innerHTML='<p class="error">No se pudo cargar el plan.</p>'; }
 }
 async function guardarEnsayo(){
@@ -2213,7 +2213,7 @@ function himnarioBuscar(q){
   // aparecían nunca al abrir el himnario: había que adivinar el título para que
   // el buscador los sacara. Son 522 <div>: el navegador con eso no se despeina.
   cont.innerHTML=lista.map(h=>`<button type="button" class="btn-plano hmodal-song ${_hmSel&&_hmSel.id===h.id?'sel':''}" onclick="himnarioSel(${escJsAttr(h.id)})">
-    <b>#${h.n}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span>${h.seccion===2?' <span class="muted small">· coros</span>':''}</button>`).join('');
+    <b>#${Number(h.n)}</b> ${escHtml(h.titulo)} <span class="muted small">(${escHtml(h.tono||'')})</span>${h.seccion===2?' <span class="muted small">· coros</span>':''}</button>`).join('');
 }
 // Se selecciona por `id`, no por número: los números se repiten entre las dos
 // secciones y un find(h=>h.n===n) devolvía SIEMPRE el de la primera. Tocar
@@ -2231,7 +2231,7 @@ function renderHimno(){
   const tonoBase=_hmSel.tono||'';
   const tonoAhora=_transAcorde(tonoBase, _hmTrans);
   v.innerHTML=`<div class="transbar">
-      <h3 style="flex:1;font-size:17px;margin:0">#${_hmSel.n} ${escHtml(_hmSel.titulo)}${_hmSel.seccion===2?' <span class="muted small" style="font-weight:400">· coros</span>':''}</h3>
+      <h3 style="flex:1;font-size:17px;margin:0">#${Number(_hmSel.n)} ${escHtml(_hmSel.titulo)}${_hmSel.seccion===2?' <span class="muted small" style="font-weight:400">· coros</span>':''}</h3>
     </div>
     ${_hmSel.nota?`<p class="muted small" style="margin:4px 0 0">✏️ ${escHtml(_hmSel.nota)}</p>`:''}
     <div class="transbar">
@@ -3530,7 +3530,7 @@ async function verIglesiaObispo(id, mes){
       <input type="month" value="${escHtml(d.mes)}" onchange="verIglesiaObispo(${Number(id)}, this.value)" style="max-width:170px"/>
     </div>
     <div class="widgets" style="margin-bottom:18px">
-      <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${d.miembros}</div></div>
+      <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${Number(d.miembros)}</div></div>
       <button type="button" class="btn-plano widget" onclick="obAsistencia(${Number(id)})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></button>
       <button type="button" class="btn-plano widget" onclick="obTesoreria(${Number(id)})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></button>
     </div>
