@@ -1,17 +1,17 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 5 de agosto de 2026, cierre de la noche (tres tandas fusionadas ese día: pulido de agosto `0defa3d`, corregir movimientos de tesorería `22dc0a2`, clases y lecciones de ED — esta última fusionada al cierre, ver el comando de abajo; **ya no queda NINGUNA rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR** (43 commits medidos al cierre — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (5-ago, cierre)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 6 de agosto de 2026 (Pablo subió los 43 commits del 5-ago y Render ya los sirve — verificado contra el `app.js` de producción; tanda D cerrada y fusionada el mismo 6-ago, **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (el merge de la tanda D — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
-## 👉 POR DÓNDE RETOMAR (5-ago, cierre de la noche)
+## 👉 POR DÓNDE RETOMAR (6-ago)
 
 **Lo primero es de Pablo, no de código:**
-1. **Push** de los ~43 commits con GitHub Desktop (dispara el redespliegue de Render). Verificar el despliegue contra el `app.js` que sirve Render (busca `quitarAusenteDuplicada` o `verHistorialMov`: si están, llegó todo el día).
-2. **Tres comprobaciones de navegador** que ninguna prueba de Node pudo hacer (el detalle exacto está en la sección de cada tanda): como `raquel`, corregir un movimiento de Tesorería (toast, lista, historial); como `marta`, editar una clase, intentar borrar una con niños (leer el 409) y borrar una lección; como `pastor`, comprobar que ve marcas e historiales pero ningún lápiz de edición.
+1. **Push** de los commits de la tanda D con GitHub Desktop (los 43 del 5-ago ya subieron y Render ya los sirve — verificado el 6-ago buscando `quitarAusenteDuplicada` en el `app.js` de producción).
+2. **Tres comprobaciones de navegador** que ninguna prueba de Node pudo hacer (el detalle exacto está en la sección de cada tanda del 5-ago): como `raquel`, corregir un movimiento de Tesorería (toast, lista, historial); como `marta`, editar una clase, intentar borrar una con niños (leer el 409) y borrar una lección; como `pastor`, comprobar que ve marcas e historiales pero ningún lápiz de edición. **Ya se pueden hacer contra producción** (el código está desplegado).
 3. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
 
-**Las tandas que Pablo ya aprobó y quedan por hacer** (el orden lo eligió él el 5-ago; D y E no necesitan más decisiones suyas, F y H sí las van a necesitar durante el brainstorming):
-- **Tanda D — cabos ARCO:** bloquear que "Corregir nombre" del pastor pueda des-anonimizar una cuenta eliminada (la única ruta que puede, punto 3 de los pendientes de corregir-nombre), y limpiar `pertenencia` al eliminar la cuenta (anotado el 1-ago).
+**Las tandas que Pablo ya aprobó y quedan por hacer** (el orden lo eligió él el 5-ago; E no necesita más decisiones suyas, F y H sí las van a necesitar durante el brainstorming):
+- ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
 - **Tanda E — bandeja del portal:** poder borrar un mensaje y marcar atendido en bloque (pendiente 3 de la bandeja).
 - **Tanda F — pantalla de auditoría general para el pastor** (hoy el rastro solo se ve hoja por hoja; con lo del 5-ago hay MÁS rastro que nunca esperando una pantalla).
 - **Tanda G — extender el barrido XSS** a manejadores de evento (95) y cuerpo de texto (676). Dos leftovers ya anotados para esta tanda: `id="mov-corregir-${m.id}"` sin `Number()` y los `onclick` de `filaMov`.
@@ -19,6 +19,47 @@
 - **Backlog que dejaron las reviews del 5-ago:** `PATCH /ninos/:id` sigue reenviando todo y auditando sin diff (contradice la regla nueva del propio módulo — candidato natural para `soloCambios()`); barrido de `catch` sin `console.error(e)`; el `FakeSelect` de `organizacion-pagador-selector.test.js` con el punto ciego del `remove()`; `z.coerce.number()` acepta booleanos (POST y PATCH de tesorería).
 
 El detalle fino de la ejecución de las tres tandas del 5-ago (quién revisó qué, qué cazó cada review) está en `.superpowers/sdd/progress.md`.
+
+---
+
+## 🆕 6 DE AGOSTO DE 2026 — 🔒 tanda D cerrada: el borrado ARCO ya se lleva las pertenencias
+
+**Fusionada a `main` el mismo día** (merge `--no-ff`, rama
+`feat/limpiar-pertenencia-arco` borrada; suite re-corrida sobre la fusión:
+662 en verde). **Sin subir a GitHub** al escribirse esto — compruébalo con
+`git log origin/main..main --oneline`.
+
+**El día empezó verificando, no programando, y valió la pena dos veces:**
+1. Los 43 commits del 5-ago **ya estaban subidos y desplegados** (0 pendientes
+   contra `origin/main`; `quitarAusenteDuplicada` y `verHistorialMov` presentes
+   en el `app.js` que sirve Render; `/api/health` ok).
+2. **El primer cabo de la tanda D ya estaba hecho** — el bloqueo de que
+   "Corregir nombre" des-anonimice una cuenta eliminada existía desde el commit
+   `3c1aaad` (guardia `bloqueaSiAnonimizada()` en `admin.js:128`, botón
+   escondido en el frontend, test `admin-cuenta-anonimizada-arco.test.js`). La
+   lista de pendientes de este documento lo daba por hacer. **Octava vez que la
+   lección se repite: comprobar un punto cuesta lo mismo que creérselo.**
+
+**Lo único que faltaba de verdad: `DELETE FROM pertenencia` en la transacción
+de anonimización** (`cuenta.js`), junto a los borrados de `push_sub`,
+`dispositivo_push` y `fecha_no_disp`. La fila anonimizada no identifica a
+nadie, pero "miembro de Jóvenes" es un dato de la persona y no debe sobrevivir
+a su baja. Hecho con TDD: la aserción vieja del test (que fijaba "la
+pertenencia NO se borra") se invirtió primero y se vio fallar antes de tocar
+`cuenta.js`.
+
+**Consecuencia en cadena, resuelta con un 404 honesto:** el test del "rol
+residual" (`el pastor SÍ puede quitarle un rol a una cuenta ya eliminada`)
+documentaba un escenario que **ya no puede existir** — la anonimización borra
+las pertenencias y asignar un rol nuevo a una cuenta anonimizada da 403. El
+test ahora fija lo contrario: tras eliminar la cuenta no queda nada que borrar
+y el `DELETE /admin/rol/:id` del pastor da **404, no 403** (la ruta sigue sin
+guardia de anonimizada **a propósito** — borrar solo quita datos; ver el
+comentario en `admin.js`).
+
+Suite: **662** (misma cifra que ayer: se invirtieron dos tests, no se sumaron;
+medida con `cd backend && npm test`; caduca con la próxima rama — no la repitas
+de memoria).
 
 ---
 
@@ -383,7 +424,7 @@ Al ejercer el derecho a eliminar la cuenta (ARCO), la fila **no se borra: se ano
 
 **El candado está en el servidor.** Los botones ocultos son el acompañamiento: la ruta se puede llamar directamente.
 
-**Queda un hueco aparte, no tocado:** `pertenencia` (las membresías de grupo) **no se limpia** cuando alguien ejerce ARCO en `cuenta.js`. La fila ya está anonimizada, así que no identifica a nadie, pero es un cabo suelto del borrado.
+~~**Queda un hueco aparte, no tocado:** `pertenencia` (las membresías de grupo) **no se limpia** cuando alguien ejerce ARCO en `cuenta.js`. La fila ya está anonimizada, así que no identifica a nadie, pero es un cabo suelto del borrado.~~ **(Cerrado el 6-ago, tanda D: el `DELETE FROM pertenencia` va en la misma transacción de anonimización — ver la sección del 6 de agosto.)**
 
 Suite: 554 → **566**.
 
