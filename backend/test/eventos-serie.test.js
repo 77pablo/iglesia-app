@@ -137,3 +137,54 @@ test('una serie activa que se quedo sin eventos se apaga (no hay de donde copiar
   await fetch(base + '/api/eventos', { headers: H(SEM.miembro1) });
   assert.equal(db.prepare('SELECT activa FROM serie WHERE id = ?').get(s).activa, 0);
 });
+
+// ---------- Tarea 3: borrar esta y las siguientes ----------
+
+async function serieSembrada() {
+  const hoy = await hoyLocal();
+  await crearEvento({ grupo_id: SEM.grupoId, titulo: 'Culto', fecha: sumarDiasISO(hoy, -14), repetir_semanal: true });
+  const evs = db.prepare('SELECT id, fecha, serie_id FROM evento ORDER BY fecha').all();
+  return { evs, serieId: evs[0].serie_id, hoy };
+}
+
+test('borrar la serie desde una fecha: futuras fuera CON su cascada, pasadas quedan, y NO resucita', async () => {
+  const { evs, serieId } = await serieSembrada();
+  const desde = evs[2].fecha;   // la tercera fecha: quedan dos de historia
+  // Una futura tiene una asignacion: la cascada tiene que llevarsela.
+  db.prepare("INSERT INTO asignacion (evento_id, persona_id, tipo) VALUES (?,?, 'predicar')")
+    .run(evs[3].id, SEM.miembro1.id);
+
+  const res = await fetch(base + `/api/eventos/serie/${serieId}?desde=${desde}`,
+    { method: 'DELETE', headers: H(SEM.pastor) });
+  assert.equal(res.status, 200);
+
+  const quedan = db.prepare('SELECT fecha FROM evento WHERE serie_id = ? ORDER BY fecha').all(serieId);
+  assert.equal(quedan.length, 2, 'solo las dos fechas anteriores a "desde"');
+  assert.ok(quedan.every(e => e.fecha < desde));
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM asignacion WHERE evento_id = ?').get(evs[3].id).n,
+    0, 'la asignacion de la fecha borrada se fue con la cascada');
+  assert.equal(db.prepare('SELECT activa FROM serie WHERE id = ?').get(serieId).activa, 0, 'la lapida quedo puesta');
+
+  // El siguiente calendario NO la resucita.
+  await fetch(base + '/api/eventos', { headers: H(SEM.miembro1) });
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM evento WHERE serie_id = ?').get(serieId).n, 2);
+});
+
+test('un lider no puede borrar la serie: 403; y una serie de otra iglesia: 404', async () => {
+  const { serieId } = await serieSembrada();
+  assert.equal((await fetch(base + `/api/eventos/serie/${serieId}`,
+    { method: 'DELETE', headers: H(SEM.lider) })).status, 403);
+  const otraIg = Number(db.prepare("INSERT INTO iglesia (nombre, codigo_unico) VALUES ('Otra','OTRASER')").run().lastInsertRowid);
+  const sAjena = Number(db.prepare('INSERT INTO serie (iglesia_id) VALUES (?)').run(otraIg).lastInsertRowid);
+  assert.equal((await fetch(base + `/api/eventos/serie/${sAjena}`,
+    { method: 'DELETE', headers: H(SEM.pastor) })).status, 404, 'un 403 confirmaria que existe');
+});
+
+test('borrar UNA fecha suelta no toca las demas ni apaga la serie', async () => {
+  const { evs, serieId } = await serieSembrada();
+  const res = await fetch(base + '/api/eventos/' + evs[3].id, { method: 'DELETE', headers: H(SEM.pastor) });
+  assert.equal(res.status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM evento WHERE serie_id = ?').get(serieId).n, evs.length - 1);
+  assert.equal(db.prepare('SELECT activa FROM serie WHERE id = ?').get(serieId).activa, 1,
+    'el feriado suelto no mata el culto de todas las semanas');
+});

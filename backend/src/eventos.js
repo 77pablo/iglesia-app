@@ -367,6 +367,28 @@ r.patch('/:id', validar(editarEventoSchema), (req, res) => {
 });
 
 // --- Eliminar evento ---
+// La cascada completa de UN evento: 6 tablas hijas, el bosquejo desvinculado,
+// la solicitud de aprobacion, la hoja de organizacion (cosas + gastos + hoja)
+// y el propio evento. SIN transaccion propia a proposito: el que llama pone
+// el BEGIN — el borrado suelto envuelve un evento; el de serie, todos los
+// suyos, para que "borrar esta y las siguientes" no pueda quedar a medias.
+function borrarEventoEnCascada(ev) {
+  db.prepare('DELETE FROM asignacion WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM asistencia WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM setlist_item WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM equipo_musica WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM ensayo WHERE evento_id=?').run(ev.id);
+  // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
+  db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
+  limpiarSolicitud(ev);   // quita la notificación "Revisar y aprobar" si seguía activa
+  // Hoja de organizacion del evento: cosas + gastos + la hoja. Va antes del
+  // DELETE del evento porque evento_org.evento_id lo referencia.
+  db.prepare('DELETE FROM evento_org_cosa  WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
+  db.prepare('DELETE FROM evento_org_gasto WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
+  db.prepare('DELETE FROM evento_org WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
+}
+
 r.delete('/:id', (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
@@ -375,22 +397,12 @@ r.delete('/:id', (req, res) => {
   // Borra 6 tablas hijas + evento en una sola transaccion: si algo falla a
   // mitad de camino, no debe quedar el evento a medio borrar (huerfanos en
   // unas tablas si o si no en otras). Patron identico al de cuenta.js /eliminar.
+  // Ojo: borrar UNA fecha de una serie NO la apaga — el feriado suelto no
+  // mata el culto de todas las semanas (y si borran todas una a una, la
+  // extension automatica apaga la serie al verla vacia).
   db.exec('BEGIN');
   try {
-    db.prepare('DELETE FROM asignacion WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM asistencia WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM setlist_item WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM equipo_musica WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM ensayo WHERE evento_id=?').run(ev.id);
-    // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
-    db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
-    limpiarSolicitud(ev);   // quita la notificación "Revisar y aprobar" si seguía activa
-    // Hoja de organizacion del evento: cosas + gastos + la hoja. Va antes del
-    // DELETE del evento porque evento_org.evento_id lo referencia.
-    db.prepare('DELETE FROM evento_org_cosa  WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
-    db.prepare('DELETE FROM evento_org_gasto WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
-    db.prepare('DELETE FROM evento_org WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
+    borrarEventoEnCascada(ev);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -399,6 +411,38 @@ r.delete('/:id', (req, res) => {
   }
   auditar(iglesia_id, persona_id, 'eliminar_evento', 'calendario', ev.titulo);
   res.json({ ok: true });
+});
+
+// "Borrar esta y las siguientes" (tanda H): apaga la serie (activa=0, la
+// lapida que la extension automatica respeta) y borra sus eventos con
+// fecha >= desde, cada uno con la MISMA cascada del borrado suelto, todo en
+// una transaccion. Las fechas pasadas quedan como historia.
+r.delete('/serie/:serieId', (req, res) => {
+  const { persona_id, iglesia_id } = req.user;
+  if (!esPastor(persona_id))
+    return res.status(403).json({ error: 'Solo el pastor puede borrar una serie' });
+  // Acotada por iglesia en la MISMA consulta; 404 y no 403 (no se confirma
+  // que la serie exista en otra congregacion).
+  const s = db.prepare('SELECT * FROM serie WHERE id = ? AND iglesia_id = ?')
+    .get(Number(req.params.serieId), iglesia_id);
+  if (!s) return res.status(404).json({ error: 'Serie no encontrada' });
+
+  const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.desde || '')) ? String(req.query.desde) : fechaLocal();
+  const evs = db.prepare('SELECT * FROM evento WHERE serie_id = ? AND iglesia_id = ? AND fecha >= ?')
+    .all(s.id, iglesia_id, desde);
+  db.exec('BEGIN');
+  try {
+    for (const ev of evs) borrarEventoEnCascada(ev);
+    db.prepare('UPDATE serie SET activa = 0 WHERE id = ?').run(s.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    console.error('[eventos] borrar serie fallo:', e);
+    return res.status(500).json({ error: 'No se pudo borrar la serie' });
+  }
+  auditar(iglesia_id, persona_id, 'eliminar_serie', 'calendario',
+    `${evs.length ? evs[0].titulo : ''} (${evs.length} fecha(s) desde ${desde})`);
+  res.json({ ok: true, borrados: evs.length });
 });
 
 export default r;
