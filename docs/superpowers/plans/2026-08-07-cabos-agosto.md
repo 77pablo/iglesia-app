@@ -30,13 +30,13 @@
 **Interfaces:**
 - Produces: mensajes 400 — alta: `'Esa persona no esta en tu iglesia o su cuenta esta inactiva'`; corrección con cambio de pagador a inactiva: el mismo texto. La corrección que NO cambia el pagador no valida `activo` (los gastos históricos de gente dada de baja se corrigen igual).
 
-- [ ] **Step 1: Crear la rama**
+- [x] **Step 1: Crear la rama**
 
 ```bash
 git checkout -b feat/cabos-agosto
 ```
 
-- [ ] **Step 2: Escribir los tests que fallan**
+- [x] **Step 2: Escribir los tests que fallan**
 
 Crear `backend/test/organizacion-gasto-activo.test.js`:
 
@@ -143,14 +143,14 @@ test('correccion: CAMBIAR el pagador a una cuenta inactiva se rechaza con 400', 
 });
 ```
 
-- [ ] **Step 3: Verificar que fallan**
+- [x] **Step 3: Verificar que fallan**
 
 ```bash
 cd backend && node --test test/organizacion-gasto-activo.test.js
 ```
 Esperado: el test 1 y el 3 FALLAN (hoy responden 200); el test 2 pasa (fija el comportamiento que debe conservarse).
 
-- [ ] **Step 4: Implementación mínima**
+- [x] **Step 4: Implementación mínima**
 
 En `backend/src/organizacion.js`, **POST** (~línea 410), cambiar la consulta de validación:
 
@@ -182,14 +182,14 @@ En el **PATCH** (~línea 470), reemplazar el bloque de validación:
   }
 ```
 
-- [ ] **Step 5: Verificar que pasan y la suite entera sigue verde**
+- [x] **Step 5: Verificar que pasan y la suite entera sigue verde**
 
 ```bash
 cd backend && node --test test/organizacion-gasto-activo.test.js && npm test
 ```
 Esperado: 3/3 del archivo nuevo, y la suite completa en verde (721 + 3).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/organizacion.js backend/test/organizacion-gasto-activo.test.js
@@ -208,7 +208,7 @@ git commit -m "feat(organizacion): un gasto nuevo no se atribuye a una cuenta in
 **Interfaces:**
 - Produces: `aparicionesDeNombre(nombreViejo, iglesiaId)` → `{ ninos: [{id, nombre}], predicas: number }` (predicas suma `predica.predicador` y `sermon.predicador`). El PATCH `/perfil` responde `{ ok: true, apariciones: { ninos: <número>, predicas: <número> } }` **solo cuando el nombre cambió** — al autoservicio le llegan CONTEOS, nunca nombres de niños (Task 3 usa la misma función para el detalle del pastor).
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 Crear `backend/test/corregir-nombre-apariciones.test.js`:
 
@@ -315,14 +315,14 @@ test('acotado por iglesia: el nino de OTRA congregacion no aparece en el conteo'
 });
 ```
 
-- [ ] **Step 2: Verificar que fallan**
+- [x] **Step 2: Verificar que fallan**
 
 ```bash
 cd backend && node --test test/corregir-nombre-apariciones.test.js
 ```
 Esperado: FALLAN los cuatro con `apariciones` `undefined` (el endpoint hoy responde solo `{ok:true}`).
 
-- [ ] **Step 3: Implementación**
+- [x] **Step 3: Implementación**
 
 Crear `backend/src/apariciones-nombre.js`:
 
@@ -376,13 +376,13 @@ En `backend/src/directorio.js`: importar arriba `import { aparicionesDeNombre } 
   res.json(apariciones ? { ok: true, apariciones } : { ok: true });
 ```
 
-- [ ] **Step 4: Verificar que pasan y la suite sigue verde**
+- [x] **Step 4: Verificar que pasan y la suite sigue verde**
 
 ```bash
 cd backend && node --test test/corregir-nombre-apariciones.test.js && npm test
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/apariciones-nombre.js backend/src/directorio.js backend/test/corregir-nombre-apariciones.test.js
@@ -401,7 +401,7 @@ git commit -m "feat(directorio): corregir el nombre avisa donde sigue escrito el
 - Consumes: `aparicionesDeNombre(nombreViejo, iglesiaId)` de Task 2 (misma firma).
 - Produces: PATCH `/api/admin/usuarios/:id` responde `{ ok: true, apariciones: { ninos: [{id, nombre}], predicas: number } }` cuando el nombre cambió — el pastor SÍ ve qué fichas (ya las ve en la app).
 
-- [ ] **Step 1: Ampliar el test (falla primero)**
+- [x] **Step 1: Ampliar el test (falla primero)**
 
 Añadir a `backend/test/corregir-nombre-apariciones.test.js`:
 
@@ -436,14 +436,14 @@ test('asistido: activar/desactivar sin tocar el nombre no trae apariciones', asy
 });
 ```
 
-- [ ] **Step 2: Verificar que el primero falla**
+- [x] **Step 2: Verificar que el primero falla**
 
 ```bash
 cd backend && node --test test/corregir-nombre-apariciones.test.js
 ```
 Esperado: el test del detalle FALLA (`apariciones` undefined); el de activar/desactivar pasa (fija lo que no debe cambiar).
 
-- [ ] **Step 3: Implementación**
+- [x] **Step 3: Implementación**
 
 En `backend/src/admin.js`: importar `import { aparicionesDeNombre } from './apariciones-nombre.js';` y modificar el bloque del nombre y el cierre:
 
@@ -464,13 +464,13 @@ En `backend/src/admin.js`: importar `import { aparicionesDeNombre } from './apar
   res.json(apariciones ? { ok: true, apariciones } : { ok: true });
 ```
 
-- [ ] **Step 4: Verificar que pasan y la suite sigue verde**
+- [x] **Step 4: Verificar que pasan y la suite sigue verde**
 
 ```bash
 cd backend && node --test test/corregir-nombre-apariciones.test.js && npm test
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/admin.js backend/test/corregir-nombre-apariciones.test.js
@@ -490,7 +490,7 @@ git commit -m "feat(admin): corregir un nombre le dice al pastor que fichas revi
 
 No hay banco de pruebas de navegador: el candado automático son los barridos XSS y de botones sobre el fuente, que corren en la suite. La verificación visual queda para Pablo (Task 7).
 
-- [ ] **Step 1: Implementar `modalAviso`**
+- [x] **Step 1: Implementar `modalAviso`**
 
 Junto a `modalConfirm` en `web/app.js`:
 
@@ -507,7 +507,7 @@ function modalAviso(msg, titulo){
 }
 ```
 
-- [ ] **Step 2: Aviso en "Mi perfil" (conteos)**
+- [x] **Step 2: Aviso en "Mi perfil" (conteos)**
 
 En `guardarPerfil`, capturar la respuesta y avisar tras el toast:
 
@@ -525,7 +525,7 @@ En `guardarPerfil`, capturar la respuesta y avisar tras el toast:
       }
 ```
 
-- [ ] **Step 3: Aviso en Administración (detalle)**
+- [x] **Step 3: Aviso en Administración (detalle)**
 
 En `adminCorregirNombre`, tras el `toast('✅ Nombre corregido'); vistaAdmin();`:
 
@@ -545,14 +545,14 @@ En `adminCorregirNombre`, tras el `toast('✅ Nombre corregido'); vistaAdmin();`
     catch(e){ toast(e.message); }
 ```
 
-- [ ] **Step 4: Correr la suite entera (los barridos XSS son el candado del frontend)**
+- [x] **Step 4: Correr la suite entera (los barridos XSS son el candado del frontend)**
 
 ```bash
 cd backend && npm test
 ```
 Esperado: verde. Si `xss-cuerpo.test.js` rechaza alguna interpolación nueva, reescribirla en las formas demostrables (escHtml/Number/map-join inline) — NO añadir excepciones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/app.js
@@ -570,7 +570,7 @@ git commit -m "feat(web): avisos de donde sigue escrito un nombre corregido"
 **Interfaces:**
 - Produces: el PATCH acepta `visto` **opcional**: `{ concepto: string, monto: number, fuente: 'caja'|'devuelve'|'aporte'|null, pagado_por: number|null }`. Si viene y difiere de la fila guardada → **409** `{ error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' }` sin aplicar nada. Sin `visto`, el PATCH funciona como hoy (compatibilidad con un `app.js` viejo).
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 Crear `backend/test/organizacion-gasto-visto.test.js` (mismo arnés `servidor()`/`tok()`/`sembrar()`/`hoja()` que `organizacion-gasto-activo.test.js` de Task 1 — copiarlo, es la convención del directorio):
 
@@ -709,14 +709,14 @@ test('el NULL tambien es un valor: pasar a "lo pago la caja" (fuente y pagador e
 });
 ```
 
-- [ ] **Step 2: Verificar que fallan**
+- [x] **Step 2: Verificar que fallan**
 
 ```bash
 cd backend && node --test test/organizacion-gasto-visto.test.js
 ```
 Esperado: FALLAN los tests 1 y 4 (hoy `visto` se descarta en silencio por zod y el PATCH pisa con 200); el 2 y el 3 pasan (fijan compatibilidad).
 
-- [ ] **Step 3: Implementación**
+- [x] **Step 3: Implementación**
 
 En `backend/src/organizacion.js`, añadir a `editarGastoSchema`:
 
@@ -748,13 +748,13 @@ Y en la ruta, justo después de `const org = hojaEditable(req, res, gasto.org_id
     return res.status(409).json({ error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' });
 ```
 
-- [ ] **Step 4: Verificar que pasan y la suite sigue verde**
+- [x] **Step 4: Verificar que pasan y la suite sigue verde**
 
 ```bash
 cd backend && node --test test/organizacion-gasto-visto.test.js && npm test
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/organizacion.js backend/test/organizacion-gasto-visto.test.js
@@ -772,7 +772,7 @@ git commit -m "feat(organizacion): corregir un gasto que otro ya cambio da 409, 
 - Consumes: el `visto` opcional y el 409 de Task 5.
 - Produces: `api()` adjunta `err.status` (número) a todo error HTTP que lanza — disponible para cualquier manejador futuro. `Org._visto` (instantánea o `null`).
 
-- [ ] **Step 1: `api()` adjunta el status al error**
+- [x] **Step 1: `api()` adjunta el status al error**
 
 En `web/app.js`, en `api()`, reemplazar la línea `if(!r.ok) throw new Error(...)`:
 
@@ -786,7 +786,7 @@ En `web/app.js`, en `api()`, reemplazar la línea `if(!r.ok) throw new Error(...
     }
 ```
 
-- [ ] **Step 2: capturar la instantánea al abrir el ✏️**
+- [x] **Step 2: capturar la instantánea al abrir el ✏️**
 
 En `Org`, junto a `_gastoEditando:null`, añadir `_visto:null,`. En `editarGasto(id)`, tras `Org._origenTocado=false;`:
 
@@ -799,7 +799,7 @@ En `Org`, junto a `_gastoEditando:null`, añadir `_visto:null,`. En `editarGasto
 
 Y en `cancelarEdicionGasto()`, junto a `Org._gastoEditando=null;`, añadir `Org._visto=null;`.
 
-- [ ] **Step 3: mandarla en el PATCH y reaccionar al 409**
+- [x] **Step 3: mandarla en el PATCH y reaccionar al 409**
 
 En `guardarGasto`, tras construir `cuerpo` (después del bloque `if((!id || Org._origenTocado)…)`):
 
@@ -823,14 +823,14 @@ Y el `catch` del `conBoton` pasa a distinguir el 409:
       }
 ```
 
-- [ ] **Step 4: Correr la suite entera**
+- [x] **Step 4: Correr la suite entera**
 
 ```bash
 cd backend && npm test
 ```
 Esperado: verde (los barridos XSS/manejadores validan el fuente nuevo).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/app.js
@@ -845,25 +845,25 @@ git commit -m "feat(web): el ✏️ del gasto manda lo visto y ante un 409 recar
 - Modify: `ESTADO.md` (nueva sección arriba + actualizar "POR DÓNDE RETOMAR")
 - Modify: `docs/superpowers/plans/2026-08-07-cabos-agosto.md` (casillas marcadas)
 
-- [ ] **Step 1: Suite completa y medirla**
+- [x] **Step 1: Suite completa y medirla**
 
 ```bash
 cd backend && npm test
 ```
 Esperado: verde. Anotar el número total (721 + los nuevos; el número exacto se mide aquí, no se repite de memoria).
 
-- [ ] **Step 2: Actualizar ESTADO.md**
+- [x] **Step 2: Actualizar ESTADO.md**
 
 Nueva sección arriba del todo con: qué cerró cada cabo, la decisión "avisar, nunca reescribir", el detalle de privacidad (autoservicio ve conteos), la compatibilidad del `visto` opcional, y la **verificación manual pendiente de Pablo**: como `raquel`, intentar anotar un gasto a nombre de una cuenta inactiva (se niega); corregir su propio nombre y leer el aviso; abrir el mismo gasto en dos pestañas, guardar en una y ver el aviso de "recarga la hoja" en la otra. Actualizar la línea de "Última actualización" y la sección "POR DÓNDE RETOMAR".
 
-- [ ] **Step 3: Commit de docs**
+- [x] **Step 3: Commit de docs**
 
 ```bash
 git add ESTADO.md docs/superpowers/plans/2026-08-07-cabos-agosto.md
 git commit -m "docs: cabos de agosto documentados (ESTADO y plan cerrado)"
 ```
 
-- [ ] **Step 4: Fusionar a main y borrar la rama**
+- [ ] **Step 4: Fusionar a main y borrar la rama** — PENDIENTE: la hace Pablo, no el agente
 
 ```bash
 git checkout main

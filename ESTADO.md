@@ -1,32 +1,199 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
 
-## ⏸️ 7 DE AGOSTO DE 2026 · NOCHE — TANDA A MEDIO EJECUTAR: retomar AQUÍ
+## 🆕 7 DE AGOSTO DE 2026 · NOCHE — 🧵 los tres cabos de agosto: el gasto a quien existe, el nombre que se quedó escrito, y la hoja que se pisaba
 
-**La rama `feat/cabos-agosto` está viva y SIN fusionar** (compruébalo con
-`git branch --no-merged main`). Spec:
+**Rama `feat/cabos-agosto` TERMINADA y revisada (14 commits sobre `8b89fb4`),
+pero SIN FUSIONAR al escribirse esto** — la fusión (`--no-ff`), el borrado de la
+rama y el push los hace Pablo. No te fíes de esta línea: compruébalo con
+`git branch --no-merged main`. Spec:
 `docs/superpowers/specs/2026-08-07-cabos-agosto-design.md`; plan:
-`docs/superpowers/plans/2026-08-07-cabos-agosto.md`; ledger detallado:
-`.superpowers/sdd/progress.md` (sección "Plan 2026-08-07 cabos-agosto").
+`docs/superpowers/plans/2026-08-07-cabos-agosto.md`; el ledger tarea a tarea en
+`.superpowers/sdd/progress.md` ("Plan 2026-08-07 cabos-agosto") y las dos
+vueltas de la revisión de rama en `.superpowers/sdd/review-final-rama.md`.
 
-**Tareas 1-5 completas y revisadas** (gasto exige persona activa · corregir
-nombre avisa dónde sigue el viejo, conteos al autoservicio y detalle al
-pastor · avisos en pantalla · PATCH del gasto con `visto` → 409). Suite en
-verde hasta `ab62a74` (734).
+**Cabo 1 — un gasto nuevo ya no puede nacer a nombre de una cuenta dada de
+baja.** El alta (`POST`) exige persona **activa** de la misma iglesia, con el
+mismo mensaje que ya usaba el responsable de la hoja. El matiz está en la
+corrección: el `PATCH` solo exige cuenta activa **si la atribución cambia**
+(`pagadoPor !== gasto.pagado_por`), porque arreglarle una falta de ortografía al
+gasto histórico de alguien que se dio de baja no puede obligar a quitarle la
+atribución. Cierra el punto 5 de los pendientes de "Fuente del gasto".
 
-**Tarea 6 a MEDIO cerrar, commit `125c954` (wip) — la suite está ROJA ahí,
-a sabiendas:** falta actualizar `organizacion-pagador-selector.test.js`, que
-fija el cuerpo EXACTO del PATCH y ahora ve el campo `visto` nuevo (hay que
-mover su expectativa al contrato nuevo, no quitar el candado). El primer
-fallo que dio la suite ya quedó arreglado dentro del wip: el candado del
-invariante de `_render` exigió reponer `Org._visto=null` ahí — cazó solo un
-estado nuevo que el plan no había previsto. **Falta también la review de la
-tarea 6** y la **tarea 7 entera** (este documento, merge `--no-ff`, borrar
-rama). Retomar con `superpowers:subagent-driven-development` desde ahí.
+**Cabo 2 — corregir un nombre avisa dónde sigue escrito el viejo.** La decisión
+de producto, escrita para que no se vuelva a discutir: **avisar, nunca
+reescribir.** La lista de quién puede retirar a un niño (`nino.autorizados`, la
+que se mira en la puerta de la sala) y el predicador de una prédica o un sermón
+(que se ven en el portal público) son **textos libres**: un reemplazo automático
+de subcadenas haría estropicios, porque "Juan" vive dentro de mil frases. La app
+busca (`LIKE` acotado por iglesia, con el nombre **viejo**, y solo cuando el
+nombre cambió de verdad) y avisa; no toca una letra.
+⚠️ **Y el aviso no es el mismo para todos, a propósito.** Quien se corrige a sí
+mismo desde "Mi perfil" ve **solo conteos**; el pastor, desde Administración, ve
+**el detalle** con el nombre de las fichas. Un `LIKE` con un nombre común casa
+con fichas de otra gente, y de qué niño hablan esas fichas no es asunto de un
+feligrés. La diferencia vive en el **servidor**, no en la pantalla:
+`directorio.js` manda `ninos: <número>` y `admin.js` manda
+`ninos: [{id, nombre}]`.
 
-**Pendiente de Pablo, sin cambios:** el push de los 6 commits del Camino C
-en `main` (GitHub Desktop) y sus comprobaciones de navegador — ver la
-sección del 7-ago más abajo. Y quedó **una conversación abierta**: qué cosa
-nueva necesita la iglesia (Pablo iba a contarlo; no llegó a responderse).
+**Cabo 3 — corregir un gasto que otro ya cambió da 409, no lo pisa.**
+Comparar-y-guardar sin tocar el esquema: al abrir el ✏️ la pantalla captura lo
+que estaba mostrando (`{concepto, monto, fuente, pagado_por}`), lo manda en el
+`PATCH` como `visto`, y el servidor lo compara contra la fila guardada **antes**
+de aplicar nada. `null` cuenta como valor ("no se sabe quién puso" también se
+puede pisar). **El campo es OPCIONAL, y eso no es un detalle de zod:** un
+`app.js` viejo que no lo mande sigue corrigiendo gastos como siempre, así que
+backend y frontend **no** tienen que desplegarse juntos — justo al revés de lo
+que exigió la fuente del gasto (punto 8 de sus pendientes). Cierra el punto 10.
+⚠️ **El aviso del choque NO es el mensaje del backend.** El servidor dice
+"recarga la hoja", pero para cuando eso se lee la hoja ya se releyó sola y el
+formulario quedó vacío y repintado como el de un gasto **nuevo**: quien vuelva a
+teclear ahí crea un **duplicado**. La pantalla escribe el suyo —dice que la
+corrección no se guardó y manda a abrir otra vez el ✏️ de ese gasto— y va por
+`modalAviso`, que se queda hasta que se pulsa "Entendido", no por un toast de
+2,8 s.
+
+🔴 **Las dos lecciones de review de esta tanda, que es lo que más vale de ella:
+en las dos, quien implementaba tenía razón contra quien revisaba.**
+1. **El agujero del barrido XSS: se arregló la clase, no la instancia.**
+   `modalAviso` (nacido en esta misma rama) compartía firma **byte a byte** con
+   `modalConfirm` —el mismo `<p style="margin:8px 0 16px">`— y el barrido
+   descarta **por firma, no por sitio**: el sumidero nuevo entró blanqueado por
+   una excepción escrita para otra función, y nada falló. La review propuso dos
+   remedios —cambiarle el margen al `<p>` para que generara firma propia, o
+   enmendar el `motivo`— y el implementador **demostró que los dos eran
+   peores**: el primero mueve HTML de producción por una razón que solo existe
+   en el test y **no impide que vuelva a pasar** con otras dos funciones; el
+   segundo deja la garantía donde estaba, en un comentario que nada comprueba.
+   Lo que hizo en su lugar: cada excepción declara a **cuántos sitios** cubre
+   (`sitios`, por defecto 1) y el conteo se comprueba en las dos direcciones. **La
+   prueba de que era la clase y no la instancia:** al declararlo aparecieron
+   **otras cuatro** excepciones que ya cubrían dos sitios cada una sin decirlo
+   (`matchMedia`, el chip de estado de casos ×2, el contador de la bandeja).
+   Ninguna de las dos propuestas de la review las habría encontrado. El revisor
+   reprodujo las dos mutaciones él mismo y le dio la razón.
+2. **M2: el diagnóstico de la review encadenaba mal la causa.** Decía "sin
+   `await` → `Org._hoja` caduca → 409 que acusa a un compañero de lo propio". El
+   eslabón del medio no depende del `await`: **si el GET falla, la hoja se queda
+   caduca con `await` y sin él.** El `await` no es el arreglo, es la
+   **precondición** para poder *saber* si la hoja se releyó. Lo que cierra el
+   daño es el `else` que el implementador añadió por su cuenta: cuando la
+   recarga falla, un aviso dice que el gasto **sí** se guardó y que hay que
+   recargar la página, en vez de un "Gasto corregido" a secas que ahí es
+   afirmativamente falso. El revisor retiró su diagnóstico y aprobó el alcance
+   extra.
+
+⚠️ **Verificación manual pendiente de Pablo.** Toda la evidencia de esta rama es
+unitaria, con DOM de mentira: **nadie ha abierto esta app en dos navegadores.**
+Estos son los pasos de `review-final-rama.md` **ya corregidos por su adenda**
+(los originales pedían otra cosa en dos de ellos y les faltaba el 2):
+1. **El pisotón (cabo 3), el que importa.** Abre la app en dos navegadores (o
+   uno normal y uno de incógnito) y entra en los dos con una cuenta que pueda
+   editar la hoja (`raquel`); abre en los dos **la misma** hoja de Organización,
+   con al menos un gasto. En **A**: ✏️ de ese gasto, cambia el concepto, **NO
+   guardes**. En **B**: ✏️ del **mismo** gasto, cambia el monto y **guarda**.
+   Vuelve a **A** y pulsa "Guardar cambios". Tiene que pasar: la corrección de A
+   **no** se aplica, la hoja de A se repinta sola con el monto de B, y sale un
+   aviso que dice que no se guardó y que abra otra vez el ✏️. **Lo que hay que
+   juzgar ya no es si dio tiempo a leerlo** (se queda hasta "Entendido"), sino
+   **que el aviso aparezca de verdad** después de que la hoja se repinta debajo:
+   está seguido en el código (`_render` no toca `modal-root`), pero nadie lo ha
+   visto en un navegador.
+2. **La recarga que falla** (el alcance que se añadió en M2). Con la hoja
+   abierta, corrige un gasto y, **en cuanto pulses "Guardar cambios"**, corta la
+   red (modo avión, o DevTools → Network → Offline) para que falle la relectura.
+   Debe salir un aviso diciendo que la corrección **sí** se guardó pero que hay
+   que recargar la página — **no** un "Gasto corregido" a secas.
+3. **La cuenta inactiva (cabo 1).** Como líder, abre una hoja de Organización y
+   **déjala abierta sin recargar**. En otra ventana, como pastor, desactiva en
+   Administración a alguien que salga en el selector de "quién puso el dinero".
+   Vuelve a la ventana del líder (sin recargar) y añade un gasto a nombre de esa
+   persona: se niega con un mensaje en castellano que dice que la cuenta está
+   inactiva, y hay que comprobar que el gasto **no** quedó anotado.
+4. **El aviso del nombre (cabo 2).** Elige a alguien que salga en los
+   `autorizados` de alguna ficha de niño **y en ninguna prédica**. Entra como esa
+   persona, Directorio → "Mi perfil", cámbiale el nombre y guarda: el modal debe
+   decir *"…en 1 ficha(s) de niños (lista de quién puede retirarlos). Pídele a tu
+   maestra…"*, **sin ningún "y 0 prédica(s)"** (eso era M1, arreglado antes de
+   cerrar). Después, como pastor, Administración → "Corregir nombre" sobre esa
+   misma persona: ahí el modal **sí** nombra la ficha del niño, y el nombre del
+   niño tiene que salir bien escrito.
+
+Suite: **752** (partió en 721; medida sobre el head `8db4546` con
+`cd backend && npm test`, 752 pass / 0 fail; **caduca con la próxima rama** — no
+la repitas de memoria).
+
+**Lo que queda anotado y sin cerrar.** Ninguno bloquea; los dos primeros son los
+que hay que entender antes de tocar nada:
+
+- 🔴 **La misma clase de agujero sigue abierta en los otros dos barridos XSS.**
+  El `sitios` solo se aplicó a `xss-cuerpo.test.js`. `xss-manejadores.test.js:79`
+  y `xss-interpolaciones-atributo.test.js:186` siguen construyendo su
+  `EXCEPCIONES_MAP` con la clave-firma y comprobando **mera existencia**, que es
+  exactamente lo que dejó entrar a `modalAviso`. Y no es teórico: **hoy hay tres
+  excepciones que cubren dos sitios cada una sin declararlo** —
+  `onchange::fechaSelectAjustarDias('${prefijo}')` (los selectores de mes y de
+  año), `class::${okClase}` (el `cf-ok` de `modalConfirm` y el `mp-ok` de
+  `modalPrompt`) y `class::estado-chip ${cls}` (la lista de casos y el detalle
+  del caso). Los tres `motivo` **sí** nombran hoy los dos sitios, así que no hay
+  nada blanqueado sin auditar; lo que falta es el candado que lo compruebe.
+  ⚠️ *Medido, no leído: se corrió el clasificador de `xss-analisis.js` sobre
+  `web/app.js` al cerrar la tanda. La adenda de la review afirma que no hay
+  colisiones vivas en las otras dos listas — **es falso**, son tres.* El arreglo
+  se aplicó a **uno de los tres** barridos: candidato claro para la próxima tanda
+  de higiene.
+- 🔴 **El commit `125c954` es un `wip` con la suite ROJA a sabiendas, y aterriza
+  en `main` con el merge `--no-ff`. Se deja a propósito.** Está ahí porque la
+  sesión se cortó a mitad de la tarea 6 y se prefirió guardar el estado real a
+  inventar un commit verde. **No hay CI en este repo** (verificado: no existe
+  `.github`), así que no rompe nada automático; el único coste es que un
+  `git bisect` futuro sobre `main` se pare en un commit rojo. Fundirlo en
+  `4f8d909` es un rebase no interactivo trivial, pero **rehacer la historia es
+  decisión de Pablo**, no del agente que lo escribió.
+- ⚠️ **`sitios` cuenta, no identifica.** Si uno de los dos sitios que cubre una
+  excepción lo sustituye otra función distinta y el total sigue en 2, el candado
+  no lo ve. Mucho mejor que antes, pero no es hermético.
+- **El comentario del `await` promete un mecanismo que no es el que actúa**
+  (`web/app.js:5561-5566`): dice que `conBoton` mantiene el botón apagado "hasta
+  que la hoja esté repintada" para justificar que se cierra la carrera del ✏️,
+  pero `conBoton` apaga **solo el botón que se pulsó**, no los ✏️ de las filas,
+  que no los desactiva nadie. Esa ventana se cura sola cuando el GET aterriza (y
+  si falla, es justo el caso que cubre el `else` nuevo). El código es correcto;
+  la frase, no.
+- **Se pierde el texto específico del error en los dos caminos silenciosos:** si
+  el GET falla, la persona lee "recarga la página" en vez del mensaje concreto de
+  `api()` (con un 429 diría eso en lugar de "espera un momento"). Intercambio
+  aceptado a cambio de quitar el aviso apilado.
+- **Asimetría con el resto de la hoja:** `addCosa` / `borrarCosa` / `toggleCosa`
+  siguen llamando a `_recargar()` sin mirar el resultado, así que si su GET falla
+  la persona ve el "Sin conexión" genérico y no se entera de que su cambio sí se
+  guardó. Justificado —solo el gasto compara-y-guarda, y por tanto solo ahí una
+  hoja caduca provoca una acusación falsa—, pero visible.
+- **`apariciones.ninos` viaja con dos tipos bajo la misma clave:** número desde
+  autoservicio, array desde admin. La diferencia de privacidad es correcta y está
+  en la spec, pero si alguien cruza los manejadores, `[{…}] > 0` es `false` y el
+  aviso **desaparece en silencio** en vez de romperse. Un `ninos_n` / `ninos` lo
+  haría imposible.
+- **Comodines `LIKE` sin escapar** (`backend/src/apariciones-nombre.js:20`):
+  `perfilSchema` solo exige 1..120 caracteres, así que quien se ponga `%` de
+  nombre y luego lo corrija recibe el recuento de **todas** las fichas de niños
+  con autorizados y de todas las prédicas **de su propia iglesia**. Es solo un
+  número, el aislamiento entre iglesias se respeta y las prédicas ya son públicas
+  en el portal: daño bajo. Se cierra escapando `%`, `_`, `\` y añadiendo
+  `ESCAPE '\'`.
+- **La comparación del 409 vive fuera de la transacción**
+  (`backend/src/organizacion.js:463-468` frente al `BEGIN` de `:536`), al revés
+  de lo que dice la spec. **Hoy no hay fallo:** el manejador es síncrono desde el
+  `SELECT` hasta el `COMMIT` y Node es de un solo hilo, y no hay cluster ni
+  workers en `server.js`, `render.yaml` ni `Dockerfile` (verificado). Pasa a ser
+  un TOCTOU real el día que la app corra en más de un proceso o instancia.
+- La consulta de persona-activa está **duplicada en tres sitios**
+  (`organizacion.js:342`, `:414` y la del `PATCH` en `:494`, que lee `activo` en
+  vez de filtrarlo): candidato natural a helper, sin urgencia.
+- **Dos huecos de cobertura y alcance:** falta la prueba del
+  `PATCH /admin/usuarios/:id` con `nombre` **y** `activo` a la vez, y
+  `nino.familia` es otro texto libre que puede nombrar a la persona y que no está
+  ni entre los tres sitios que busca el cabo 2 ni en el "Fuera de alcance" de la
+  spec (probablemente correcto dejarlo fuera; solo que no está escrito).
 
 
 ## 🆕 7 DE AGOSTO DE 2026 — 💰 el libro de la tesorera por fin cuenta los eventos (Camino C)
@@ -67,18 +234,24 @@ al tiro; abrir "🗒️ Gastos de eventos" y saltar a la hoja con "Ver hoja ›"
 Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
 
 ---
-*Última actualización: 6 de agosto de 2026, sexta pasada (tandas F y H fusionadas al cierre — ya NO queda ninguna tanda aprobada pendiente) (tanda D fusionada y subida por la mañana; **tandas E y G y el backlog de las reviews del 5-ago fusionados** después; **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de las tandas E y G — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 7 de agosto de 2026, noche (cierre de los **cabos de agosto**: los tres cabos hechos y revisados, suite **752**). ⚠️ **Queda UNA rama local sin fusionar, `feat/cabos-agosto`** — la fusión `--no-ff`, el borrado de la rama y el push son de Pablo; compruébalo con `git branch --no-merged main`, no te fíes de esta línea. ⬆️ **`main` sigue SIN SUBIR**: al escribirse esto iban **8 commits** por delante de `origin/main` (los 6 del Camino C más la spec y el plan de esta tanda), y encima irá el merge — el push lo hace Pablo con GitHub Desktop y es lo que dispara el redespliegue. **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está fusionada, subida o desplegada caducan con cada rama** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (7-ago · noche)" aquí abajo, y compruébalo con `npm test`, `git branch --no-merged main` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
-## 👉 POR DÓNDE RETOMAR (6-ago)
+## 👉 POR DÓNDE RETOMAR (7-ago · noche)
 
-**Lo primero es de Pablo, no de código:**
-1. **Push** de los commits de las tandas E y G con GitHub Desktop (la tanda D ya subió esa misma mañana; verificar el despliegue buscando `atenderTodosPortal` en el `app.js` que sirve Render).
-2. **Comprobaciones de navegador pendientes** que ninguna prueba de Node pudo hacer: las tres del 5-ago (como `raquel`, corregir un movimiento de Tesorería; como `marta`, editar/borrar clases y lecciones y leer el 409; como `pastor`, ver historiales sin lápiz) **ya se pueden hacer contra producción**. Y una nueva de la tanda E: como `pastor`, borrar un mensaje de la bandeja (ver la tarjeta irse sin que la sección de anteriores se pliegue) y marcar todos como atendidos (ver la lista repintada).
-3. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
+**Lo primero es de Pablo, no de código, y en este orden:**
+1. **Fusionar `feat/cabos-agosto`** (`git merge --no-ff`, borrar la rama, y re-correr `cd backend && npm test` **sobre la fusión** — 752 en verde). ⚠️ Con `--no-ff` entra también el `wip` `125c954`, que tiene la **suite roja a sabiendas**: está explicado en la sección del 7-ago · noche, y aplastarlo con un rebase o dejarlo es **decisión suya**.
+2. **Push** con GitHub Desktop. Al escribirse esto iban 8 commits sin subir más lo que añada el merge; el push dispara el redespliegue en Render. Verificarlo después buscando `modalAviso` en el `app.js` que sirve Render.
+3. **Las cuatro comprobaciones de navegador de los cabos de agosto** (el pisotón en dos ventanas, la recarga que falla con la red cortada, el gasto a una cuenta inactiva, el aviso del nombre) — están escritas paso a paso en la sección del 7-ago · noche. **Ninguna prueba de Node puede hacerlas**: nadie ha abierto todavía esta app en dos navegadores a la vez.
+4. **Las comprobaciones de navegador que siguen pendientes de antes:** las tres del 5-ago (como `raquel`, corregir un movimiento de Tesorería; como `marta`, editar/borrar clases y lecciones y leer el 409; como `pastor`, ver historiales sin lápiz), la de la tanda E (borrar un mensaje de la bandeja y marcar todos como atendidos), la de la tanda F (Registro de actividad filtrado por `raquel`, con la casilla de accesos), la de la tanda H (crear "Culto — todos los domingos" y borrar "esta y las siguientes") y la del Camino C (un gasto "lo pagó la caja" y ver bajar el saldo de Tesorería).
+5. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
 
-**Las tandas que Pablo ya aprobó y quedan por hacer** (el orden lo eligió él el 5-ago; F y H van a necesitar sus decisiones durante el brainstorming):
+**Y queda una conversación abierta, no de código:** qué cosa nueva necesita la iglesia. Pablo iba a contarlo y no llegó a responderse.
+
+**Con los cabos de agosto cerrados no queda ninguna tanda aprobada pendiente.** Lo que hay anotado para una próxima tanda de higiene está al final de la sección del 7-ago · noche; lo más gordo es que el candado nuevo del barrido XSS (`sitios`) solo se aplicó a **uno de los tres** barridos.
+
+**Las tandas que Pablo aprobó el 5-ago, todas cerradas** (se dejan aquí porque cada una explica qué cazó y qué dejó anotado):
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
 - ~~**Tanda E — bandeja del portal:** poder borrar un mensaje y marcar atendido en bloque (pendiente 3 de la bandeja).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. Spec: `docs/superpowers/specs/2026-08-06-bandeja-borrar-y-bloque-design.md`.
 - ~~**Tanda F — pantalla de auditoría general para el pastor** (hoy el rastro solo se ve hoja por hoja; con lo del 5-ago hay MÁS rastro que nunca esperando una pantalla).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. Spec: `docs/superpowers/specs/2026-08-06-auditoria-general-design.md`.
@@ -1315,8 +1488,8 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
    > ⚠️ **Y ojo con leer "tres pruebas nuevas" como "los dos arreglos quedaron cubiertos":** la mitad de frontend **no tiene candado automático**. Este proyecto no tiene banco de pruebas de navegador; se comprobó a mano con dos sesiones reales.
    > ✅ **El nombre del pie de la barra lateral ya se repinta** (`pintarUsuarioLateral()`, `web/app.js`), tanto al corregirse uno mismo desde "Mi perfil" como cuando el pastor se corrige a sí mismo desde Administración. Antes solo se pintaba al iniciar sesión, así que se veía el toast verde y abajo a la izquierda seguía el nombre viejo — parecía que no se había guardado.
    > ⚠️ **Lo que sigue pendiente:**
-   > 1. Corregir un nombre **no actualiza una prédica ya guardada.** `predica.predicador` y `sermon.predicador` son texto libre (pueden nombrar a un invitado sin cuenta), así que no son copias que sincronizar — pero eso se ve en el **portal público** y va a parecer un fallo.
-   > 2. Y lo mismo, **peor**, con `nino.autorizados` (`db.js:297`): la lista de quién puede retirar a un niño también es texto libre (300 caracteres, y **tiene** que serlo, porque la abuela que va a buscarlo no tiene cuenta). Corriges tu nombre y **la ficha del niño sigue autorizando a "juan perez"** — y esa lista es la que se mira **en la puerta de la sala**. Se arregla editando la ficha.
+   > 1. **(atendido el 7-ago, cabo 2 — ver la sección "7 de agosto · noche":** la app **sigue sin reescribir** esos textos, y eso ya no es un pendiente sino una **decisión de producto escrita** ("avisar, nunca reescribir": son textos libres y un reemplazo de subcadenas haría estropicios). Lo que sí cambió: al corregir el nombre, la app **busca el nombre viejo y avisa dónde sigue escrito** — conteos a quien se corrige a sí mismo, detalle al pastor. Sigue habiendo que corregirlo a mano.**)** ~~Corregir un nombre **no actualiza una prédica ya guardada.** `predica.predicador` y `sermon.predicador` son texto libre (pueden nombrar a un invitado sin cuenta), así que no son copias que sincronizar — pero eso se ve en el **portal público** y va a parecer un fallo.~~
+   > 2. **(atendido el 7-ago, cabo 2, igual que el punto 1:** la ficha sigue diciendo "juan perez" hasta que alguien la edite, pero ahora **la app lo dice** en cuanto se corrige el nombre.**)** ~~Y lo mismo, **peor**, con `nino.autorizados` (`db.js:297`): la lista de quién puede retirar a un niño también es texto libre (300 caracteres, y **tiene** que serlo, porque la abuela que va a buscarlo no tiene cuenta). Corriges tu nombre y **la ficha del niño sigue autorizando a "juan perez"** — y esa lista es la que se mira **en la puerta de la sala**. Se arregla editando la ficha.~~
    > 3. **El pastor puede ponerle nombre a una cuenta ya anonimizada.** `GET /admin/datos` lista también a las personas que `cuenta.js` dejó como `'Usuario eliminado'`, y el botón "✏️ Corregir nombre" sale en esas filas: guardar reescribiría `persona.nombre` **y** `aprobacion_log.actor_nombre`, deshaciendo parte del borrado ARCO. Hay que teclear el nombre a mano, así que no es una fuga automática, pero **es la única ruta de la app que puede des-anonimizar**.
    > 4. `directorio.js:117` hace `.get(...).nombre` sin comprobar que la fila exista; su gemelo `GET /perfil` sí devuelve 404. Con el token de una persona borrada de verdad daría un **500 en vez de un 404**.
 
@@ -1328,14 +1501,14 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
    > 2. **No se registra si ya se devolvió el dinero** (Camino B). El bloque "Por devolver" dice cuánto se debe hoy, para siempre.
    > 3. **Borrar un gasto sigue sin dejar rastro**, a propósito: en este módulo ningún ítem lo deja al crearse o borrarse, y auditar solo el borrado del gasto sería un parche asimétrico. Consecuencia asumida: quien quiera esquivar el historial puede borrar y volver a crear.
    > 4. **No hay pantalla de auditoría general.** Lo que se ve es el historial de correcciones **de una hoja**; `crear_org`, `editar_org`, `borrar_org` y `duplicar_org` siguen sin mostrarse en ningún sitio.
-   > 5. **No se comprueba que la persona esté activa** al anotar o corregir un gasto (sí se comprueba en las cosas a llevar, `organizacion.js:282-284`). Bug preexistente, fuera de alcance.
+   > 5. **(cerrado el 7-ago, cabo 1** — ver la sección "7 de agosto · noche". El alta exige persona **activa**; la corrección solo si la atribución **cambia**, para que un gasto histórico de alguien dado de baja se pueda seguir corrigiendo.**)** ~~**No se comprueba que la persona esté activa** al anotar o corregir un gasto (sí se comprueba en las cosas a llevar, `organizacion.js:282-284`). Bug preexistente, fuera de alcance.~~
    > 6. ✅ ~~Corregir un gasto y auditarlo no van en una transacción.~~ **Arreglado en la revisión final:** el `UPDATE` y el `auditar()` van ya en un `BEGIN`/`COMMIT`/`ROLLBACK`, así que una corrección de dinero no puede quedar aplicada sin rastro.
    >    ⚠️ **La razón por la que se había dejado así era falsa** y llegó a estar escrita aquí: *"es la convención del resto del repo, nada de este módulo usa transacciones"*. **La convención es la contraria** — este mismo archivo las usa dos veces (`organizacion.js`, al borrar la hoja y al duplicarla), y también `asistencia.js`, `cuenta.js`, `cuidado.js`, `eventos.js`, `musica.js`, `ninos.js` y `eliminarIglesia.js`. Si vuelves a leer "la convención es no usar transacciones" en algún sitio, es mentira: compruébalo con un `grep -rn "BEGIN" backend/src`.
    > 7. **(resuelto el 5-ago:** ver la sección de esa fecha — `quitarAusenteDuplicada()` quita la inyectada **siempre** que llegue su gemela real, esté seleccionada o no, conservando la elección**)** ~~**Rótulo falso mientras el directorio aún no cargó — arreglado a medias, a propósito.** Al llegar `/directorio`, si la opción inyectada es la **seleccionada**, se reconcilia: se quita el rótulo *"(cuenta inactiva)"* sobre alguien activo y el nombre deja de salir dos veces. Pero si mientras tanto la persona **cambió el selector a mano**, la inyectada sigue en la lista —sin seleccionar, con el rótulo falso y el nombre duplicado—, porque reconciliar ahí le borraría su elección. Elegirla daría el id correcto, así que **no mueve dinero**; es un rótulo mentiroso en una pantalla de plata. Se cierra quitando la inyectada cuando aparezca su gemela real, conservando `sel.value`.~~
    > 8. **Al desplegar, backend y frontend van JUNTOS.** `armarHoja` ya no devuelve `aportes` (ahora son `total_caja` / `por_devolver` / `aportes_donados`). Un `app.js` viejo contra el backend nuevo pinta **el resumen vacío, sin ningún error**: ni en pantalla ni en la consola. No sirve subir solo uno de los dos.
    > 9. **`NULL` y `'devuelve'` se leen igual en el rastro.** `descOrigenGasto(null, X)` y `descOrigenGasto('devuelve', X)` devuelven las dos *"se devuelve a X"* (y el resumen mete a las dos en "Por devolver"). Consecuencia: si alguien abre el ✏️ de un gasto histórico y **toca a propósito** el selector de origen dejándolo en "Se devuelve", el historial anota `se devuelve a X -> se devuelve a X`. Ahí el cambio **sí es real** (pasa de "no se sabe" a una afirmación), pero se ve idéntico. Ya no ocurre sin que nadie toque nada — eso era el fallo, y está cerrado.
    >    ⚠️ **Y ojo con la razón que se dio para aplazarlo, que también era falsa:** se escribió que arreglarlo "cambia cómo se lee el rastro de los gastos ya auditados". **No.** `descOrigenGasto` se llama **solo al escribir** (un único uso en todo el repo) y su salida queda congelada como texto dentro de `auditoria.detalle`; cambiar la función no toca ni una fila guardada, solo los apuntes futuros. Es mucho más barato de lo que decía esa nota. Es la **segunda** razón inventada de este mismo bloque (la otra, la de las transacciones): **compruébalas antes de creerlas**.
-   > 10. **No hay control de concurrencia en el `PATCH` del gasto**, y la pantalla de una hoja es de vida larga (se abre y se queda abierta durante todo el almuerzo). Dos personas editando la misma hoja pueden pisarse: no hay `If-Match`, ni versión, ni aviso de "esto cambió mientras mirabas". La revisión final quitó el caso peor —una corrección de ortografía ya no **resucita** una deuda que otro acababa de borrar, porque el origen solo viaja si alguien lo tocó—, pero el punto general sigue en pie: el último que guarda el concepto o el monto, gana.
+   > 10. **(cerrado el 7-ago, cabo 3** — ver la sección "7 de agosto · noche". Comparar-y-guardar: el ✏️ manda la instantánea `visto` de lo que estaba viendo, y si la fila ya cambió el servidor responde **409** sin aplicar nada. No es un `If-Match` generalizado: es solo esta pantalla, que es la que ya mordió. **`visto` es opcional**, así que un `app.js` viejo sigue funcionando.**)** ~~**No hay control de concurrencia en el `PATCH` del gasto**, y la pantalla de una hoja es de vida larga (se abre y se queda abierta durante todo el almuerzo). Dos personas editando la misma hoja pueden pisarse: no hay `If-Match`, ni versión, ni aviso de "esto cambió mientras mirabas". La revisión final quitó el caso peor —una corrección de ortografía ya no **resucita** una deuda que otro acababa de borrar, porque el origen solo viaja si alguien lo tocó—, pero el punto general sigue en pie: el último que guarda el concepto o el monto, gana.~~
 
 #### Decidido, pero sin spec todavía
 3. ✅ ~~**Mensajes del portal público.**~~ — **HECHO el 31 jul** en la rama `feat/bandeja-y-historial-correcciones`; si ya está fusionada a `main` y desplegada es dato de `main` y caduca con cada fusión — no lo repitas de memoria, compruébalo con `git log origin/main..main --oneline` y contra el `app.js` que sirve Render (busca `filaMensajePortal`). Spec `docs/superpowers/specs/2026-07-31-bandeja-portal-publico-design.md`, plan `docs/superpowers/plans/2026-07-31-bandeja-portal-publico.md`. Suite en **471 tests** (partió en 456).
