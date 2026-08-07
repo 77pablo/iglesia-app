@@ -152,6 +152,19 @@ class FakeInput {
 //
 // `recargaOk` es lo que el _recargar de mentira contesta: true = la hoja se
 // releyo, false = el GET fallo y la pantalla se queda con la version vieja.
+//
+// Lo que la persona VE se recoge en tres listas, y las tres hacen falta:
+//   toasts  — los avisos de 2,8 s que se van solos
+//   modales — los que se quedan hasta que se pulsa "Entendido" (modalAviso)
+//   avisos  — los dos juntos, EN ORDEN: cuantas cosas le aparecen en total
+//
+// Contarlos juntos no es un lujo: el candado de "un solo aviso" se escribio
+// mirando solo los toasts de guardarGasto, con _recargar sustituida entera por
+// recargarMock — que no avisaba de nada. En produccion el catch de Org.abrir SI
+// avisa por su cuenta, asi que la prueba afirmaba "un aviso" donde habia dos.
+// Por eso recargarMock imita ahora ese aviso (y lo calla cuando le piden
+// silencio, igual que hace el metodo real: candado abajo, con el fuente
+// recortado de verdad).
 function montar({ gastos, directorio, miId = 3, responde, recargaOk = true }) {
   const sel = new FakeSelect();
   // Estado de partida: el <select> del HTML trae solo "Lo puse yo".
@@ -166,11 +179,15 @@ function montar({ gastos, directorio, miId = 3, responde, recargaOk = true }) {
   };
   const llamadas = [];
   const avisos = [];
+  const toasts = [];
+  const modales = [];
   const recargas = [];
+  const emitirToast = t => { toasts.push(t); avisos.push(t); };
   const contexto = {
     $: id => nodos[id] || null,
     document: { createElement: () => new FakeOption() },
-    toast: t => avisos.push(t),
+    toast: emitirToast,
+    modalAviso: m => { modales.push(m); avisos.push(m); },
     conBoton: async (_b, fn) => fn(),
     botonActual: () => null,
     ME: { persona: { id: miId } },
@@ -184,21 +201,28 @@ function montar({ gastos, directorio, miId = 3, responde, recargaOk = true }) {
     // montar _render aqui seria un simulacro tan grande que ya no probaria gran
     // cosa. Lo que SI se prueba de verdad, mas abajo y con el metodo recortado
     // del fuente, es que _recargar informa de si lo consiguio.
-    recargarMock: async () => { recargas.push(1); return recargaOk; }
+    // Imita las DOS cosas que hace el _recargar real: contesta si lo consiguio
+    // y, si no, deja que `abrir` avise por su cuenta — salvo que le pidan
+    // silencio, que es lo que hace quien va a dar su propio aviso.
+    recargarMock: async (silencioso) => {
+      recargas.push(silencioso === true);
+      if (!recargaOk && silencioso !== true) emitirToast('Sin conexión');
+      return recargaOk;
+    }
   };
   const cuerpo = `
     ${QUITAR_AUSENTE_DUPLICADA}
     const Org = {
       _hoja: HOJA, _gastoEditando: null, _pagador: '', _personas: null,
       _fuente: 'devuelve', _origenTocado: false, _visto: null,
-      _recargar(){ return recargarMock(); },
+      _recargar(silencioso){ return recargarMock(silencioso); },
       ${METODOS.map(recortarMetodo).join('\n')}
     };
     return Org;`;
   const claves = Object.keys(contexto);
   const fabricar = new Function(...claves, 'HOJA', cuerpo);
   const Org = fabricar(...claves.map(k => contexto[k]), { id: 1, gastos });
-  return { Org, sel, nodos, llamadas, avisos, recargas };
+  return { Org, sel, nodos, llamadas, avisos, toasts, modales, recargas };
 }
 
 const ABEL = { id: 3, nombre: 'Abel' };
@@ -411,7 +435,7 @@ const choqueDeEdiciones = () => {
 
 test('si otra persona cambio el gasto, la correccion se descarta: aviso, edicion cerrada y hoja releida', async () => {
   const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
-  const { Org, nodos, avisos, recargas } = montar({
+  const { Org, nodos, avisos, toasts, modales, recargas } = montar({
     gastos: [gasto], directorio: async () => [ABEL, MARIA], responde: choqueDeEdiciones
   });
   await Org._llenarQuienPago();
@@ -425,11 +449,19 @@ test('si otra persona cambio el gasto, la correccion se descarta: aviso, edicion
   assert.equal(Org._visto, null, 'y con ella la instantanea, que ya no describe nada que exista');
   assert.equal(recargas.length, 1, 'hay que releer la hoja: lo que la pantalla enseña ya no es lo que hay guardado');
   assert.equal(avisos.length, 1, 'un solo aviso, no un silencio ni tres');
+  // Y por que canal sale. Este es el aviso mas consecuente de la hoja: la hoja
+  // se acaba de repintar sola debajo de la persona, el formulario se vacio, y
+  // el que tiene delante es el de ALTA. Si no lee que hay que volver a abrir el
+  // ✏️, teclea ahi y crea un gasto duplicado. Un toast de 2,8 s no basta: la
+  // propia app tiene modalAviso escrito para "avisos que la persona necesita
+  // LEER", y este lo es mas que ninguno.
+  assert.equal(modales.length, 1, 'el aviso del choque tiene que quedarse en pantalla hasta que se lea, no irse solo a los 2,8 s');
+  assert.equal(toasts.length, 0, 'y no salir ademas por toast: es un aviso, no dos');
 });
 
 test('el aviso del choque dice que la correccion no se guardo, y no manda recargar algo ya recargado', async () => {
   const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
-  const { Org, nodos, avisos } = montar({
+  const { Org, nodos, modales } = montar({
     gastos: [gasto], directorio: async () => [ABEL, MARIA], responde: choqueDeEdiciones
   });
   await Org._llenarQuienPago();
@@ -438,7 +470,7 @@ test('el aviso del choque dice que la correccion no se guardo, y no manda recarg
   nodos['org-gasto-concepto'].value = 'Pan';
   await Org.guardarGasto();
 
-  const aviso = avisos[0];
+  const aviso = modales[0];
   // Al chocar se vacia el formulario: lo que la persona acababa de teclear
   // desaparece de la pantalla. Si el aviso no lo dice, se queda creyendo que
   // guardo.
@@ -461,7 +493,7 @@ test('el aviso del choque dice que la correccion no se guardo, y no manda recarg
 // decirlo, porque desde dentro no se distingue de la mala suerte.
 test('si ademas falla la recarga, se le dice que recargue la pagina (o el choque se repite en bucle)', async () => {
   const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
-  const { Org, nodos, avisos, recargas } = montar({
+  const { Org, nodos, avisos, toasts, recargas } = montar({
     gastos: [gasto], directorio: async () => [ABEL, MARIA], responde: choqueDeEdiciones, recargaOk: false
   });
   await Org._llenarQuienPago();
@@ -471,6 +503,13 @@ test('si ademas falla la recarga, se le dice que recargue la pagina (o el choque
   await Org.guardarGasto();
 
   assert.equal(recargas.length, 1, 'se intenta igual');
+  // Es EL camino de los dos avisos apilados: `abrir` avisa por su cuenta desde
+  // el catch ("Sin conexión") y guardarGasto avisa detras. Los dos a la vez
+  // dejan el generico tapando al unico que dice que hacer, asi que aqui —y
+  // solo aqui, porque guardarGasto da el suyo— se le pide silencio.
+  assert.deepEqual(recargas, [true],
+    'guardarGasto tiene que pedirle silencio a la recarga: si no, salen dos avisos y el generico tapa al que sirve');
+  assert.equal(toasts.length, 0, 'nada de un "Sin conexión" apilado encima');
   assert.equal(avisos.length, 1);
   assert.match(avisos[0], /recarga(r)? la p[aá]gina/i,
     'con la hoja vieja en pantalla toda correccion vuelve a chocar: la unica salida es recargar el navegador');
@@ -510,6 +549,18 @@ test('si el GET de la hoja falla, _recargar lo dice en vez de tragarselo', async
     'quien recarga por un choque de ediciones tiene que poder enterarse de que la hoja NO se releyo');
   assert.equal(pintados.length, 0);
   assert.equal(avisos.length, 1, 'abrir sigue avisando por su cuenta: los otros cinco llamantes dependen de ese aviso');
+});
+
+// El otro lado del silencio: lo de arriba es un mock, esto es el fuente. Sin
+// esta prueba, recargarMock podria imitar un `silencioso` que produccion no
+// tiene y las tres pruebas del choque pasarian igual — que es exactamente la
+// forma del candado falso que se esta corrigiendo.
+test('_recargar(true) se calla: quien lo pide es porque va a dar su propio aviso', async () => {
+  const { Org, avisos, pintados } = montarRecarga({ api: async () => { throw new Error('Sin conexión'); } });
+  assert.equal(await Org._recargar(true), false, 'sigue contestando la verdad: la hoja NO se releyo');
+  assert.equal(pintados.length, 0);
+  assert.equal(avisos.length, 0,
+    'el aviso generico de abrir tiene que callarse aqui: guardarGasto da uno mas concreto y dos apilados tapan al que sirve');
 });
 
 test('sin hoja abierta no hay nada que releer, y tampoco se miente diciendo que si', async () => {

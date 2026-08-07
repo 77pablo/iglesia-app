@@ -5118,9 +5118,16 @@ const Org = {
   // excepción justo para no cambiarles el contrato a los demás: un
   // `Org.abrir(...)` suelto en un onclick pasaría a ser una promesa rechazada
   // que nadie escucha.
-  async abrir(id, origen){
+  //
+  // `silencioso` apaga SOLO ese aviso propio (sigue contestando si lo consiguió).
+  // Lo pide quien mira el valor devuelto y da su propio aviso, más concreto:
+  // hoy, guardarGasto tras un choque de ediciones. Sin esto salen dos avisos
+  // apilados —delante el genérico ("Sin conexión") y detrás el único que dice
+  // qué hacer—, y el de arriba tapa al que sirve. Los demás llamantes no lo
+  // pasan y siguen avisando igual que siempre: son los que no miran el resultado.
+  async abrir(id, origen, silencioso){
     try{ const h=await api('/organizacion/'+id); Org._render(h, origen); return true; }
-    catch(e){ toast((e&&e.message)||'No se pudo abrir'); return false; }
+    catch(e){ if(!silencioso) toast((e&&e.message)||'No se pudo abrir'); return false; }
   },
   _origen:'organizacion',
   volver(){ (ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion).ir(); },
@@ -5414,7 +5421,7 @@ const Org = {
   // Relee la hoja abierta y la repinta. Devuelve la promesa de si lo consiguió,
   // para quien necesite esperarla: los seis llamantes que solo repintan tras un
   // cambio propio la siguen ignorando y se comportan igual que antes.
-  _recargar(){ return Org._hoja ? Org.abrir(Org._hoja.id) : Promise.resolve(false); },
+  _recargar(silencioso){ return Org._hoja ? Org.abrir(Org._hoja.id, undefined, silencioso) : Promise.resolve(false); },
   async addCosa(){
     const nombre=$('org-cosa-nombre').value.trim(); const cantidad=Number($('org-cosa-cant').value)||1;
     if(!nombre) return toast('Escribe qué llevar');
@@ -5564,7 +5571,11 @@ const Org = {
           // borrar lo tecleado, indefinidamente. La unica salida es recargar la
           // pagina, y desde dentro eso no se distingue de la mala suerte: hay que
           // decirlo.
-          const alDia=await Org._recargar();
+          // Silenciosa a propósito: si el GET también falla, el catch de `abrir`
+          // soltaría su "Sin conexión" genérico justo delante del aviso de aquí
+          // abajo, que es el único que dice qué hacer. Dos avisos apilados de
+          // 2,8 s, y el que sirve debajo.
+          const alDia=await Org._recargar(true);
           // El mensaje NO es el del backend: aquel manda "recarga la hoja", y
           // para cuando esto se lee la hoja ya se releyo sola — la persona
           // recargaria el navegador sin necesidad, o se quedaria esperando a
@@ -5576,9 +5587,22 @@ const Org = {
           // ahi la correccion crearia un gasto duplicado en vez de corregir el
           // que choco. Hay que nombrar el paso que falta: abrir el ✏️ de ese
           // gasto otra vez.
-          toast(alDia
+          // Y va por modalAviso, no por toast: un toast dura 2,8 s y se emite
+          // en el mismo instante en que la hoja se repinta sola debajo de la
+          // persona y el formulario se vacia. Quien levante la vista un segundo
+          // se encuentra la pantalla cambiada, su correccion perdida y ningun
+          // mensaje — y el formulario que tiene delante es el de ALTA, asi que
+          // volver a teclear ahi crea un gasto DUPLICADO: justo lo que todo
+          // este bloque existe para evitar. El arreglo depende por completo de
+          // que el aviso se lea, y modalAviso es lo que la app tiene escrito
+          // para "avisos que la persona necesita LEER".
+          //
+          // Los dos textos son literales sin interpolacion: no hay dato de
+          // nadie que escapar (modalAviso mete el mensaje crudo en innerHTML).
+          modalAviso(alDia
             ? 'Otra persona cambió este gasto. Tu corrección no se guardó: abre el ✏️ de ese gasto y corrígelo de nuevo.'
-            : 'Tu corrección no se guardó y la hoja no se pudo actualizar. Recarga la página y vuelve a intentarlo.');
+            : 'Tu corrección no se guardó y la hoja no se pudo actualizar. Recarga la página y vuelve a intentarlo.',
+            'Tu corrección no se guardó');
           return;
         }
         toast((e&&e.message)||'No se pudo guardar');
