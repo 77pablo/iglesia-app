@@ -3781,10 +3781,17 @@ async function guardarPerfilDirectorio(){
   await conBoton(botonActual(), async()=>{
     try{
       if(file) body.foto_url=await uploadArchivo(file);
-      await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
+      const resp=await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
       if(ME.persona){ ME.persona.nombre=body.nombre; pintarUsuarioLateral(); }
       toast('✅ Perfil actualizado');
       vistaDirectorio();
+      // Cabo 2: si el nombre cambio y el viejo sigue escrito en textos libres
+      // (lista de retiro de un nino, predicas), avisar. Solo CONTEOS: el
+      // backend no manda fichas al autoservicio, a proposito.
+      const a=resp&&resp.apariciones;
+      if(a&&(a.ninos>0||a.predicas>0)){
+        modalAviso(`Tu nombre anterior sigue escrito en ${Number(a.ninos)} ficha(s) de niños (lista de quién puede retirarlos) y ${Number(a.predicas)} prédica(s). Pídele a tu maestra o al pastor que lo actualicen donde corresponda.`,'Tu nombre aparece en otros lugares');
+      }
     }catch(e){ toast(e.message); }
   }, file?'Subiendo foto…':'Guardando…');
 }
@@ -3818,6 +3825,16 @@ function modalConfirm(msg, onYes, opts){
     <button class="${okClase}" id="cf-ok">${okLabel}</button></div></div></div>`;
   root.classList.add('show');
   $('cf-ok').onclick=()=>{ cerrarModal(); onYes(); };
+}
+// Informativo puro: un solo boton. msg llega YA escapado por el llamador
+// (misma convencion que modalConfirm). Existe porque toast() dura 2.8s y hay
+// avisos que la persona necesita LEER (donde sigue escrito su nombre viejo).
+function modalAviso(msg, titulo){
+  const root=$('modal-root');
+  root.innerHTML=`<div class="modal-bg"><div class="modal"><h3>${escHtml(titulo||'Aviso')}</h3>
+    <p class="muted" style="margin:8px 0 16px">${msg}</p>
+    <div class="row"><button class="btn" onclick="cerrarModal()">Entendido</button></div></div></div>`;
+  root.classList.add('show');
 }
 // Hermano de modalConfirm, pero con un campo de texto: sustituye a prompt(), que
 // abre una ventanita gris del sistema, sin el tipo de letra ni los colores de la
@@ -4165,12 +4182,24 @@ function adminCorregirNombre(id){
   // pantalla entera en vez de no hacer nada.
   const d=window._admin; const u=(d&&d.usuarios||[]).find(x=>x.id===id); if(!u) return;
   modalPrompt(`Nuevo nombre para <b>${escHtml(u.nombre)}</b>.`, async(nombre)=>{
-    try{ await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({nombre})});
+    try{ const resp=await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({nombre})});
       // Este boton tambien sale sobre la propia fila del pastor: si se corrige
       // a si mismo, el pie de la barra lateral tiene que repintarse igual que
       // desde "Mi perfil".
       if(ME.persona&&ME.persona.id===id){ ME.persona.nombre=nombre; pintarUsuarioLateral(); }
-      toast('✅ Nombre corregido'); vistaAdmin(); }
+      toast('✅ Nombre corregido'); vistaAdmin();
+      // Cabo 2, detalle para el pastor: que fichas siguen diciendo el nombre
+      // viejo. La app no reescribe textos libres; el pastor corrige a mano.
+      const a=resp&&resp.apariciones;
+      if(a&&(a.ninos.length||a.predicas>0)){
+        // Une "fichas de niños" y "prédicas" con una "y" solo si hay ambas.
+        // Escrito como tres interpolaciones ternarias (no un array armado a
+        // mano con partes.push/partes.join) porque el barrido XSS del cuerpo
+        // no puede demostrar que ese array solo contenga texto ya escapado;
+        // cada rama de acá sí es una forma que el barrido reconoce (mapJoin
+        // o template literal completo).
+        modalAviso(`El nombre anterior sigue escrito en: ${a.ninos.length?a.ninos.map(n=>`la ficha de <b>${escHtml(n.nombre)}</b> (autorizados para retirarlo)`).join(', '):''}${a.ninos.length&&a.predicas>0?' y ':''}${a.predicas>0?`${Number(a.predicas)} prédica(s)`:''}. Corrígelo a mano donde corresponda.`,'El nombre viejo sigue escrito');
+      } }
     catch(e){ toast(e.message); }
   }, {titulo:'Corregir nombre', placeholder:'Nombre completo', valor:u.nombre, okLabel:'Guardar'});
 }
