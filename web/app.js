@@ -2680,6 +2680,7 @@ async function vistaTesoreria(){
         <div class="widget"><div class="widget-head">💰 Saldo actual</div><div class="stat-num">${money(res.saldo)}</div></div>
         <div class="widget"><div class="widget-head">↑ Ingresos del mes</div><div class="stat-num" style="color:var(--green-tx)">${money(res.ingMes)}</div></div>
         <div class="widget"><div class="widget-head">↓ Gastos del mes</div><div class="stat-num" style="color:var(--red-tx)">${money(res.gasMes)}</div></div>
+        <div class="widget"><div class="widget-head">🗒️ Eventos del mes</div><div class="stat-num" style="color:var(--red-tx)">${money(res.gastosEventosMes)}</div></div>
       </div>
       ${esTesoreroUI()
         ? `<div class="row" style="margin-bottom:14px">
@@ -2699,8 +2700,14 @@ async function vistaTesoreria(){
              ${camps.filter(c=>c.cerrada_en).map(filaCampaniaCerrada).join('')}`
           : ''}
       </div>
+      <div class="card" style="margin-bottom:18px">
+        <button type="button" class="link" id="ge-toggle" aria-expanded="false" aria-controls="ge-zona" onclick="verGastosEventos()">
+          <span id="ge-flecha">▸</span> 🗒️ Gastos de eventos</button>
+        <p class="muted small" style="margin:4px 0 0">Lo gastado en cada evento, leído de su hoja de Organización (ahí se corrige). Solo lo que pagó la caja descuenta del saldo.</p>
+        <div id="ge-zona" style="display:none"></div>
+      </div>
       <div class="card" style="margin-bottom:18px"><div class="widget-head">🔓 Transparencia</div>
-        <p class="small" style="margin:6px 0 14px">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
+        <p class="small" style="margin:6px 0 14px">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · En eventos <b>${money(trans.gastosEventos)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
         ${trans.porCategoria.length
           ? trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0;
               return `<div class="dato-row"><span>${escHtml(cap(g.categoria))}</span><span class="val">${Number(pct)}% · ${money(g.monto)}</span></div>`;}).join('')
@@ -2896,6 +2903,66 @@ async function guardarAporte(id){
   });
 }
 // Borrar un aporte: se está borrando dinero, así que pide confirmación.
+// --- Gastos de eventos (Camino C): el libro los lee de las hojas ---
+// Seccion plegable nacida cerrada; "ya cargada" se decide mirando el DOM
+// (vistaTesoreria repinta entero tras cada movimiento — la leccion de
+// _clasesEd, misma solucion que el Registro de actividad).
+let _geOffset=0, _geCargada=false;
+function verGastosEventos(){
+  const zona=$('ge-zona'), flecha=$('ge-flecha'), btn=$('ge-toggle');
+  if(!zona) return;
+  const abierta = zona.style.display!=='none';
+  if(abierta){
+    zona.style.display='none';
+    if(flecha) flecha.textContent='▸';
+    if(btn) btn.setAttribute('aria-expanded','false');
+    return;
+  }
+  zona.style.display='';
+  if(flecha) flecha.textContent='▾';
+  if(btn) btn.setAttribute('aria-expanded','true');
+  if(_geCargada && $('ge-lista')) return;
+  _geCargada=false;
+  zona.innerHTML='<p class="muted small">Cargando…</p>';
+  cargarGastosEventos(true);
+}
+async function cargarGastosEventos(desdeCero){
+  if(desdeCero) _geOffset=0;
+  try{
+    const d=await api('/tesoreria/gastos-eventos?offset='+_geOffset);
+    const zona=$('ge-zona'); if(!zona) return;
+    const filas=d.items.length
+      ? d.items.map(filaHojaGastos).join('')
+      : '<p class="muted small" style="margin-top:8px">Ningún evento tiene gastos anotados todavía.</p>';
+    const verMas=d.hayMas
+      ? `<button class="btn ghost small-btn" id="ge-mas" style="margin-top:10px" onclick="masGastosEventos()">Ver más</button>` : '';
+    if(!_geCargada){
+      _geCargada=true;
+      zona.innerHTML=`<div id="ge-lista"></div><div id="ge-pie"></div>`;
+    }
+    const lista=$('ge-lista'), pie=$('ge-pie');
+    if(_geOffset===0){ if(lista) lista.innerHTML=filas; }
+    else if(lista) lista.insertAdjacentHTML('beforeend', filas);
+    if(pie) pie.innerHTML=verMas;
+  }catch(e){
+    const zona=$('ge-zona');
+    if(zona&&!_geCargada) zona.innerHTML=errCargar('verGastosEventos()','los gastos de eventos');
+    else toast(e.message);
+  }
+}
+async function masGastosEventos(){
+  await conBoton($('ge-mas'), async()=>{ _geOffset+=20; await cargarGastosEventos(false); });
+}
+function filaHojaGastos(h){
+  return `<div class="item-card" style="margin-top:10px">
+    <div class="flex" style="align-items:flex-start">
+      <div style="flex:1"><b>${escHtml(h.titulo)}</b>${h.fecha?` <span class="muted small">· ${escHtml(fechaTxt(h.fecha,true))}</span>`:''}</div>
+      <button class="btn ghost small-btn" onclick="Org.abrir(${Number(h.id)})">Ver hoja ›</button>
+    </div>
+    ${h.gastos.map(g=>`<div class="dato-row"><span>${escHtml(g.concepto)} <span class="muted small">· ${g.fuente==='caja'?'pagó la caja':g.fuente==='aporte'?`puso ${g.pagado_por_nombre?escHtml(g.pagado_por_nombre):'(cuenta eliminada)'} (aporte)`:g.fuente==='devuelve'?`se le devuelve a ${g.pagado_por_nombre?escHtml(g.pagado_por_nombre):'(cuenta eliminada)'}`:'sin registrar quién puso'}</span></span><span class="val">${money(g.monto)}</span></div>`).join('')}
+  </div>`;
+}
+
 function borrarAporte(campaniaId, movId){
   modalConfirm('¿Borrar este aporte? El monto se descuenta de la campaña y de los movimientos. No se puede deshacer.', async()=>{
     try{
