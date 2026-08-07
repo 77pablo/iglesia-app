@@ -98,3 +98,32 @@ test('acotado por iglesia: el nino de OTRA congregacion no aparece en el conteo'
   });
   assert.deepEqual((await res.json()).apariciones, { ninos: 0, predicas: 0 });
 });
+
+test('asistido: el pastor recibe el DETALLE — que fichas de ninos y cuantas predicas', async () => {
+  const b = await servidor();
+  const S = sembrar('AP5');
+  sembrarRastros(S);
+  const res = await fetch(b + `/api/admin/usuarios/${S.rosaId}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(S.pastorId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: 'Rosa Diaz Perez' })
+  });
+  assert.equal(res.status, 200);
+  const { apariciones } = await res.json();
+  assert.equal(apariciones.ninos.length, 1);
+  assert.equal(apariciones.ninos[0].nombre, 'Pedrito', 'el pastor ve QUE ficha revisar');
+  assert.equal(apariciones.predicas, 2);
+});
+
+test('asistido: activar/desactivar sin tocar el nombre no trae apariciones', async () => {
+  const b = await servidor();
+  const S = sembrar('AP6');
+  sembrarRastros(S);
+  const res = await fetch(b + `/api/admin/usuarios/${S.rosaId}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(S.pastorId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ activo: false })
+  });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).apariciones, undefined);
+});
