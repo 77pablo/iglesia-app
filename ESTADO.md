@@ -1,4 +1,43 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
+
+## 🆕 7 DE AGOSTO DE 2026 — 💰 el libro de la tesorera por fin cuenta los eventos (Camino C)
+
+**Fusionada a `main` el mismo día** (merge `--no-ff`, rama
+`feat/rendicion-eventos` borrada). **Sin subir a GitHub** al escribirse esto —
+compruébalo con `git log origin/main..main --oneline`. Spec:
+`docs/superpowers/specs/2026-08-07-rendicion-eventos-design.md`.
+
+**La decisión que cambió el diseño vino del dueño:** *"la iglesia no devuelve
+dinero — dar es voluntario"*. Con eso el **Camino B** (marcar devuelto +
+movimiento de devolución) **murió antes de nacer**: no se construyó nada. La
+opción "se le devuelve" del formulario **se queda** por si un caso especial la
+necesita; la salida de escape documentada es que la tesorera anote esa
+devolución como gasto manual en su libro.
+
+**El Camino C quedó calculado, sin copias** (la lección de campañas): el saldo
+del resumen y el de transparencia restan lo que la caja pagó en eventos
+(`fuente='caja'`) **leyéndolo de las hojas** — un solo dato, imposible que
+libro y hoja discrepen. Lo voluntario (`aporte`) y lo marcado "se le devuelve"
+**no descuentan** (no salió plata de la caja). `gasMes` sigue siendo SOLO el
+libro; la línea nueva `gastosEventosMes` viaja aparte (el mes es el de la
+hoja/evento, o el `creado_en` en hora local). Tarjeta plegable "🗒️ Gastos de
+eventos" en Tesorería con cada hoja, sus gastos y la fuente en palabras, y
+"Ver hoja ›" a la casa donde se corrige. `GET /gastos-eventos` pagina de a 20
+hojas.
+
+⚠️ **Consecuencias asumidas, escritas:** el saldo histórico **baja** el día
+del despliegue (todos los gastos-caja de hojas viejas por fin descuentan — esa
+plata SÍ salió y el libro decía otra cosa); y borrar un evento se lleva sus
+gastos del cálculo (naturaleza de lo calculado, igual que la barra de
+campañas).
+
+⚠️ **Verificación manual pendiente de Pablo:** como `raquel`, anotar en la
+hoja de un evento un gasto "lo pagó la caja" y ver el saldo de Tesorería bajar
+al tiro; abrir "🗒️ Gastos de eventos" y saltar a la hoja con "Ver hoja ›".
+
+Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
+
+---
 *Última actualización: 6 de agosto de 2026, sexta pasada (tandas F y H fusionadas al cierre — ya NO queda ninguna tanda aprobada pendiente) (tanda D fusionada y subida por la mañana; **tandas E y G y el backlog de las reviews del 5-ago fusionados** después; **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de las tandas E y G — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
@@ -1256,7 +1295,7 @@ Dos planes escritos, autorrevisados y con las decisiones del dueño ya incorpora
    Se construyó: la columna `evento_org_gasto.fuente` (`NULL` para todo lo histórico); el `POST` acepta `fuente`: `'caja'` · `'devuelve'` · `'aporte'`; el resumen de la hoja partido en tres bloques (lo que pagó la caja, lo por devolver, los aportes donados); `PATCH` para corregir un gasto, auditado, y el rastro dice también **si cambió quién puso el dinero**; `auditoria` gana `ref_tabla`/`ref_id` y la referencia apunta **a la hoja, no al gasto** (para que borrar un gasto no deje su corrección huérfana); en pantalla, casilla de origen, fuente por línea y ✏️ para corregir; y el historial de correcciones, visible **en la hoja y en la rendición impresa**.
    **Cuatro veces** se cerró el mismo fallo de fondo —corregir un gasto movía a quién se le debe dinero— y las cuatro por una puerta distinta: el backend que reasignaba, el selector que no ofrecía "sin registrar", el `.value` releído del DOM, y por último **el formulario que reenviaba el origen aunque nadie lo hubiera tocado**. Esa cuarta, la de la revisión final, era la que más iba a doler: en producción **todos** los gastos guardados tienen `fuente = NULL`, así que el primer ✏️ sobre cualquiera de ellos les inventaba un `'devuelve'` y estampaba en el historial un `se devuelve a María -> se devuelve a María`, o sea, la línea que existe para avisar de que cambió quién puso el dinero afirmando un cambio que nadie hizo. Regla que queda: **el `PATCH` es parcial por diseño y la pantalla tiene que respetarlo** — una corrección manda `fuente`/`pagado_por` **solo** si la persona tocó alguno de los dos selectores (`Org._origenTocado`); un alta los manda siempre.
    > **Sigue sin resolver**, a propósito o por quedar fuera de alcance:
-   > 1. **Los gastos de la hoja de Organización siguen sin aparecer en Tesorería**: sigue siendo el Camino C, no decidido.
+   > 1. ~~**Los gastos de la hoja de Organización siguen sin aparecer en Tesorería**: sigue siendo el Camino C, no decidido.~~ **(Cerrado el 7-ago: calculados desde las hojas, sin copias — ver la sección del 7 de agosto. Y el Camino B murió antes de nacer: "la iglesia no devuelve dinero, dar es voluntario" — decisión del dueño.)**
    > 2. **No se registra si ya se devolvió el dinero** (Camino B). El bloque "Por devolver" dice cuánto se debe hoy, para siempre.
    > 3. **Borrar un gasto sigue sin dejar rastro**, a propósito: en este módulo ningún ítem lo deja al crearse o borrarse, y auditar solo el borrado del gasto sería un parche asimétrico. Consecuencia asumida: quien quiera esquivar el historial puede borrar y volver a crear.
    > 4. **No hay pantalla de auditoría general.** Lo que se ve es el historial de correcciones **de una hoja**; `crear_org`, `editar_org`, `borrar_org` y `duplicar_org` siguen sin mostrarse en ningún sitio.
