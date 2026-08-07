@@ -3796,7 +3796,16 @@ async function guardarPerfilDirectorio(){
       // backend no manda fichas al autoservicio, a proposito.
       const a=resp&&resp.apariciones;
       if(a&&(a.ninos>0||a.predicas>0)){
-        modalAviso(`Tu nombre anterior sigue escrito en ${Number(a.ninos)} ficha(s) de niños (lista de quién puede retirarlos) y ${Number(a.predicas)} prédica(s). Pídele a tu maestra o al pastor que lo actualicen donde corresponda.`,'Tu nombre aparece en otros lugares');
+        // La guarda es un OR, asi que el texto tambien: nombrar los dos lados
+        // siempre decia "en 0 ficha(s) de niños (…) y 2 prédica(s)" en los dos
+        // casos de un solo lado, que son los probables. Un cero ahi no informa
+        // de nada y hace dudar del numero de al lado.
+        //
+        // Tres ternarios (un trozo, la "y", el otro trozo), el mismo patron que
+        // el aviso del pastor de adminCorregirNombre: cada rama es un template
+        // literal completo con Number() sobre el contador, que es una forma que
+        // el barrido XSS del cuerpo reconoce sin excepciones.
+        modalAviso(`Tu nombre anterior sigue escrito en ${a.ninos>0?`${Number(a.ninos)} ficha(s) de niños (lista de quién puede retirarlos)`:''}${a.ninos>0&&a.predicas>0?' y ':''}${a.predicas>0?`${Number(a.predicas)} prédica(s)`:''}. Pídele a tu maestra o al pastor que lo actualicen donde corresponda.`,'Tu nombre aparece en otros lugares');
       }
     }catch(e){ toast(e.message); }
   }, file?'Subiendo foto…':'Guardando…');
@@ -5549,8 +5558,26 @@ const Org = {
         if(id) await api('/organizacion/gastos/'+id,{method:'PATCH',body:JSON.stringify(cuerpo)});
         else   await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)});
         Org.cancelarEdicionGasto();
-        Org._recargar();
-        toast(id?'Gasto corregido':'Gasto añadido');
+        // Se ESPERA la recarga (el bloque del 409 de abajo ya lo hacia; este
+        // no). Mientras el GET viaja, Org._hoja sigue siendo la hoja de ANTES
+        // de la correccion: sin el await, el boton se reactiva y el ✏️ vuelve a
+        // ser clicable en ese hueco, y la instantanea que capture sera la
+        // caduca. Con el await, conBoton lo mantiene apagado hasta que la hoja
+        // este repintada.
+        const alDia=await Org._recargar(true);
+        // Y si el GET falla, el hueco no se cierra solo: Org._hoja se queda con
+        // la fila vieja para siempre, el proximo ✏️ manda esa instantanea, el
+        // backend la compara con la fila que uno MISMO acaba de actualizar y
+        // responde 409 — "Otra persona cambió este gasto", acusando a un
+        // compañero de lo propio y borrando lo tecleado. Un "Gasto corregido" a
+        // secas afirma justo lo contrario de lo que pasa. Silenciosa (true) por
+        // lo mismo que el bloque del 409: el aviso de aqui ya lo dice todo, y
+        // el "Sin conexión" generico de abrir solo lo taparia.
+        if(alDia) toast(id?'Gasto corregido':'Gasto añadido');
+        else modalAviso(id
+          ? 'Tu corrección sí se guardó, pero la hoja no se pudo actualizar. Recarga la página antes de seguir corrigiendo gastos.'
+          : 'El gasto sí se anotó, pero la hoja no se pudo actualizar. Recarga la página antes de seguir.',
+          id?'Corrección guardada':'Gasto anotado');
       }catch(e){
         // El 409 solo puede darse en una CORRECCION (id puesto): es el backend
         // detectando que la instantanea `visto` ya no coincide con la fila

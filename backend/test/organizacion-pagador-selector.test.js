@@ -477,6 +477,13 @@ test('el aviso del choque dice que la correccion no se guardo, y no manda recarg
   assert.match(aviso, /no se guard/i,
     'lo unico imprescindible: que su correccion NO quedo guardada y hay que volver a escribirla');
   assert.match(aviso, /otra persona|alguien/i, 'y por que: no fue un fallo suyo');
+  // Y el paso que falta, que es el que evita el fallo que corrompe datos: para
+  // cuando esto se lee, el formulario ya se vacio y _render lo repinto como el
+  // de un gasto NUEVO (boton "Añadir"). Quien teclee ahi la correccion crea un
+  // gasto DUPLICADO. Sin esta asercion se podia borrar esa mitad del mensaje y
+  // la suite seguia verde.
+  assert.match(aviso, /✏️/,
+    'tiene que nombrar el ✏️: sin ese paso la persona teclea en el formulario de alta y duplica el gasto');
   // El texto del backend ("recarga la hoja") describe el momento ANTERIOR a
   // recargar; para cuando esto se lee, la linea de al lado ya la recargo. Si se
   // reemite tal cual, la persona recarga el navegador entero sin necesidad o se
@@ -516,6 +523,50 @@ test('si ademas falla la recarga, se le dice que recargue la pagina (o el choque
   assert.match(avisos[0], /no se guard/i, 'sigue haciendo falta saber que la correccion se perdio');
   assert.doesNotMatch(avisos[0], /al d[ií]a|actualizada:/i,
     'no se puede afirmar que la hoja esta al dia cuando la recarga acaba de fallar');
+});
+
+// --- y el camino FELIZ, que tambien depende de esa recarga ---------------
+//
+// El PATCH sale bien y el GET siguiente falla (datos moviles). Org._hoja se
+// queda con la fila de ANTES de la correccion, el proximo ✏️ captura esa
+// instantanea caduca, el backend la compara con la fila que uno MISMO acaba de
+// actualizar y responde 409: "Otra persona cambio este gasto" — acusando a un
+// companero de lo propio y borrando lo tecleado. Hay que esperar la recarga
+// (si no, ni siquiera se sabe si funciono) y, si fallo, decirlo.
+test('si el gasto se guardo pero la hoja no se pudo releer, se dice — no se da por bueno y ya', async () => {
+  const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
+  const { Org, nodos, toasts, modales, recargas } = montar({
+    gastos: [gasto], directorio: async () => [ABEL, MARIA], recargaOk: false
+  });
+  await Org._llenarQuienPago();
+
+  Org.editarGasto(9);
+  nodos['org-gasto-concepto'].value = 'Pan';
+  await Org.guardarGasto();
+
+  assert.equal(recargas.length, 1);
+  assert.equal(modales.length, 1,
+    'con la hoja vieja en pantalla, el proximo ✏️ choca contra uno mismo: eso hay que leerlo, no verlo pasar en 2,8 s');
+  assert.match(modales[0], /s[ií] se guard|s[ií] se anot/i,
+    'lo primero, que su correccion NO se perdio: el PATCH salio bien');
+  assert.match(modales[0], /recarga(r)? la p[aá]gina/i, 'y lo unico que lo arregla');
+  assert.equal(toasts.length, 0,
+    'y NADA de un "Gasto corregido" a secas: afirma que todo esta al dia cuando la hoja se quedo vieja');
+});
+
+test('cuando todo sale bien, el gasto corregido se avisa con un toast y sin modales', async () => {
+  const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
+  const { Org, nodos, toasts, modales } = montar({
+    gastos: [gasto], directorio: async () => [ABEL, MARIA]
+  });
+  await Org._llenarQuienPago();
+
+  Org.editarGasto(9);
+  nodos['org-gasto-concepto'].value = 'Pan';
+  await Org.guardarGasto();
+
+  assert.deepEqual(toasts, ['Gasto corregido'], 'el camino feliz no puede volverse ruidoso: se va solo');
+  assert.equal(modales.length, 0, 'ni parar a la persona con un modal cuando no ha pasado nada');
 });
 
 // Y el otro extremo de lo mismo, con el metodo REAL recortado del fuente: de
