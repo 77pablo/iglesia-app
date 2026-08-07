@@ -430,7 +430,17 @@ const editarGastoSchema = z.object({
   // MISMO mensaje que gastoSchema (Task 2): no puede contener la palabra
   // "fuente", que es el nombre tecnico del campo. validar() compone
   // "Datos invalidos: " + este texto y se lo suelta tal cual a la persona.
-  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional(),
+  // Cabo 3: la instantanea de lo que la pantalla mostraba al abrir el ✏️.
+  // Opcional a proposito: un app.js viejo no la manda y el PATCH sigue
+  // funcionando (backend y frontend pueden no desplegarse juntos). Sin
+  // coerce: la construye nuestro propio codigo, no un formulario.
+  visto: z.object({
+    concepto: z.string(),
+    monto: z.number(),
+    fuente: z.enum(FUENTES_GASTO).nullable(),
+    pagado_por: z.number().int().nullable()
+  }).optional()
 });
 r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // Acotado por iglesia en la MISMA consulta: es el fallo que ya se colo una
@@ -445,6 +455,17 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' });
   const org = hojaEditable(req, res, gasto.org_id);   // valida permiso (403); iglesia ya validada arriba
   if (!org) return;
+
+  // Cabo 3: si la pantalla mando lo que estaba viendo y ya no coincide con lo
+  // guardado, otro corrigio este gasto en el medio (la hoja queda abierta
+  // durante todo el almuerzo). No se aplica nada: 409 y a recargar. NULL es un
+  // valor mas ("no se sabe quien puso" tambien se puede pisar).
+  const visto = req.body.visto;
+  if (visto && (visto.concepto !== gasto.concepto
+             || visto.monto !== gasto.monto
+             || visto.fuente !== gasto.fuente
+             || visto.pagado_por !== gasto.pagado_por))
+    return res.status(409).json({ error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' });
 
   const concepto = req.body.concepto ?? gasto.concepto;
   const monto = req.body.monto ?? gasto.monto;
