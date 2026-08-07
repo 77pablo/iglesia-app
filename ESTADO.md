@@ -1,5 +1,34 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
 
+## ⏸️ 7 DE AGOSTO DE 2026 · NOCHE — TANDA A MEDIO EJECUTAR: retomar AQUÍ
+
+**La rama `feat/cabos-agosto` está viva y SIN fusionar** (compruébalo con
+`git branch --no-merged main`). Spec:
+`docs/superpowers/specs/2026-08-07-cabos-agosto-design.md`; plan:
+`docs/superpowers/plans/2026-08-07-cabos-agosto.md`; ledger detallado:
+`.superpowers/sdd/progress.md` (sección "Plan 2026-08-07 cabos-agosto").
+
+**Tareas 1-5 completas y revisadas** (gasto exige persona activa · corregir
+nombre avisa dónde sigue el viejo, conteos al autoservicio y detalle al
+pastor · avisos en pantalla · PATCH del gasto con `visto` → 409). Suite en
+verde hasta `ab62a74` (734).
+
+**Tarea 6 a MEDIO cerrar, commit `125c954` (wip) — la suite está ROJA ahí,
+a sabiendas:** falta actualizar `organizacion-pagador-selector.test.js`, que
+fija el cuerpo EXACTO del PATCH y ahora ve el campo `visto` nuevo (hay que
+mover su expectativa al contrato nuevo, no quitar el candado). El primer
+fallo que dio la suite ya quedó arreglado dentro del wip: el candado del
+invariante de `_render` exigió reponer `Org._visto=null` ahí — cazó solo un
+estado nuevo que el plan no había previsto. **Falta también la review de la
+tarea 6** y la **tarea 7 entera** (este documento, merge `--no-ff`, borrar
+rama). Retomar con `superpowers:subagent-driven-development` desde ahí.
+
+**Pendiente de Pablo, sin cambios:** el push de los 6 commits del Camino C
+en `main` (GitHub Desktop) y sus comprobaciones de navegador — ver la
+sección del 7-ago más abajo. Y quedó **una conversación abierta**: qué cosa
+nueva necesita la iglesia (Pablo iba a contarlo; no llegó a responderse).
+
+
 ## 🆕 7 DE AGOSTO DE 2026 — 💰 el libro de la tesorera por fin cuenta los eventos (Camino C)
 
 **Fusionada a `main` el mismo día** (merge `--no-ff`, rama
