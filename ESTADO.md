@@ -177,12 +177,18 @@ verificada: template anidado como contenedor (sus `${}` internos se barren
 aparte — hay autocomprobación), tablas `MAYUSCULAS[...]` (un test exige que
 se declaren con puros literales), y 16 ayudantes leídos uno a uno.
 
-🔥 **La deuda, explícita y con candado:** la cola del cuerpo que no se pudo
+🔥 ~~**La deuda, explícita y con candado:** la cola del cuerpo que no se pudo
 clasificar con rigor mecánico (HTML en variables locales, en su mayoría) son
 **199 firmas** en `PENDIENTES` de `xss-cuerpo.test.js`, y es un **trinquete**:
 el código nuevo tiene que salir limpio (una interpolación cruda nueva rompe la
 suite), y una firma cuyo sitio desaparece también rompe — la lista **solo
-puede encoger**. Quemarla por lotes de 20-30 (el plan lo deja anotado).
+puede encoger**. Quemarla por lotes de 20-30 (el plan lo deja anotado).~~
+**(QUEMADA ENTERA el mismo 6-ago, lotes 1-3: `PENDIENTES` quedó VACÍA y así se
+queda — como la lista del barrido de botones. En el camino cayeron arreglos
+reales: `ME.iglesia.nombre` iba crudo en el saludo del panel, las horas de
+eventos sin escapar, ~40 contadores sin `Number()`. Todo sitio vive ahora en
+reglas mecánicas con autocomprobación, ayudantes verificados uno a uno, o
+excepciones con motivo y zombie-check. El detalle por lote, en el plan.)**
 
 Suite: **689** (671 + 18; medida al cerrar la rama; caduca con la próxima rama
 que se fusione — no la repitas de memoria).
