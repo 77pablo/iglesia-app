@@ -1,5 +1,5 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
-*Última actualización: 6 de agosto de 2026, quinta pasada (tanda F — Registro de actividad — fusionada al final del día) (tanda D fusionada y subida por la mañana; **tandas E y G y el backlog de las reviews del 5-ago fusionados** después; **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de las tandas E y G — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 6 de agosto de 2026, sexta pasada (tandas F y H fusionadas al cierre — ya NO queda ninguna tanda aprobada pendiente) (tanda D fusionada y subida por la mañana; **tandas E y G y el backlog de las reviews del 5-ago fusionados** después; **ninguna rama de trabajo local**, compruébalo con `git branch --no-merged main`). ⬆️ **`main` quedó SIN SUBIR de nuevo** (los commits de las tandas E y G — el push lo hace Pablo con GitHub Desktop y dispara el redespliegue). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está subida o desplegada caducan con cada rama que se fusiona** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (6-ago)" aquí abajo, y compruébalo con `npm test` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
@@ -15,7 +15,7 @@
 - ~~**Tanda E — bandeja del portal:** poder borrar un mensaje y marcar atendido en bloque (pendiente 3 de la bandeja).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. Spec: `docs/superpowers/specs/2026-08-06-bandeja-borrar-y-bloque-design.md`.
 - ~~**Tanda F — pantalla de auditoría general para el pastor** (hoy el rastro solo se ve hoja por hoja; con lo del 5-ago hay MÁS rastro que nunca esperando una pantalla).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. Spec: `docs/superpowers/specs/2026-08-06-auditoria-general-design.md`.
 - ~~**Tanda G — extender el barrido XSS** a manejadores de evento (95) y cuerpo de texto (676). Dos leftovers ya anotados para esta tanda: `id="mov-corregir-${m.id}"` sin `Number()` y los `onclick` de `filaMov`.~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ Los dos leftovers **ya estaban arreglados** (la lista envejeció otra vez), y en cambio aparecieron cosas que nadie tenía anotadas: tres formateadores de fecha devolvían texto crudo en sus fallbacks, y `cap()` iba sin escapar en 6 sitios. 🔥 **Deja deuda explícita:** el trinquete `PENDIENTES` de `xss-cuerpo.test.js`, para quemar por lotes (ver el plan). Nació con 199 firmas; los lotes 1 y 2 del mismo día la dejaron en **135** (contadores con `Number()`, 25 excepciones verificadas, y la regla `mapJoin` para listas construidas con `.map(...).join()` — el barrido ganó excepciones con motivo, zombie-check y autocomprobaciones nuevas).
-- **Tanda H — eventos que se repiten** ("todos los domingos"; conecta con la columna `repetir` de `fecha_no_disp` que hoy no hace nada).
+- ~~**Tanda H — eventos que se repiten** ("todos los domingos"; conecta con la columna `repetir` de `fecha_no_disp` que hoy no hace nada).~~ **hecha y fusionada el 6-ago** — ver su sección abajo. La columna muerta `repetir` se retiró (cero INSERT en la historia, mismo criterio que la tabla `recurso`); "no puedo servir los martes" quedó explícitamente fuera. **Ya no queda NINGUNA tanda aprobada pendiente.**
 - ~~**Backlog que dejaron las reviews del 5-ago:** `PATCH /ninos/:id` sigue reenviando todo y auditando sin diff (contradice la regla nueva del propio módulo — candidato natural para `soloCambios()`); barrido de `catch` sin `console.error(e)`; el `FakeSelect` de `organizacion-pagador-selector.test.js` con el punto ciego del `remove()`; `z.coerce.number()` acepta booleanos (POST y PATCH de tesorería).~~ **Los cuatro cerrados el 6-ago** (rama `feat/backlog-reviews-5ago`, TDD en cada uno): el PATCH del niño usa `soloCambios()` con bitácora "antes -> después"; `numeroEstricto()` en los cuatro esquemas con dinero (true→1 y [5000]→5000 ya no pasan; el texto numérico de un formulario sigue valiendo); el `FakeOption.remove()` viejo imita al DOM real; y **once** `catch` con 500 mudo ahora loguean, con barrido nuevo (`catch-con-log.test.js`) que exige `console.error` o `throw` en todo catch que responda 500 — uno de los once se había escrito **ese mismo día**: una convención sin candado no se sostiene.
 
 El detalle fino de la ejecución de las tres tandas del 5-ago (quién revisó qué, qué cazó cada review) está en `.superpowers/sdd/progress.md`.
@@ -60,6 +60,49 @@ comentario en `admin.js`).
 Suite: **662** (misma cifra que ayer: se invirtieron dos tests, no se sumaron;
 medida con `cd backend && npm test`; caduca con la próxima rama — no la repitas
 de memoria).
+
+---
+
+## 🆕 6 DE AGOSTO DE 2026 (5) — 🔁 el culto de todos los domingos se crea una sola vez
+
+**Tanda H, fusionada a `main` el mismo día** (merge `--no-ff`, rama
+`feat/eventos-serie` borrada). **Sin subir a GitHub** al escribirse esto —
+compruébalo. Brainstorming con Pablo esa noche; sus decisiones (solo semanal;
+3 meses con extensión automática; borrar una fecha o la serie, sin "editar la
+serie"; solo el pastor, nacen aprobadas) en la spec:
+`docs/superpowers/specs/2026-08-06-eventos-serie-design.md`.
+
+**El modelo es materializar, no dibujar:** las fechas se crean DE VERDAD como
+filas de `evento` (con `serie_id`), así que asignaciones, música, asistencia y
+organización siguen colgando de eventos concretos sin enterarse de que existen
+las series. La tabla nueva `serie` (`activa DEFAULT 1`) existe por una sola
+razón: **que "borrar la serie" y la extensión automática no se contradigan** —
+`activa=0` es la lápida que impide que el calendario resucite lo que el pastor
+mató.
+
+**Crear:** el pastor marca "🔁 repetir todas las semanas" y salen ~13 fechas
+aprobadas (hasta hoy+90). La semana cuyo lugar/hora ya está ocupado **se salta
+y las demás se crean**. **Extender:** al abrir el calendario, toda serie
+activa con menos de hoy+45 de horizonte gana semanas hasta hoy+90, copiando su
+último evento; una serie activa que se quedó sin eventos se apaga (no hay de
+dónde copiar). **Borrar:** el feriado suelto se borra como cualquier evento y
+NO apaga la serie; "Borrar esta y las siguientes" (solo pastor) apaga la serie
+y borra las futuras **cada una con la cascada completa de 6 tablas** —
+extraída a `borrarEventoEnCascada()`, compartida con el borrado suelto, todo
+en una transacción. Las pasadas quedan como historia.
+
+**Fechas sin trampa de zona horaria:** la aritmética de semanas es UTC puro
+sobre la cadena `YYYY-MM-DD` (`sumarDias()`), y el "hoy" es `fechaLocal()` de
+Chile. **Limpieza:** `fecha_no_disp.repetir` se retiró — nadie la escribió
+nunca (cero INSERT en la historia del repo, el criterio de la tabla `recurso`
+del 5-ago); "no puedo servir los martes" queda fuera a propósito.
+
+⚠️ **Verificación manual pendiente de Pablo:** como `pastor`, crear "Culto —
+todos los domingos" y ver ~13 domingos en el calendario con su chip 🔁; borrar
+un domingo suelto (los demás quedan); y "Borrar esta y las siguientes" desde
+un domingo del medio (los anteriores quedan, el calendario no la resucita).
+
+Suite: **714** (705 + 9; medida al cerrar la rama; caduca con la próxima rama).
 
 ---
 
