@@ -5545,7 +5545,13 @@ const Org = {
         Org._recargar();
         toast(id?'Gasto corregido':'Gasto añadido');
       }catch(e){
-        if(e&&e.status===409){
+        // El 409 solo puede darse en una CORRECCION (id puesto): es el backend
+        // detectando que la instantanea `visto` ya no coincide con la fila
+        // guardada, y `visto` solo viaja en el PATCH. Un ALTA (POST, sin id) no
+        // manda `visto` y hoy no puede chocar por esta via; sin el `id&&` de
+        // aqui, el aviso de mas abajo ("Otra persona cambió este gasto") saldria
+        // en un alta donde no hay ningun gasto previo que haya podido cambiar.
+        if(id && e&&e.status===409){
           // Otro corrigio este gasto con el ✏️ abierto. No se fusiona nada: se
           // cierra la edicion y se relee la hoja para mirar lo nuevo. Cerrarla
           // VACIA el formulario, asi que lo que la persona acababa de teclear
@@ -5563,8 +5569,15 @@ const Org = {
           // para cuando esto se lee la hoja ya se releyo sola — la persona
           // recargaria el navegador sin necesidad, o se quedaria esperando a
           // hacer algo que ya esta hecho.
+          //
+          // Tampoco basta con decir "vuelve a escribirla": para cuando se lee
+          // esto, cancelarEdicionGasto() ya vacio el formulario y _render lo
+          // repinto como el de un gasto NUEVO (boton "Añadir"). Quien tecleara
+          // ahi la correccion crearia un gasto duplicado en vez de corregir el
+          // que choco. Hay que nombrar el paso que falta: abrir el ✏️ de ese
+          // gasto otra vez.
           toast(alDia
-            ? 'Otra persona cambió este gasto. Tu corrección no se guardó: la hoja ya está al día, vuelve a escribirla.'
+            ? 'Otra persona cambió este gasto. Tu corrección no se guardó: abre el ✏️ de ese gasto y corrígelo de nuevo.'
             : 'Tu corrección no se guardó y la hoja no se pudo actualizar. Recarga la página y vuelve a intentarlo.');
           return;
         }
