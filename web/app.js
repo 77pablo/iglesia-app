@@ -5109,9 +5109,18 @@ const Org = {
   },
   // Abre una hoja por id. `origen` solo se pasa al ENTRAR: las recargas de la
   // propia hoja (añadir una cosa, un gasto) lo omiten y conservan el de entrada.
+  //
+  // Devuelve si lo consiguió (true) o no (false), sin dejar de avisar por su
+  // cuenta como hacía siempre. Los cuatro llamantes que solo abren una hoja
+  // ignoran ese valor y no notan nada; quien lo necesita es _recargar, porque
+  // tras un choque de ediciones quedarse con la hoja vieja en pantalla ya no es
+  // inocuo (ver guardarGasto). Se devuelve un booleano en vez de propagar la
+  // excepción justo para no cambiarles el contrato a los demás: un
+  // `Org.abrir(...)` suelto en un onclick pasaría a ser una promesa rechazada
+  // que nadie escucha.
   async abrir(id, origen){
-    try{ const h=await api('/organizacion/'+id); Org._render(h, origen); }
-    catch(e){ toast((e&&e.message)||'No se pudo abrir'); }
+    try{ const h=await api('/organizacion/'+id); Org._render(h, origen); return true; }
+    catch(e){ toast((e&&e.message)||'No se pudo abrir'); return false; }
   },
   _origen:'organizacion',
   volver(){ (ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion).ir(); },
@@ -5402,7 +5411,10 @@ const Org = {
     }else if(!mostrar && ya){ ya.remove(); }
   },
   _personas:null,
-  _recargar(){ if(Org._hoja) Org.abrir(Org._hoja.id); },
+  // Relee la hoja abierta y la repinta. Devuelve la promesa de si lo consiguió,
+  // para quien necesite esperarla: los seis llamantes que solo repintan tras un
+  // cambio propio la siguen ignorando y se comportan igual que antes.
+  _recargar(){ return Org._hoja ? Org.abrir(Org._hoja.id) : Promise.resolve(false); },
   async addCosa(){
     const nombre=$('org-cosa-nombre').value.trim(); const cantidad=Number($('org-cosa-cant').value)||1;
     if(!nombre) return toast('Escribe qué llevar');
@@ -5534,11 +5546,26 @@ const Org = {
         toast(id?'Gasto corregido':'Gasto añadido');
       }catch(e){
         if(e&&e.status===409){
-          // Otro corrigio este gasto con el ✏️ abierto. No se fusiona nada:
-          // se cierra la edicion y se recarga la hoja para mirar lo nuevo.
-          toast((e&&e.message)||'Recarga la hoja');
+          // Otro corrigio este gasto con el ✏️ abierto. No se fusiona nada: se
+          // cierra la edicion y se relee la hoja para mirar lo nuevo. Cerrarla
+          // VACIA el formulario, asi que lo que la persona acababa de teclear
+          // desaparece de la pantalla: si el aviso no lo dice, se queda creyendo
+          // que guardo.
           Org.cancelarEdicionGasto();
-          Org._recargar();
+          // Se ESPERA la recarga, y se mira si funciono. Si el GET tambien falla
+          // (datos moviles), Org._hoja se queda con la version vieja: el ✏️
+          // siguiente captura otra instantanea caduca, vuelve a chocar y vuelve a
+          // borrar lo tecleado, indefinidamente. La unica salida es recargar la
+          // pagina, y desde dentro eso no se distingue de la mala suerte: hay que
+          // decirlo.
+          const alDia=await Org._recargar();
+          // El mensaje NO es el del backend: aquel manda "recarga la hoja", y
+          // para cuando esto se lee la hoja ya se releyo sola — la persona
+          // recargaria el navegador sin necesidad, o se quedaria esperando a
+          // hacer algo que ya esta hecho.
+          toast(alDia
+            ? 'Otra persona cambió este gasto. Tu corrección no se guardó: la hoja ya está al día, vuelve a escribirla.'
+            : 'Tu corrección no se guardó y la hoja no se pudo actualizar. Recarga la página y vuelve a intentarlo.');
           return;
         }
         toast((e&&e.message)||'No se pudo guardar');

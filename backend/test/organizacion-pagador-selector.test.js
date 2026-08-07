@@ -56,15 +56,21 @@ const lineas = fuente.split('\n');
 // Si ves un error de sintaxis raro al tocar web/app.js, mira aqui antes que en
 // ningun otro sitio. Y si tocas el HTML de _render, comprueba que esta prueba
 // sigue fallando al quitarle a _render una de sus lineas de reseteo.
+//
+// El corte NO puede ser "para cuando j > i": un metodo escrito entero en una
+// linea (`_recargar(){ ... },`) ya cierra su llave en la primera, y esperar a
+// la siguiente se tragaba el metodo de al lado. Se corta cuando el saldo vuelve
+// a cero HABIENDO abierto al menos una llave, que es lo mismo para los metodos
+// de varias lineas y lo correcto para los de una.
 function recortarMetodo(nombre) {
   const i = lineas.findIndex(l => new RegExp(`^  (?:async )?${nombre}\\(`).test(l));
   assert.ok(i >= 0, `no se encontro el metodo ${nombre} en web/app.js`);
-  let saldo = 0;
+  let saldo = 0, abierta = false;
   const trozo = [];
   for (let j = i; j < lineas.length; j++) {
     trozo.push(lineas[j]);
-    for (const ch of lineas[j]) { if (ch === '{') saldo++; else if (ch === '}') saldo--; }
-    if (j > i && saldo <= 0) break;
+    for (const ch of lineas[j]) { if (ch === '{') { saldo++; abierta = true; } else if (ch === '}') saldo--; }
+    if (abierta && saldo <= 0) break;
   }
   return trozo.join('\n');
 }
@@ -138,7 +144,15 @@ class FakeInput {
 
 // Monta un Org real con el DOM de mentira. `directorio` es una funcion que
 // devuelve la promesa de /directorio (puede rechazar, o tardar).
-function montar({ gastos, directorio, miId = 3 }) {
+//
+// `responde` es lo que contesta el api() de mentira a todo lo que NO es
+// /directorio; por defecto acepta. Puede LANZAR, que es la unica manera de
+// entrar en el `catch` de guardarGasto — mientras no lo hiciera, la rama del
+// choque de ediciones no la ejercitaba nada.
+//
+// `recargaOk` es lo que el _recargar de mentira contesta: true = la hoja se
+// releyo, false = el GET fallo y la pantalla se queda con la version vieja.
+function montar({ gastos, directorio, miId = 3, responde, recargaOk = true }) {
   const sel = new FakeSelect();
   // Estado de partida: el <select> del HTML trae solo "Lo puse yo".
   sel.innerHTML = '<option value="">Lo puse yo</option>';
@@ -152,6 +166,7 @@ function montar({ gastos, directorio, miId = 3 }) {
   };
   const llamadas = [];
   const avisos = [];
+  const recargas = [];
   const contexto = {
     $: id => nodos[id] || null,
     document: { createElement: () => new FakeOption() },
@@ -162,22 +177,28 @@ function montar({ gastos, directorio, miId = 3 }) {
     api: async (ruta, opts) => {
       if (ruta === '/directorio') return directorio();
       llamadas.push({ ruta, cuerpo: JSON.parse((opts && opts.body) || '{}'), metodo: opts && opts.method });
+      if (responde) return responde();
       return { ok: true };
-    }
+    },
+    // El _recargar de verdad (releer la hoja y repintarla) necesita _render, y
+    // montar _render aqui seria un simulacro tan grande que ya no probaria gran
+    // cosa. Lo que SI se prueba de verdad, mas abajo y con el metodo recortado
+    // del fuente, es que _recargar informa de si lo consiguio.
+    recargarMock: async () => { recargas.push(1); return recargaOk; }
   };
   const cuerpo = `
     ${QUITAR_AUSENTE_DUPLICADA}
     const Org = {
       _hoja: HOJA, _gastoEditando: null, _pagador: '', _personas: null,
-      _fuente: 'devuelve', _origenTocado: false,
-      _recargar(){},
+      _fuente: 'devuelve', _origenTocado: false, _visto: null,
+      _recargar(){ return recargarMock(); },
       ${METODOS.map(recortarMetodo).join('\n')}
     };
     return Org;`;
   const claves = Object.keys(contexto);
   const fabricar = new Function(...claves, 'HOJA', cuerpo);
   const Org = fabricar(...claves.map(k => contexto[k]), { id: 1, gastos });
-  return { Org, sel, nodos, llamadas, avisos };
+  return { Org, sel, nodos, llamadas, avisos, recargas };
 }
 
 const ABEL = { id: 3, nombre: 'Abel' };
@@ -369,6 +390,133 @@ test('el gasto historico se PINTA como "Se devuelve" pero eso no basta para mand
     concepto: 'Carne', monto: 20000, fuente: 'devuelve', pagado_por: 7,
     visto: { concepto: 'Carne', monto: 20000, fuente: null, pagado_por: 7 }
   });
+});
+
+// --- el choque de ediciones: dos personas corrigiendo el mismo gasto -------
+//
+// El backend responde 409 cuando la instantanea que manda la pantalla ya no
+// coincide con la fila guardada: otra persona la cambio mientras el ✏️ seguia
+// abierto. Esa rama del `catch` no la ejercitaba NADA (el api de mentira solo
+// sabia aceptar), asi que se podia borrar entera y la suite seguia verde.
+//
+// Lo que la persona ve al chocar tiene tres partes, y las tres importan: el
+// aviso, la edicion cerrada y la hoja releida.
+const MARIA = { id: 7, nombre: 'María' };
+const choqueDeEdiciones = () => {
+  // Tal como llega desde api(): el texto del backend y el codigo en `.status`.
+  const e = new Error('Alguien cambió este gasto mientras lo mirabas — recarga la hoja');
+  e.status = 409;
+  throw e;
+};
+
+test('si otra persona cambio el gasto, la correccion se descarta: aviso, edicion cerrada y hoja releida', async () => {
+  const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
+  const { Org, nodos, avisos, recargas } = montar({
+    gastos: [gasto], directorio: async () => [ABEL, MARIA], responde: choqueDeEdiciones
+  });
+  await Org._llenarQuienPago();
+
+  Org.editarGasto(9);
+  nodos['org-gasto-concepto'].value = 'Pan';
+  await Org.guardarGasto();
+
+  assert.equal(Org._gastoEditando, null,
+    'la edicion tiene que cerrarse: con el ✏️ abierto, el siguiente intento reenvia la misma instantanea caduca y vuelve a chocar');
+  assert.equal(Org._visto, null, 'y con ella la instantanea, que ya no describe nada que exista');
+  assert.equal(recargas.length, 1, 'hay que releer la hoja: lo que la pantalla enseña ya no es lo que hay guardado');
+  assert.equal(avisos.length, 1, 'un solo aviso, no un silencio ni tres');
+});
+
+test('el aviso del choque dice que la correccion no se guardo, y no manda recargar algo ya recargado', async () => {
+  const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
+  const { Org, nodos, avisos } = montar({
+    gastos: [gasto], directorio: async () => [ABEL, MARIA], responde: choqueDeEdiciones
+  });
+  await Org._llenarQuienPago();
+
+  Org.editarGasto(9);
+  nodos['org-gasto-concepto'].value = 'Pan';
+  await Org.guardarGasto();
+
+  const aviso = avisos[0];
+  // Al chocar se vacia el formulario: lo que la persona acababa de teclear
+  // desaparece de la pantalla. Si el aviso no lo dice, se queda creyendo que
+  // guardo.
+  assert.match(aviso, /no se guard/i,
+    'lo unico imprescindible: que su correccion NO quedo guardada y hay que volver a escribirla');
+  assert.match(aviso, /otra persona|alguien/i, 'y por que: no fue un fallo suyo');
+  // El texto del backend ("recarga la hoja") describe el momento ANTERIOR a
+  // recargar; para cuando esto se lee, la linea de al lado ya la recargo. Si se
+  // reemite tal cual, la persona recarga el navegador entero sin necesidad o se
+  // queda esperando a hacer algo que ya esta hecho.
+  assert.doesNotMatch(aviso, /recarga la hoja/i,
+    'la hoja ya se releyo sola: pedirlo otra vez manda a la persona a hacer algo que ya esta hecho');
+  assert.doesNotMatch(aviso, /409|conflict|patch|visto/i, 'nada de jerga ni de codigos');
+});
+
+// I3: la recarga tambien puede fallar (datos moviles). Si nadie mira si
+// funciono, Org._hoja se queda con la version vieja INDEFINIDAMENTE y cada
+// correccion siguiente captura una instantanea caduca, choca otra vez y vuelve
+// a borrar lo tecleado. Unica salida real: recargar la pagina — y hay que
+// decirlo, porque desde dentro no se distingue de la mala suerte.
+test('si ademas falla la recarga, se le dice que recargue la pagina (o el choque se repite en bucle)', async () => {
+  const gasto = { id: 9, concepto: 'Pna', monto: 5000, pagado_por: 7, pagado_por_nombre: 'María', fuente: 'devuelve' };
+  const { Org, nodos, avisos, recargas } = montar({
+    gastos: [gasto], directorio: async () => [ABEL, MARIA], responde: choqueDeEdiciones, recargaOk: false
+  });
+  await Org._llenarQuienPago();
+
+  Org.editarGasto(9);
+  nodos['org-gasto-concepto'].value = 'Pan';
+  await Org.guardarGasto();
+
+  assert.equal(recargas.length, 1, 'se intenta igual');
+  assert.equal(avisos.length, 1);
+  assert.match(avisos[0], /recarga(r)? la p[aá]gina/i,
+    'con la hoja vieja en pantalla toda correccion vuelve a chocar: la unica salida es recargar el navegador');
+  assert.match(avisos[0], /no se guard/i, 'sigue haciendo falta saber que la correccion se perdio');
+  assert.doesNotMatch(avisos[0], /al d[ií]a|actualizada:/i,
+    'no se puede afirmar que la hoja esta al dia cuando la recarga acaba de fallar');
+});
+
+// Y el otro extremo de lo mismo, con el metodo REAL recortado del fuente: de
+// nada sirve que guardarGasto pregunte si la recarga funciono si `abrir` se
+// traga su propio fallo y contesta lo mismo pase lo que pase.
+function montarRecarga({ api }) {
+  const avisos = [];
+  const pintados = [];
+  const contexto = { api, toast: t => avisos.push(t), pintados };
+  const cuerpo = `
+    const Org = {
+      _hoja: { id: 7 },
+      _render(h){ pintados.push(h); },
+      ${['abrir', '_recargar'].map(recortarMetodo).join('\n')}
+    };
+    return Org;`;
+  const claves = Object.keys(contexto);
+  const Org = new Function(...claves, cuerpo)(...claves.map(k => contexto[k]));
+  return { Org, avisos, pintados };
+}
+
+test('cuando la hoja se relee de verdad, _recargar lo confirma', async () => {
+  const { Org, pintados } = montarRecarga({ api: async () => ({ id: 7, cosas: [], gastos: [] }) });
+  assert.equal(await Org._recargar(), true);
+  assert.equal(pintados.length, 1, 'y la pantalla se repinta con lo que acaba de llegar');
+});
+
+test('si el GET de la hoja falla, _recargar lo dice en vez de tragarselo', async () => {
+  const { Org, avisos, pintados } = montarRecarga({ api: async () => { throw new Error('Sin conexión'); } });
+  assert.equal(await Org._recargar(), false,
+    'quien recarga por un choque de ediciones tiene que poder enterarse de que la hoja NO se releyo');
+  assert.equal(pintados.length, 0);
+  assert.equal(avisos.length, 1, 'abrir sigue avisando por su cuenta: los otros cinco llamantes dependen de ese aviso');
+});
+
+test('sin hoja abierta no hay nada que releer, y tampoco se miente diciendo que si', async () => {
+  const { Org, avisos } = montarRecarga({ api: async () => ({ id: 7, cosas: [], gastos: [] }) });
+  Org._hoja = null;
+  assert.equal(await Org._recargar(), false);
+  assert.equal(avisos.length, 0, 'no hay nada que avisar: no se intento abrir nada');
 });
 
 // --- el rotulo falso "(cuenta inactiva)" sobre alguien activo -------------
