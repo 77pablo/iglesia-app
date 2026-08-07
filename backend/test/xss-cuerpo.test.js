@@ -28,6 +28,25 @@
 //  mecanicas, AYUDANTES_CUERPO (verificados uno a uno), o EXCEPCIONES (con
 //  motivo y zombie-check). Una interpolacion nueva sin escapar no tiene
 //  donde esconderse: rompe la suite.
+//
+//  CUANTOS SITIOS CUBRE CADA EXCEPCION (`sitios`, por defecto 1). La firma
+//  son 25 caracteres de contexto + la expresion, y eso NO es unico: dos
+//  trozos de HTML escritos igual dan la misma firma. Mientras el barrido
+//  solo miraba "¿existe algun sitio con esta firma?", una excepcion escrita
+//  para una funcion blanqueaba en silencio a cualquier otra que naciera
+//  con el mismo contexto. Paso de verdad (7-ago): `modalAviso` nacio con
+//  el mismo `<p class="muted" style="margin:8px 0 16px">${msg}</p>` que
+//  `modalConfirm`, entro en el codigo como sumidero de innerHTML NUEVO, y
+//  ni el barrido ni el zombie-check pudieron decir nada — el registro de
+//  sumideros del repo quedo incompleto y nadie lo supo.
+//
+//  Por eso cada excepcion declara a CUANTOS sitios cubre y el conteo se
+//  comprueba. Rompe la suite en las dos direcciones, que son los dos
+//  agujeros:
+//   - de mas: un sumidero nuevo que colisiona de firma con uno viejo
+//     (exactamente el caso de modalAviso) — obliga a nombrarlo en el motivo.
+//   - de menos: desaparece uno de los sitios que la excepcion cubria —
+//     obliga a re-auditar el que queda en vez de heredarle el permiso.
 // ============================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -76,7 +95,8 @@ const OPTS = { templatesComoLiteral: true, tablasMayusculas: true, mapJoin: true
 
 // Verificadas una a una en el lote 1 (6-ago): sitios que NO son HTML o son
 // internos de helpers ya demostrados. Cada firma debe seguir existiendo en el
-// codigo (zombie = fallo), igual que las de PENDIENTES.
+// codigo (zombie = fallo), igual que las de PENDIENTES, y cubrir EXACTAMENTE
+// los `sitios` que declara (por defecto 1; ver la cabecera).
 const EXCEPCIONES = [
   { firma: "div class=\"mini-date\"><b>⟨⟩x.d",
     motivo: "interno de chipFecha/fechaChip: x.d viene del parseFecha estricto (solo digitos) — el candado de parseFecha esta abajo" },
@@ -94,8 +114,8 @@ const EXCEPCIONES = [
     motivo: "interno de duracionTxt(): h/m/d/s salen de Math.floor sobre Number(seg) dos lineas arriba, solo numeros" },
   { firma: "eturn h?`${d} d ${h} h`:`⟨⟩d",
     motivo: "interno de duracionTxt(): h/m/d/s salen de Math.floor sobre Number(seg) dos lineas arriba, solo numeros" },
-  { firma: "w.matchMedia(`(max-width:⟨⟩NAV_MOVIL_MAX",
-    motivo: "media query de matchMedia, no HTML; NAV_MOVIL_MAX es una constante numerica de este archivo" },
+  { firma: "w.matchMedia(`(max-width:⟨⟩NAV_MOVIL_MAX", sitios: 2,
+    motivo: "media query de matchMedia, no HTML; NAV_MOVIL_MAX es una constante numerica de este archivo. Dos sitios con el mismo texto: esMovil() y vigilarAnchoDelMenu()" },
   { firma: "ue) return ''; return `⟨⟩a.value",
     motivo: "fechaSelectValor() devuelve la cadena YYYY-MM-DD de los <select> que la propia app construyo con digitos, no HTML" },
   { firma: "''; return `${a.value}-⟨⟩String(m.value).padStart(2,'0')",
@@ -114,8 +134,8 @@ const EXCEPCIONES = [
     motivo: "estado interno del transpositor de acordes (+/- semitonos): entero que solo tocan los botones, mostrado como +N/-N" },
   { firma: "teriores a esta bandeja (⟨⟩d.previos",
     motivo: "textContent del contador de mensajes anteriores, no innerHTML: el navegador no interpreta HTML ahi" },
-  { firma: "teriores a esta bandeja (⟨⟩_mpPreviosTotal",
-    motivo: "textContent del contador de mensajes anteriores, no innerHTML: el navegador no interpreta HTML ahi" },
+  { firma: "teriores a esta bandeja (⟨⟩_mpPreviosTotal", sitios: 2,
+    motivo: "textContent del contador de mensajes anteriores, no innerHTML: el navegador no interpreta HTML ahi. Dos sitios con el mismo texto: los dos caminos que descuentan un mensaje de la bandeja" },
   { firma: "||h.fecha; let txt=`*⟨⟩titulo",
     motivo: "texto para el portapapeles del boton compartir de Organizacion (clipboard.writeText); el unico camino a HTML es el fallback, que pasa por escHtml(txt)" },
   { firma: "_llegada) txt+=`, llegar ⟨⟩h.hora_llegada",
@@ -210,10 +230,10 @@ const EXCEPCIONES = [
     motivo: "variable local construida en la misma funcion SOLO con templates ya barridos (escHtml/money/Number/safeUrl en todo dato) — verificada en el lote 3" },
   { firma: "chip\">📌 Fijo</span>':''}⟨⟩sub",
     motivo: "variable local construida en la misma funcion SOLO con templates ya barridos (escHtml/money/Number/safeUrl en todo dato) — verificada en el lote 3" },
-  { firma: "ass=\"estado-chip ${cls}\">⟨⟩si",
-    motivo: "variable local construida en la misma funcion SOLO con templates ya barridos (escHtml/money/Number/safeUrl en todo dato) — verificada en el lote 3" },
-  { firma: "stado-chip ${cls}\">${si} ⟨⟩sl",
-    motivo: "variable local construida en la misma funcion SOLO con templates ya barridos (escHtml/money/Number/safeUrl en todo dato) — verificada en el lote 3" },
+  { firma: "ass=\"estado-chip ${cls}\">⟨⟩si", sitios: 2,
+    motivo: "variable local construida en la misma funcion SOLO con templates ya barridos (escHtml/money/Number/safeUrl en todo dato) — verificada en el lote 3. Dos sitios con el mismo chip: la lista de casos y el detalle del caso" },
+  { firma: "stado-chip ${cls}\">${si} ⟨⟩sl", sitios: 2,
+    motivo: "variable local construida en la misma funcion SOLO con templates ya barridos (escHtml/money/Number/safeUrl en todo dato) — verificada en el lote 3. Dos sitios con el mismo chip: la lista de casos y el detalle del caso" },
   { firma: "accion-${m.id}\"> ⟨⟩chip",
     motivo: "variable local construida en la misma funcion SOLO con templates ya barridos (escHtml/money/Number/safeUrl en todo dato) — verificada en el lote 3" },
   { firma: "${m.id}\"> ${chip}⟨⟩boton",
@@ -290,8 +310,8 @@ const EXCEPCIONES = [
     motivo: "flecha con cuerpo de bloque: la regla mapJoin no la matchea A PROPOSITO (fallo conservador); interior verificado — escHtml(cap()), Number(pct), money()" },
   { firma: "ding:18px;overflow:auto\">⟨⟩html",
     motivo: "modalConfirm/modalDetalle son sumideros POR DISEÑO: pintan lo que el llamador compone, y cada interpolacion de los llamadores la barre este mismo archivo en SU sitio" },
-  { firma: "tyle=\"margin:8px 0 16px\">⟨⟩msg",
-    motivo: "modalConfirm/modalDetalle son sumideros POR DISEÑO: pintan lo que el llamador compone, y cada interpolacion de los llamadores la barre este mismo archivo en SU sitio" },
+  { firma: "tyle=\"margin:8px 0 16px\">⟨⟩msg", sitios: 2,
+    motivo: "DOS sumideros distintos con el mismo <p>: modalConfirm y modalAviso (el de la tarea 4 de los cabos de agosto, para los avisos que hay que LEER). Los dos son sumideros POR DISEÑO —pintan lo que el llamador compone— y cada interpolacion de los llamadores la barre este mismo archivo en SU sitio. modalAviso se nombra aqui porque entro compartiendo firma con modalConfirm y quedo blanqueado sin que nadie lo registrara" },
   { firma: "=\"${okClase}\" id=\"cf-ok\">⟨⟩okLabel",
     motivo: "modalConfirm/modalDetalle son sumideros POR DISEÑO: pintan lo que el llamador compone, y cada interpolacion de los llamadores la barre este mismo archivo en SU sitio; okLabel ademas es un literal en cada llamada del archivo" },
   { firma: "tyle=\"margin:8px 0 14px\">⟨⟩msg",
@@ -368,6 +388,35 @@ test('barrido: toda interpolación ${...} del cuerpo de texto pasa por un ayudan
   const excZombies = EXCEPCIONES.filter(e => !firmasVistas.has(e.firma)).map(e => e.firma);
   assert.deepEqual(excZombies, [],
     'excepciones que ya no corresponden a ningún sitio del código: bórralas (una excepción sin sitio blanquea de más):\n' + excZombies.join('\n'));
+});
+
+// El zombie-check de arriba solo pregunta "¿queda ALGUN sitio con esta firma?",
+// y la firma (25 caracteres de contexto + la expresion) no es unica. Esto
+// cuenta los sitios: una excepcion tiene que cubrir exactamente los que dice.
+//
+// Sin este candado, un sumidero de innerHTML NUEVO escrito con el mismo HTML
+// que uno viejo entra blanqueado y en silencio — que es literalmente lo que
+// le paso a modalAviso al nacer (ver la cabecera).
+test('cada excepción del cuerpo cubre exactamente los sitios que declara (una firma NO es unica: dos trozos de HTML iguales la comparten)', () => {
+  const { cuerpo } = clasificarInterpolaciones(fuente);
+  const malas = cuerpo.filter(it => !esExprSegura(it.expr, AYUDANTES_CUERPO, OPTS));
+  const sitiosPorFirma = new Map();
+  for (const it of malas) {
+    const firma = firmaDe(it);
+    if (!sitiosPorFirma.has(firma)) sitiosPorFirma.set(firma, []);
+    sitiosPorFirma.get(firma).push(it.linea);
+  }
+  const descuadres = [];
+  for (const exc of EXCEPCIONES) {
+    const lineas = sitiosPorFirma.get(exc.firma) || [];
+    const declarados = exc.sitios || 1;
+    if (lineas.length !== declarados) {
+      descuadres.push(`${JSON.stringify(exc.firma)}: declara ${declarados} sitio(s), el barrido ve ${lineas.length}` +
+        (lineas.length ? ` (líneas ${lineas.join(', ')})` : ''));
+    }
+  }
+  assert.deepEqual(descuadres, [],
+    'excepciones cuyo número de sitios no cuadra. Si SOBRAN sitios, hay código nuevo que heredó el permiso de otra función sin que nadie lo auditara: audítalo y nómbralo en el motivo (o dale su propia firma). Si FALTAN, uno de los sitios desapareció: re-audita el que queda antes de bajar el número.\n' + descuadres.join('\n'));
 });
 
 test('todas las excepciones del cuerpo tienen un motivo real (no solo un nombre)', () => {
