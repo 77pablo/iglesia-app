@@ -342,8 +342,26 @@ export function esExprSegura(expr, ayudantes = AYUDANTES_SEGUROS, opts = {}) {
       const cb = mj[1].trim();
       if (/^[\w$]+$/.test(cb) && ayudantes.includes(cb)) return true;
       const tick = cb.indexOf('`');
-      if (/^\(?[\w$,\s]*\)?\s*=>\s*`/.test(cb) && tick >= 0 && esTemplateCompleto(cb.slice(tick))) return true;
+      // Los parametros de la flecha admiten destructuring: ([k,v])=>`...`.
+      if (/^\(?[[\]\w$,\s]*\)?\s*=>\s*`/.test(cb) && tick >= 0 && esTemplateCompleto(cb.slice(tick))) return true;
+      // Flecha cuyo cuerpo es UNA llamada a un ayudante de la lista
+      // (m=>filaAsist(m,true)): el texto lo produce el ayudante verificado.
+      const flechaLlamada = cb.match(/^\(?[\w$,\s]*\)?\s*=>\s*([\w$]+)\(([^]*)\)$/);
+      if (flechaLlamada && ayudantes.includes(flechaLlamada[1]) && !/[`'"<]/.test(flechaLlamada[2])) return true;
     }
+  }
+  // (expr) entre parentesis balanceados: se juzga lo de adentro. Aparece en
+  // ternarios anidados escritos con parentesis por claridad.
+  if (e[0] === '(' && e.endsWith(')')) {
+    let prof = 0, cierraAlFinal = true, comilla = null;
+    for (let k = 0; k < e.length; k++) {
+      const c = e[k];
+      if (comilla) { if (c === '\\') { k++; continue; } if (c === comilla) comilla = null; continue; }
+      if (c === '"' || c === "'" || c === '`') { comilla = c; continue; }
+      if (c === '(') prof++;
+      else if (c === ')') { prof--; if (prof === 0 && k !== e.length - 1) { cierraAlFinal = false; break; } }
+    }
+    if (cierraAlFinal) return esExprSegura(e.slice(1, -1), ayudantes, opts);
   }
   const tern = partirTernario(e);
   if (tern) return esExprSegura(tern.a, ayudantes, opts) && esExprSegura(tern.b, ayudantes, opts);

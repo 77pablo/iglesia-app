@@ -910,7 +910,7 @@ function closeSidebar(){ $('sidebar').classList.remove('open'); $('overlay').cla
 async function renderDashboard(){
   const c=$('content');
   c.innerHTML=`<div class="hero"><h2>Hola, ${escHtml(ME.persona.nombre.split(' ')[0])} 👋</h2>
-    <p>${ME.iglesia?ME.iglesia.nombre:''} · ${$('u-rol').textContent}</p></div>
+    <p>${ME.iglesia?escHtml(ME.iglesia.nombre):''} · ${escHtml($('u-rol').textContent)}</p></div>
     <div id="dash" class="muted small" style="margin-top:18px">Cargando…</div>`;
 
   // Traer todo en paralelo (tolerante a fallos individuales)
@@ -962,7 +962,7 @@ async function renderDashboard(){
   const listaEventos=eventos.length
     ? `<div class="mini-list">`+eventos.slice(0,4).map(e=>
         `<button type="button" class="btn-plano mini-item" onclick="navTo('calendario')">${chipFecha(e.fecha)}
-         <div><b>${escHtml(e.titulo)}</b><br><span class="muted small">${escHtml(e.grupo||'')}${e.hora_inicio?' · '+e.hora_inicio:''}</span></div></button>`).join('')+`</div>`
+         <div><b>${escHtml(e.titulo)}</b><br><span class="muted small">${escHtml(e.grupo||'')}${e.hora_inicio?' · '+escHtml(e.hora_inicio):''}</span></div></button>`).join('')+`</div>`
     : '<div class="empty">No hay eventos próximos.</div>';
   const listaAnuncios=anuncios.length
     ? `<div class="mini-list">`+anuncios.slice(0,3).map(a=>
@@ -1111,7 +1111,7 @@ function renderCalendario(){
       const pend=e.estado && e.estado!=='aprobado';
       return `<div class="cal-ev${pend?' pend':''}" style="border-left-color:${safeColor(e.grupo_color)}"
         title="${escHtml(e.titulo)}${e.grupo?' · '+escHtml(e.grupo):''}${e.hora_inicio?' · '+escHtml(e.hora_inicio):''}"
-        onclick="event.stopPropagation();abrirEvento(${e.id})">${e.hora_inicio?'<b>'+e.hora_inicio+'</b> ':''}${escHtml(e.titulo)}</div>`;
+        onclick="event.stopPropagation();abrirEvento(${e.id})">${e.hora_inicio?'<b>'+escHtml(e.hora_inicio)+'</b> ':''}${escHtml(e.titulo)}</div>`;
     }).join('');
     const mas=delDia.length>3?`<div class="cal-mas">+${delDia.length-3} más</div>`:'';
     celdas+=`<button type="button" class="btn-plano cal-cell${esHoy?' today':''}${finde?' finde':''}${sel?' sel':''}${delDia.length?' tiene':''}" onclick="verDia('${fecha}')">
@@ -1124,7 +1124,7 @@ function renderCalendario(){
   $('cal').innerHTML=`
     <div class="cal-nav">
       <button class="cal-navbtn" onclick="calMover(-1)" aria-label="Mes anterior">‹</button>
-      <h3>${MESES_LARGO[m]} ${y}</h3>
+      <h3>${MESES_LARGO[m]} ${Number(y)}</h3>
       <div class="row" style="width:auto;gap:8px">
         <button class="btn ghost small-btn" onclick="calHoy()">Hoy</button>
         <button class="cal-navbtn" onclick="calMover(1)" aria-label="Mes siguiente">›</button>
@@ -1152,7 +1152,7 @@ function verDia(fecha){
     const badge=e.estado==='pendiente'?'<span class="estado-chip estado-pendiente">⏳ Pendiente</span>':e.estado==='rechazado'?'<span class="estado-chip estado-rechazado">🔴 Rechazada</span>':'<span class="estado-chip estado-aceptado">✅ Aprobado</span>';
     return `<div class="item-card flex" style="margin-top:10px;border-left:4px solid ${safeColor(e.grupo_color)}">
       <div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
-        <div class="muted small">${e.grupo?'🏷️ '+escHtml(e.grupo):''}${e.hora_inicio?' · 🕐 '+e.hora_inicio+(e.hora_fin?'–'+e.hora_fin:''):''}${e.lugar?' · 📍 '+escHtml(e.lugar):''}</div>
+        <div class="muted small">${e.grupo?'🏷️ '+escHtml(e.grupo):''}${e.hora_inicio?' · 🕐 '+escHtml(e.hora_inicio)+(e.hora_fin?'–'+escHtml(e.hora_fin):''):''}${e.lugar?' · 📍 '+escHtml(e.lugar):''}</div>
         <div style="margin-top:6px">${badge}${e.serie_id?' <span class="estado-chip">🔁 se repite cada semana</span>':''}</div></div>
       ${(puede||puedeBorrar||puedePublicar())?`<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
         ${puedePublicar()?`<button class="link" onclick="Org.abrirEvento(${e.id})">🗒️ Organización</button>`:''}
@@ -1355,7 +1355,7 @@ async function vistaMiServicio(){
   if(musica.length){
     html+='<h3 class="section-title">🎵 Me toca tocar</h3><div class="list" style="margin-bottom:18px">'+musica.map(m=>
       `<div class="item-card flex"><div style="flex:1"><div class="item-titulo">${escHtml(m.instrumento||'Música')} · ${escHtml(m.titulo)}</div>
-        <div class="muted small">📅 ${fechaTxt(m.fecha)}${m.hora_inicio?' · 🕐 '+m.hora_inicio:''}</div></div>
+        <div class="muted small">📅 ${fechaTxt(m.fecha)}${m.hora_inicio?' · 🕐 '+escHtml(m.hora_inicio):''}</div></div>
         <button class="btn ghost small-btn" onclick="navTo('musicos')">Ver detalles ›</button></div>`).join('')+'</div>';
   }
   // 3) Tareas de grupo
@@ -1617,7 +1617,7 @@ function renderHoja(d){
       <div class="muted small">${fechaTxt(d.evento.fecha)}</div>
       <div class="asist-stat">
         <div class="asist-total">Asistieron: <b id="contador">${_asist.present.size}</b> de ${d.miembros.length}</div>
-        ${d.ultimaVez!=null?`<div class="asist-prev">Última vez: <b>${d.ultimaVez}</b></div>`:''}
+        ${d.ultimaVez!=null?`<div class="asist-prev">Última vez: <b>${escHtml(d.ultimaVez)}</b></div>`:''}
       </div>
       ${editable
         ? '<p class="muted small" style="margin-top:8px">Toca un nombre para marcar/desmarcar su asistencia.</p>'
@@ -1719,7 +1719,7 @@ async function vistaPanel(){
       <div class="widgets" style="margin-bottom:18px">
         <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${Number(d.miembros)}</div></div>
         <div class="widget"><div class="widget-head">📊 Promedio asistencia</div><div class="stat-num">${Number(d.promedio)}</div></div>
-        <div class="widget"><div class="widget-head">✅ Última reunión</div><div class="stat-num">${d.ultima?d.ultima.total:'—'}</div></div>
+        <div class="widget"><div class="widget-head">✅ Última reunión</div><div class="stat-num">${d.ultima?Number(d.ultima.total):'—'}</div></div>
       </div>
       <div class="card" style="margin-bottom:18px"><div class="widget-head">📈 Tendencia de asistencia</div>
         ${d.reuniones.length? d.reuniones.map(r=>`<div class="trend-row">
@@ -1870,7 +1870,7 @@ async function vistaReportes(){
         <button class="btn ghost small-btn" style="margin-left:auto" onclick="window.print()">🖨️ Imprimir</button>
       </div>
       <div class="widgets cifras" style="margin-bottom:18px">
-        <div class="widget"><div class="widget-head">✅ Asistencia último mes</div><div class="stat-num">${ultimaAsis?ultimaAsis.total:'—'}</div></div>
+        <div class="widget"><div class="widget-head">✅ Asistencia último mes</div><div class="stat-num">${ultimaAsis?Number(ultimaAsis.total):'—'}</div></div>
         <div class="widget"><div class="widget-head">💰 Saldo total</div><div class="stat-num">${money(teso.saldoTotal)}</div></div>
         <div class="widget"><div class="widget-head">👥 Miembros activos</div><div class="stat-num">${Number(crec.totalActivos)}</div></div>
         <div class="widget"><div class="widget-head">🌱 Altas este mes</div><div class="stat-num">${Number(altasMesActual)}</div></div>
@@ -2648,7 +2648,7 @@ function atenderTodosPortal(previos){
     try{
       const d=await api('/publico/mensajes/atender-todos',
         {method:'PATCH',body:JSON.stringify({previos:previos===true})});
-      toast(`✅ ${d.atendidos} mensaje(s) marcados como atendidos`);
+      toast(`✅ ${Number(d.atendidos)} mensaje(s) marcados como atendidos`);
       vistaMensajesPortal();
     }catch(e){ toast(e.message); }
   }, {okLabel:'Sí, marcar todos', danger:true});
@@ -2703,7 +2703,7 @@ async function vistaTesoreria(){
         <p class="small" style="margin:6px 0 14px">Recaudado <b>${money(trans.recaudado)}</b> · Usado <b>${money(trans.gastado)}</b> · Saldo <b>${money(trans.saldo)}</b></p>
         ${trans.porCategoria.length
           ? trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0;
-              return `<div class="dato-row"><span>${escHtml(cap(g.categoria))}</span><span class="val">${pct}% · ${money(g.monto)}</span></div>`;}).join('')
+              return `<div class="dato-row"><span>${escHtml(cap(g.categoria))}</span><span class="val">${Number(pct)}% · ${money(g.monto)}</span></div>`;}).join('')
           : '<p class="muted small">Cuando se registren gastos, aquí se verá en qué se fue el dinero.</p>'}
       </div>
       <div class="card"><div class="widget-head">Movimientos</div>
@@ -2782,7 +2782,7 @@ function filaCampania(c){
     <div style="display:flex;justify-content:space-between;font-size:14px">
       <b>${escHtml(c.nombre)}</b>
       <span class="muted">${money(c.recaudado)}${c.meta?' / '+money(c.meta):''}</span></div>
-    ${pct===null?'':`<div class="trend-track" style="margin-top:6px"><div class="trend-bar" style="width:${pct}%">${pct}%</div></div>`}
+    ${pct===null?'':`<div class="trend-track" style="margin-top:6px"><div class="trend-bar" style="width:${pct}%">${Number(pct)}%</div></div>`}
     ${esTesoreroUI()?`<div class="row" style="margin-top:8px">
       <button class="btn ghost small-btn" onclick="formAporte(${c.id})">+ Aporte</button>
       <button class="btn ghost small-btn" onclick="cerrarCampania(${c.id})">Cerrar campaña</button></div>
@@ -2932,7 +2932,7 @@ async function cargarClases(){
     c.className='grid';
     c.innerHTML=cl.map(x=>`<button type="button" class="btn-plano module-card" onclick="vistaClase(${x.id},${escJsAttr(x.nombre||'')})">
       <div class="icon">📚</div><div class="label">${escHtml(x.nombre)}</div>
-      <div class="muted small">${escHtml(x.edad||'')} · ${x.ninos} niños</div></button>`).join('');
+      <div class="muted small">${escHtml(x.edad||'')} · ${Number(x.ninos)} niños</div></button>`).join('');
   }catch(e){ $('clases').innerHTML='<p class="error">'+e.message+'</p>'; }
 }
 function formClase(){ const z=$('form-clase'); if(z.innerHTML){z.innerHTML='';return;}
@@ -3408,7 +3408,7 @@ function renderPredicas(items){
   c.className='list';
   c.innerHTML=items.map(p=>`<button type="button" class="btn-plano item-card flex" onclick="verPredica(${p.id})">
     ${chipFecha(p.fecha||'')}<div style="flex:1"><div class="item-titulo">${escHtml(p.titulo)}</div>
-    <div class="muted small">${p.predicador?'🎤 '+escHtml(p.predicador):''}${p.recursos?' · 📎 '+p.recursos+' recurso(s)':''}</div></div>
+    <div class="muted small">${p.predicador?'🎤 '+escHtml(p.predicador):''}${p.recursos?' · 📎 '+Number(p.recursos)+' recurso(s)':''}</div></div>
     <span class="muted" style="font-size:20px">›</span></button>`).join('');
 }
 async function verPredica(id){
@@ -3524,9 +3524,9 @@ async function vistaPanelObispo(){
           <div class="label" style="font-size:16px">⛪ ${escHtml(i.nombre)}</div><span class="estado-chip">${escHtml(i.codigo_unico)}</span></div>
         <div class="muted small" style="margin:6px 0 10px">Pastor: ${escHtml(i.pastor||'—')}</div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
-          <span class="estado-chip">👥 ${i.miembros}</span>
-          <span class="estado-chip">📅 ${i.eventos}</span>
-          <span class="estado-chip">📊 asist. ${i.asistenciaPromedio}</span>
+          <span class="estado-chip">👥 ${Number(i.miembros)}</span>
+          <span class="estado-chip">📅 ${Number(i.eventos)}</span>
+          <span class="estado-chip">📊 asist. ${Number(i.asistenciaPromedio)}</span>
           <span class="estado-chip">💰 ${money(i.saldo)}</span>
         </div></button>`).join('')}</div>`;
 }
@@ -3550,18 +3550,18 @@ async function verIglesiaObispo(id, mes){
     </div>
     <div class="widgets" style="margin-bottom:18px">
       <div class="widget"><div class="widget-head">👥 Miembros</div><div class="stat-num">${Number(d.miembros)}</div></div>
-      <button type="button" class="btn-plano widget" onclick="obAsistencia(${Number(id)})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${d.asistencia.promedio}</div><div class="small" style="color:var(--primary)">${d.asistencia.reuniones} reunión(es) · ver detalle ›</div></button>
+      <button type="button" class="btn-plano widget" onclick="obAsistencia(${Number(id)})"><div class="widget-head">✅ Asistencia prom. (mes)</div><div class="stat-num">${Number(d.asistencia.promedio)}</div><div class="small" style="color:var(--primary)">${Number(d.asistencia.reuniones)} reunión(es) · ver detalle ›</div></button>
       <button type="button" class="btn-plano widget" onclick="obTesoreria(${Number(id)})"><div class="widget-head">💰 Balance del mes</div><div class="stat-num" style="color:${d.tesoreria.balanceMes>=0?'var(--green-tx)':'var(--red-tx)'}">${money(d.tesoreria.balanceMes)}</div><div class="small" style="color:var(--primary)">Saldo total ${money(d.tesoreria.saldoTotal)} · ver movimientos ›</div></button>
     </div>
     ${card('💰 Tesorería del mes', `<div class="muted small">↑ Ingresos <b style="color:var(--green-tx)">${money(d.tesoreria.ingresosMes)}</b> · ↓ Gastos <b style="color:var(--red-tx)">${money(d.tesoreria.gastosMes)}</b> · Balance <b>${money(d.tesoreria.balanceMes)}</b></div><button class="btn ghost small-btn" style="margin-top:10px" onclick="obTesoreria(${Number(id)})">Ver movimientos ›</button>`)}
-    ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${escHtml(e.grupo||'')} · ${escHtml(e.estado)}</div></div><span class="estado-chip">✅ ${e.asistencia}</span></div>`, 'Sin eventos este mes.'))}
+    ${card('📅 Eventos del mes', lista(d.eventosMes, e=>`<div class="item-card flex">${chipFecha(e.fecha)}<div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div><div class="muted small">${escHtml(e.grupo||'')} · ${escHtml(e.estado)}</div></div><span class="estado-chip">✅ ${Number(e.asistencia)}</span></div>`, 'Sin eventos este mes.'))}
     ${card('📖 Prédicas del mes', lista(d.predicasMes, p=>`<button type="button" class="btn-plano item-card flex" onclick="obPredica(${p.id})">${chipFecha(p.fecha||'')}<div style="flex:1"><b>${escHtml(p.titulo)}</b><div class="muted small">${escHtml(p.predicador||'')}</div></div><span class="muted" style="font-size:18px">›</span></button>`, 'Sin prédicas este mes.'))}
     <div class="widgets" style="margin-bottom:16px">
-      <div class="widget"><div class="widget-head">📢 Anuncios (mes)</div><div class="stat-num">${d.anunciosMes}</div></div>
-      <div class="widget"><div class="widget-head">❤️ Casos de cuidado abiertos</div><div class="stat-num">${d.cuidado.casosAbiertos}</div></div>
-      <div class="widget"><div class="widget-head">👶 Niños / clases</div><div class="stat-num">${d.ninos.ninos}</div><div class="muted small">${d.ninos.clases} clase(s)</div></div>
+      <div class="widget"><div class="widget-head">📢 Anuncios (mes)</div><div class="stat-num">${Number(d.anunciosMes)}</div></div>
+      <div class="widget"><div class="widget-head">❤️ Casos de cuidado abiertos</div><div class="stat-num">${Number(d.cuidado.casosAbiertos)}</div></div>
+      <div class="widget"><div class="widget-head">👶 Niños / clases</div><div class="stat-num">${Number(d.ninos.ninos)}</div><div class="muted small">${Number(d.ninos.clases)} clase(s)</div></div>
     </div>
-    ${card('🧩 Grupos', lista(d.grupos, g=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(g.nombre)}</b></div><span class="estado-chip">👥 ${g.miembros}</span></div>`, 'Sin grupos.'))}
+    ${card('🧩 Grupos', lista(d.grupos, g=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(g.nombre)}</b></div><span class="estado-chip">👥 ${Number(g.miembros)}</span></div>`, 'Sin grupos.'))}
     ${card('⭐ Líderes', lista(d.lideres, l=>`<div class="item-card flex"><div style="flex:1"><b>${escHtml(l.nombre)}</b><div class="muted small">${escHtml(rolLabel(l.rol||''))} · ${escHtml(l.grupo)}</div></div></div>`, 'Sin líderes.'))}`;
 }
 // --- Modal genérico de detalle (drill-down del obispo) ---
@@ -4199,7 +4199,7 @@ async function saCargarLista(){
           <div style="flex:1">
             <b>${escHtml(ig.nombre)}</b>
             <span class="estado-chip ${activa?'estado-aceptado':'estado-rechazado'}" style="margin-top:0;margin-left:6px;vertical-align:middle">${activa?'Activa':'Desactivada'}</span>
-            <div class="muted small">Código: <code>${escHtml(codigo)}</code> · Pastor: ${escHtml(ig.pastor||'—')} · ${ig.miembros||0} miembro(s)</div>
+            <div class="muted small">Código: <code>${escHtml(codigo)}</code> · Pastor: ${escHtml(ig.pastor||'—')} · ${Number(ig.miembros)||0} miembro(s)</div>
           </div>
           <button class="btn ghost small-btn" onclick="saCopiar('${escHtml(codigo)}')">📋 Copiar</button>
         </div>
@@ -4275,7 +4275,7 @@ async function saCargarPersistencia(){
     if(transitorio&&_persIntentos<PERS_REINTENTOS_MAX){
       _persIntentos++;
       c.innerHTML+=`<div class="muted small" style="margin-top:6px">⏳ Comprobando de nuevo en
-        ${PERS_REINTENTO_MS/1000} s (intento ${_persIntentos} de ${PERS_REINTENTOS_MAX})…</div>`;
+        ${Number(PERS_REINTENTO_MS/1000)} s (intento ${Number(_persIntentos)} de ${Number(PERS_REINTENTOS_MAX)})…</div>`;
       _persTimer=setTimeout(saCargarPersistencia,PERS_REINTENTO_MS);
     }else if(transitorio){
       // Agotados los reintentos y sigue "arrancando": eso ya NO es el arranque
@@ -4372,14 +4372,14 @@ function saEliminarIglesia(id){
   const ig=SA_IGLESIAS.find(i=>i.id===id); if(!ig) return;
   const miembros=ig.miembros||0, eventos=ig.eventos||0;
   modalConfirm(
-    `Vas a eliminar <b>${escHtml(ig.nombre)}</b>: <b>${miembros}</b> miembro(s), <b>${eventos}</b> evento(s), y toda su tesorería, mensajes, niños y archivos subidos.<br><br><b>Esto NO se puede deshacer.</b>`,
+    `Vas a eliminar <b>${escHtml(ig.nombre)}</b>: <b>${Number(miembros)}</b> miembro(s), <b>${Number(eventos)}</b> evento(s), y toda su tesorería, mensajes, niños y archivos subidos.<br><br><b>Esto NO se puede deshacer.</b>`,
     ()=>{
       modalConfirm(
         `¿De verdad quieres eliminar <b>${escHtml(ig.nombre)}</b>? Esta acción es <b>definitiva</b>.`,
         async()=>{
           try{
             const r=await api('/superadmin/iglesias/'+id,{method:'DELETE'});
-            toast('🗑️ Iglesia eliminada'+((r&&r.archivos_borrados)?` (${r.archivos_borrados} archivo(s))`:''));
+            toast('🗑️ Iglesia eliminada'+((r&&r.archivos_borrados)?` (${Number(r.archivos_borrados)} archivo(s))`:''));
             saCargarLista();
           }catch(e){ toast((e&&e.message)||'No se pudo eliminar'); }
         },
@@ -4786,7 +4786,7 @@ const Chat = {
       el.className='chat-item'+(c.no_leidos?' no-leido':'')+(c.id===this.convActual?' sel':'');
       el.innerHTML=`<div class="ci-titulo">${escHtml(c.titulo||'(sin nombre)')}</div>
         <div class="ci-ultimo">${escHtml(c.ultimo?c.ultimo.texto||'':'Sin mensajes todavía')}</div>
-        ${c.no_leidos?`<span class="badge">${c.no_leidos}</span>`:''}`;
+        ${c.no_leidos?`<span class="badge">${Number(c.no_leidos)}</span>`:''}`;
       el.onclick=()=>this.abrirConversacion(c.id, c.titulo);
       cont.appendChild(el);
     }
@@ -4954,7 +4954,7 @@ async function vistaOrganizacion(){
       const fecha = h.evento_fecha || h.fecha;
       return `<button type="button" class="btn-plano item-card flex" style="margin-top:10px" onclick="Org.abrir(${h.id},'organizacion')">
         <div style="flex:1"><div class="item-titulo">${escHtml(titulo)}</div>
-          <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''} · ${h.n_cosas||0} cosa(s)</div></div>
+          <div class="muted small">${h.evento_id?'📅 De un evento':'📝 Lista suelta'}${fecha?' · '+fechaTxt(fecha):''} · ${Number(h.n_cosas)||0} cosa(s)</div></div>
         <div style="text-align:right"><b>${money(h.total_gastado)}</b><div class="muted small">gastado</div></div>
       </button>`;
     }).join('') : '<p class="muted small">Aún no hay listas. Crea una con "Nueva lista".</p>';
@@ -5046,7 +5046,7 @@ const Org = {
         : `<button class="link org-sin-asignar" onclick="Org.asignar(${x.id})">👤 Asignar</button><span class="org-firma"></span>`;
       return `<div class="org-row">
         <label class="org-check"><input type="checkbox" ${x.listo?'checked':''} ${ed?'':'disabled'} onchange="Org.toggleCosa(${x.id}, this.checked)">
-          <span class="${x.listo?'org-listo':''}">${escHtml(x.nombre)} <b>×${x.cantidad}</b></span></label>
+          <span class="${x.listo?'org-listo':''}">${escHtml(x.nombre)} <b>×${Number(x.cantidad)}</b></span></label>
         <div class="org-quien">${ed?quien:(x.responsable_nombre?'👤 '+escHtml(x.responsable_nombre):'')}</div>
         ${ed?`<button class="link icon-only" style="color:var(--red-tx)" aria-label="Quitar ${escHtml(x.nombre)}" onclick="Org.borrarCosa(${x.id})">✕</button>`:''}
       </div>`;
