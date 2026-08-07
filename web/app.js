@@ -1153,11 +1153,12 @@ function verDia(fecha){
     return `<div class="item-card flex" style="margin-top:10px;border-left:4px solid ${safeColor(e.grupo_color)}">
       <div style="flex:1"><div class="item-titulo">${escHtml(e.titulo)}</div>
         <div class="muted small">${e.grupo?'🏷️ '+escHtml(e.grupo):''}${e.hora_inicio?' · 🕐 '+e.hora_inicio+(e.hora_fin?'–'+e.hora_fin:''):''}${e.lugar?' · 📍 '+escHtml(e.lugar):''}</div>
-        <div style="margin-top:6px">${badge}</div></div>
+        <div style="margin-top:6px">${badge}${e.serie_id?' <span class="estado-chip">🔁 se repite cada semana</span>':''}</div></div>
       ${(puede||puedeBorrar||puedePublicar())?`<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
         ${puedePublicar()?`<button class="link" onclick="Org.abrirEvento(${e.id})">🗒️ Organización</button>`:''}
         ${puede?`<button class="link" onclick="editarEvento(${e.id})">✏️ Editar</button>`:''}
         ${puedeBorrar?`<button class="link" style="color:var(--red-tx)" onclick="borrarEvento(${e.id})">🗑️ Borrar</button>`:''}
+        ${(e.serie_id&&ME.persona.es_pastor)?`<button class="link" style="color:var(--red-tx)" onclick="borrarSerie(${Number(e.serie_id)},${escJsAttr(e.fecha)})">🔁 Borrar esta y las siguientes</button>`:''}
       </div>`:''}</div>`;
   }).join('');
   cont.innerHTML=`<div class="card" style="margin-top:16px">${inner}</div>`;
@@ -1202,24 +1203,42 @@ function toggleFormEvento(ev){
     <div class="row" style="margin-top:10px"><div style="flex:1"><label for="ev-ini">Hora inicio</label><input id="ev-ini" type="time" value="${ev&&ev.hora_inicio?escHtml(ev.hora_inicio):''}" /></div>
       <div style="flex:1"><label for="ev-fin">Hora fin</label><input id="ev-fin" type="time" value="${ev&&ev.hora_fin?escHtml(ev.hora_fin):''}" /></div></div>
     <label for="ev-lugar">Lugar</label><input id="ev-lugar" value="${ev?escHtml(ev.lugar):''}" placeholder="Ej. Salón principal" />
+    ${(!ev && esPastorUI)?`<label class="small" style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer">
+      <input type="checkbox" id="ev-repetir"/> 🔁 Repetir todas las semanas (los próximos 3 meses; después se extiende sola)</label>`:''}
     <p id="ev-error" class="error"></p>
     <button class="btn" style="margin-top:14px" onclick="guardarEvento()">${ev?'Guardar cambios':(esPastorUI?'Crear evento':'📩 Enviar al pastor')}</button></div>`;
 }
 function editarEvento(id){ const ev=(window._eventos||[]).find(e=>e.id===id); if(ev) toggleFormEvento(ev); }
 function borrarEvento(id){ modalConfirm('¿Eliminar este evento? No se puede deshacer.', async()=>{
   try{ await api('/eventos/'+id,{method:'DELETE'}); cargarEventos(); toast('Evento eliminado'); }catch(e){ toast(e.message); } }); }
+// Tanda H: termina la serie desde esta fecha. Las pasadas quedan como
+// historia; la serie se apaga y la extensión automática no la resucita.
+function borrarSerie(serieId, desde){
+  modalConfirm('¿Borrar este evento y TODAS sus fechas siguientes? La serie se termina y no se puede deshacer. Las fechas pasadas quedan como historia.', async()=>{
+    try{
+      const r=await api('/eventos/serie/'+serieId+'?desde='+encodeURIComponent(desde),{method:'DELETE'});
+      toast(`🗑️ Serie terminada: ${Number(r.borrados)} fecha(s) borradas`);
+      cargarEventos();
+    }catch(e){ toast(e.message); }
+  }, {okLabel:'Sí, borrar la serie', danger:true});
+}
 async function guardarEvento(){
   const fecha=fechaSelectValor('ev');
   const body={grupo_id:$('ev-grupo').value,titulo:$('ev-titulo').value.trim(),fecha,
     hora_inicio:$('ev-ini').value,hora_fin:$('ev-fin').value,lugar:$('ev-lugar').value.trim()};
   const e=$('ev-error'); e.textContent='';
   if(!body.titulo){ e.textContent='Pon al menos el título'; return; }
+  // La casilla solo existe al CREAR y siendo pastor (ver toggleFormEvento):
+  // un PATCH nunca la manda, y el servidor igual la rechazaria de un lider.
+  const rep=$('ev-repetir');
+  if(!window._editEvId && rep && rep.checked) body.repetir_semanal=true;
   await conBoton(botonActual(), async()=>{
     try{
       if(window._editEvId){ await api('/eventos/'+window._editEvId,{method:'PATCH',body:JSON.stringify(body)}); toast('Evento actualizado'); }
       else {
         const r=await api('/eventos',{method:'POST',body:JSON.stringify(body)});
-        toast(r.estado==='pendiente' ? '📨 Enviado · pendiente de aprobación del pastor' : '✅ Evento creado y aprobado');
+        toast(r.creados ? `🔁 Serie creada: ${Number(r.creados)} fechas en el calendario`
+          : r.estado==='pendiente' ? '📨 Enviado · pendiente de aprobación del pastor' : '✅ Evento creado y aprobado');
       }
       window._editEvId=null; $('form-zona').innerHTML=''; cargarEventos();
     } catch(ex){ e.textContent=ex.message; }

@@ -10,13 +10,65 @@ import {
 } from './auth.js';
 import { enviarPush } from './push.js';
 import { validar } from './seguridad.js';
+import { fechaLocal } from './fechas.js';
 
 const r = Router();
 r.use(authMiddleware);
 
+// Aritmetica de fechas de calendario en UTC PURO sobre la cadena YYYY-MM-DD:
+// la T00:00:00Z fija el mediodia... no: fija medianoche UTC, y como solo se
+// suman dias enteros y se recorta a los 10 primeros caracteres, la zona
+// horaria del proceso no toca nada (la trampa de las cinco fechas, ver
+// reportes.js:21-29 antes de tocar esto).
+function sumarDias(f, n) {
+  const d = new Date(f + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+const HORIZONTE_DIAS = 90;   // una serie llega hasta 3 meses adelante...
+const UMBRAL_DIAS = 45;      // ...y se extiende cuando le queda menos que esto.
+
+// Extension automatica (tanda H): al abrir el calendario, toda serie ACTIVA
+// de la iglesia cuyo ultimo evento quede a menos de hoy+45 gana semanas hasta
+// hoy+90, copiando su ultimo evento (titulo, horas, lugar, grupo). Los
+// choques de lugar/hora se saltan, igual que al crear la serie. Una serie
+// activa sin ningun evento (los borraron uno a uno) se apaga: no queda de
+// donde copiar. La lapida activa=0 es lo que impide resucitar una serie que
+// el pastor borro "desde aqui en adelante".
+function extenderSeries(iglesiaId) {
+  const hoy = fechaLocal();
+  const umbral = sumarDias(hoy, UMBRAL_DIAS);
+  const tope = sumarDias(hoy, HORIZONTE_DIAS);
+  const series = db.prepare(
+    `SELECT s.id, MAX(e.fecha) AS ultima FROM serie s
+       LEFT JOIN evento e ON e.serie_id = s.id
+      WHERE s.iglesia_id = ? AND s.activa = 1 GROUP BY s.id`
+  ).all(iglesiaId);
+  for (const s of series) {
+    if (!s.ultima) { db.prepare('UPDATE serie SET activa = 0 WHERE id = ?').run(s.id); continue; }
+    if (s.ultima >= umbral) continue;
+    const p = db.prepare('SELECT * FROM evento WHERE serie_id = ? ORDER BY fecha DESC LIMIT 1').get(s.id);
+    db.exec('BEGIN');
+    try {
+      for (let f = sumarDias(s.ultima, 7); f <= tope; f = sumarDias(f, 7)) {
+        if (detectarChoque(iglesiaId, f, p.lugar, p.hora_inicio, p.hora_fin)) continue;
+        db.prepare(
+          `INSERT INTO evento (iglesia_id, grupo_id, titulo, fecha, hora_inicio, hora_fin, lugar, descripcion, estado, creado_por, serie_id)
+           VALUES (?,?,?,?,?,?,?,?,'aprobado',?,?)`
+        ).run(iglesiaId, p.grupo_id, p.titulo, f, p.hora_inicio, p.hora_fin, p.lugar, p.descripcion, p.creado_por, s.id);
+      }
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      console.error('[eventos] extender serie fallo:', e);
+    }
+  }
+}
+
 // --- Listar eventos (segun lo que el usuario puede ver) ---
 r.get('/', (req, res) => {
   const { persona_id, iglesia_id } = req.user;
+  extenderSeries(iglesia_id);
   let eventos;
   if (veCalendarioCompleto(persona_id)) {
     // Lideres/pastor: ven TODO el calendario de su iglesia
@@ -61,7 +113,10 @@ const crearEventoSchema = z.object({
   hora_inicio: horaSchema,
   hora_fin: horaSchema,
   lugar: z.string().trim().optional(),
-  descripcion: z.string().trim().optional()
+  descripcion: z.string().trim().optional(),
+  // Tanda H: "todos los domingos". Solo semanal, solo el pastor (se comprueba
+  // en la ruta: el schema no sabe quien pregunta).
+  repetir_semanal: z.boolean().optional()
 });
 // El grupo tiene que ser de TU iglesia. esAdminDeGrupo() no lo comprueba: le
 // dice que si a cualquier pastor sea cual sea el grupo, asi que sin esto un
@@ -93,6 +148,39 @@ r.post('/', validar(crearEventoSchema), (req, res) => {
 
   if (!puedeUsarGrupo(persona_id, grupo_id, iglesia_id))
     return res.status(403).json({ error: 'No tienes permiso para crear eventos en ese grupo' });
+
+  // Serie semanal (tanda H): SOLO el pastor, y nace aprobada como todo lo
+  // suyo. Se materializan las fechas hasta hoy+90 en una transaccion; la
+  // semana cuyo lugar/hora ya esta ocupado SE SALTA y las demas se crean (la
+  // respuesta dice cuantas). serie.activa=1 queda como el interruptor que la
+  // extension automatica respeta.
+  if (req.body.repetir_semanal === true) {
+    if (!esPastor(persona_id))
+      return res.status(403).json({ error: 'Solo el pastor puede crear eventos que se repiten' });
+    const tope = sumarDias(fechaLocal(), HORIZONTE_DIAS);
+    let creados = 0, serieId;
+    db.exec('BEGIN');
+    try {
+      serieId = Number(db.prepare('INSERT INTO serie (iglesia_id) VALUES (?)').run(iglesia_id).lastInsertRowid);
+      const ins = db.prepare(
+        `INSERT INTO evento (iglesia_id, grupo_id, titulo, fecha, hora_inicio, hora_fin, lugar, descripcion, estado, creado_por, serie_id)
+         VALUES (?,?,?,?,?,?,?,?,'aprobado',?,?)`
+      );
+      for (let f = fecha; f <= tope; f = sumarDias(f, 7)) {
+        if (detectarChoque(iglesia_id, f, lugar, hora_inicio, hora_fin)) continue;
+        ins.run(iglesia_id, grupo_id, titulo, f, hora_inicio || null, hora_fin || null,
+          lugar || null, descripcion || null, persona_id, serieId);
+        creados++;
+      }
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      console.error('[eventos] crear serie fallo:', e);
+      return res.status(500).json({ error: 'No se pudo crear la serie' });
+    }
+    auditar(iglesia_id, persona_id, 'crear_serie', 'calendario', `${titulo} (${creados} fecha(s))`);
+    return res.json({ ok: true, serie_id: serieId, creados });
+  }
 
   const choque = detectarChoque(iglesia_id, fecha, lugar, hora_inicio, hora_fin);
   if (choque)
@@ -279,6 +367,28 @@ r.patch('/:id', validar(editarEventoSchema), (req, res) => {
 });
 
 // --- Eliminar evento ---
+// La cascada completa de UN evento: 6 tablas hijas, el bosquejo desvinculado,
+// la solicitud de aprobacion, la hoja de organizacion (cosas + gastos + hoja)
+// y el propio evento. SIN transaccion propia a proposito: el que llama pone
+// el BEGIN — el borrado suelto envuelve un evento; el de serie, todos los
+// suyos, para que "borrar esta y las siguientes" no pueda quedar a medias.
+function borrarEventoEnCascada(ev) {
+  db.prepare('DELETE FROM asignacion WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM asistencia WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM setlist_item WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM equipo_musica WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM ensayo WHERE evento_id=?').run(ev.id);
+  // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
+  db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
+  limpiarSolicitud(ev);   // quita la notificación "Revisar y aprobar" si seguía activa
+  // Hoja de organizacion del evento: cosas + gastos + la hoja. Va antes del
+  // DELETE del evento porque evento_org.evento_id lo referencia.
+  db.prepare('DELETE FROM evento_org_cosa  WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
+  db.prepare('DELETE FROM evento_org_gasto WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
+  db.prepare('DELETE FROM evento_org WHERE evento_id=?').run(ev.id);
+  db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
+}
+
 r.delete('/:id', (req, res) => {
   const { persona_id, iglesia_id } = req.user;
   const ev = db.prepare('SELECT * FROM evento WHERE id = ? AND iglesia_id = ?').get(req.params.id, iglesia_id);
@@ -287,22 +397,12 @@ r.delete('/:id', (req, res) => {
   // Borra 6 tablas hijas + evento en una sola transaccion: si algo falla a
   // mitad de camino, no debe quedar el evento a medio borrar (huerfanos en
   // unas tablas si o si no en otras). Patron identico al de cuenta.js /eliminar.
+  // Ojo: borrar UNA fecha de una serie NO la apaga — el feriado suelto no
+  // mata el culto de todas las semanas (y si borran todas una a una, la
+  // extension automatica apaga la serie al verla vacia).
   db.exec('BEGIN');
   try {
-    db.prepare('DELETE FROM asignacion WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM asistencia WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM setlist_item WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM equipo_musica WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM ensayo WHERE evento_id=?').run(ev.id);
-    // El bosquejo del sermón puede vivir sin evento: lo desvinculamos (no lo borramos).
-    db.prepare('UPDATE sermon SET evento_id=NULL WHERE evento_id=?').run(ev.id);
-    limpiarSolicitud(ev);   // quita la notificación "Revisar y aprobar" si seguía activa
-    // Hoja de organizacion del evento: cosas + gastos + la hoja. Va antes del
-    // DELETE del evento porque evento_org.evento_id lo referencia.
-    db.prepare('DELETE FROM evento_org_cosa  WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
-    db.prepare('DELETE FROM evento_org_gasto WHERE org_id IN (SELECT id FROM evento_org WHERE evento_id=?)').run(ev.id);
-    db.prepare('DELETE FROM evento_org WHERE evento_id=?').run(ev.id);
-    db.prepare('DELETE FROM evento WHERE id=?').run(ev.id);
+    borrarEventoEnCascada(ev);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -311,6 +411,38 @@ r.delete('/:id', (req, res) => {
   }
   auditar(iglesia_id, persona_id, 'eliminar_evento', 'calendario', ev.titulo);
   res.json({ ok: true });
+});
+
+// "Borrar esta y las siguientes" (tanda H): apaga la serie (activa=0, la
+// lapida que la extension automatica respeta) y borra sus eventos con
+// fecha >= desde, cada uno con la MISMA cascada del borrado suelto, todo en
+// una transaccion. Las fechas pasadas quedan como historia.
+r.delete('/serie/:serieId', (req, res) => {
+  const { persona_id, iglesia_id } = req.user;
+  if (!esPastor(persona_id))
+    return res.status(403).json({ error: 'Solo el pastor puede borrar una serie' });
+  // Acotada por iglesia en la MISMA consulta; 404 y no 403 (no se confirma
+  // que la serie exista en otra congregacion).
+  const s = db.prepare('SELECT * FROM serie WHERE id = ? AND iglesia_id = ?')
+    .get(Number(req.params.serieId), iglesia_id);
+  if (!s) return res.status(404).json({ error: 'Serie no encontrada' });
+
+  const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.desde || '')) ? String(req.query.desde) : fechaLocal();
+  const evs = db.prepare('SELECT * FROM evento WHERE serie_id = ? AND iglesia_id = ? AND fecha >= ?')
+    .all(s.id, iglesia_id, desde);
+  db.exec('BEGIN');
+  try {
+    for (const ev of evs) borrarEventoEnCascada(ev);
+    db.prepare('UPDATE serie SET activa = 0 WHERE id = ?').run(s.id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    console.error('[eventos] borrar serie fallo:', e);
+    return res.status(500).json({ error: 'No se pudo borrar la serie' });
+  }
+  auditar(iglesia_id, persona_id, 'eliminar_serie', 'calendario',
+    `${evs.length ? evs[0].titulo : ''} (${evs.length} fecha(s) desde ${desde})`);
+  res.json({ ok: true, borrados: evs.length });
 });
 
 export default r;

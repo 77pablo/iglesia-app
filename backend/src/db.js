@@ -703,6 +703,30 @@ export function migrarQuitarRecurso(conexion = db) {
 }
 migrarQuitarRecurso();
 
+// SERIE (tanda H): el estado de un "todos los domingos". Los eventos de una
+// serie son filas REALES de evento (evento.serie_id) — asignaciones, musica y
+// organizacion siguen colgando de eventos concretos sin enterarse. Esta tabla
+// existe para que "borrar la serie" y la extension automatica no se
+// contradigan: activa=0 es la lapida que impide que el calendario resucite lo
+// que el pastor mato.
+db.exec(`CREATE TABLE IF NOT EXISTS serie (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  iglesia_id INTEGER NOT NULL REFERENCES iglesia(id),
+  activa     INTEGER NOT NULL DEFAULT 1
+)`);
+agregarColumna('evento', 'serie_id', 'INTEGER');
+
+// FECHA_NO_DISP.repetir: nacio con la tabla y nadie la escribio NUNCA (cero
+// INSERT en toda la historia del repo — el mismo criterio con el que se fue
+// la tabla recurso el 5-ago). "No puedo servir los martes" queda fuera de la
+// tanda H a proposito; si algun dia se construye, sera con su propio diseño,
+// no con una columna muerta. Guarda explicita: DROP COLUMN no es idempotente.
+export function migrarQuitarRepetir(conexion = db) {
+  const existe = conexion.prepare('PRAGMA table_info(fecha_no_disp)').all().some(c => c.name === 'repetir');
+  if (existe) conexion.exec('ALTER TABLE fecha_no_disp DROP COLUMN repetir');
+}
+migrarQuitarRepetir();
+
 // Cuando se cerro la campania (NULL = activa). Una campania cerrada ya no
 // admite aportes; no se borra, para no perder el historial de para que se junto.
 agregarColumna('campania', 'cerrada_en', 'TEXT');
