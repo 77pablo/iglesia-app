@@ -147,7 +147,13 @@ async function api(path, opts={}){
     const data = await r.json().catch(()=>({}));
     if(r.status===401 && teniaToken){ _sesionCaducada(); throw new Error(ERR_SESION); }
     if(r.status===429) throw new Error('Estás yendo muy rápido. Espera un momento y vuelve a intentarlo.');
-    if(!r.ok) throw new Error(data.error||'No se pudo completar la acción. Inténtalo otra vez.');
+    if(!r.ok){
+      // El status viaja en el error: hay manejadores que necesitan distinguir
+      // un 409 ("recarga y reintenta") de cualquier otro fallo (cabo 3).
+      const err=new Error(data.error||'No se pudo completar la acción. Inténtalo otra vez.');
+      err.status=r.status;
+      throw err;
+    }
     return data;
   } finally { if(soltar) soltar(); }
 }
@@ -5127,6 +5133,7 @@ const Org = {
     Org._pagador='';           // ...ni arrastra el pagador de la correccion anterior
     Org._fuente='devuelve';    // ...ni la fuente elegida antes de repintar
     Org._origenTocado=false;   // ...ni la marca de "esto lo eligio una persona"
+    Org._visto=null;           // ...ni la instantanea del ✏️ anterior (cabo 3)
     if(origen && ORG_ORIGEN[origen]) Org._origen=origen;
     const volver=ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion;
     const ed=!!h.puede_editar;
@@ -5420,6 +5427,7 @@ const Org = {
     }, {danger:true});
   },
   _gastoEditando:null,
+  _visto:null,
   // Quien puso el dinero, segun el formulario: '' = yo · 'caja' = la caja ·
   // 'sin' = no se sabe (no tocarlo) · null = no se pudo determinar (no tocarlo)
   // · un id = esa persona. Es lo que manda guardarGasto: NO se relee del DOM.
@@ -5444,6 +5452,10 @@ const Org = {
     const g=(Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===id); if(!g) return;
     Org._gastoEditando=id;
     Org._origenTocado=false;   // empieza limpia: nadie ha tocado el origen todavia
+    // Cabo 3: lo que la pantalla esta mostrando AHORA, para que el backend
+    // detecte si otro lo cambia mientras el ✏️ esta abierto. Se captura de la
+    // fila (la misma verdad que pinta el formulario), no del DOM.
+    Org._visto={concepto:g.concepto, monto:g.monto, fuente:g.fuente??null, pagado_por:g.pagado_por??null};
     $('org-gasto-concepto').value=g.concepto;
     $('org-gasto-monto').value=g.monto;
     // Un gasto de los antiguos (sin fuente y sin pagador) NO se puede pintar
@@ -5464,6 +5476,7 @@ const Org = {
   },
   cancelarEdicionGasto(){
     Org._gastoEditando=null;
+    Org._visto=null;
     Org._pagador='';                  // un gasto NUEVO lo pone quien lo registra
     Org._origenTocado=false;
     Org._opcionSinRegistrar(false);   // no debe quedar disponible para un gasto NUEVO
@@ -5511,6 +5524,7 @@ const Org = {
         cuerpo.pagado_por = quien?Number(quien):ME.persona.id;
       }
     }
+    if(id && Org._visto) cuerpo.visto=Org._visto;
     await conBoton(botonActual(), async()=>{
       try{
         if(id) await api('/organizacion/gastos/'+id,{method:'PATCH',body:JSON.stringify(cuerpo)});
@@ -5518,7 +5532,17 @@ const Org = {
         Org.cancelarEdicionGasto();
         Org._recargar();
         toast(id?'Gasto corregido':'Gasto añadido');
-      }catch(e){ toast((e&&e.message)||'No se pudo guardar'); }
+      }catch(e){
+        if(e&&e.status===409){
+          // Otro corrigio este gasto con el ✏️ abierto. No se fusiona nada:
+          // se cierra la edicion y se recarga la hoja para mirar lo nuevo.
+          toast((e&&e.message)||'Recarga la hoja');
+          Org.cancelarEdicionGasto();
+          Org._recargar();
+          return;
+        }
+        toast((e&&e.message)||'No se pudo guardar');
+      }
     });
   },
   // Un gasto lleva el monto y quién puso el dinero: es el registro con el que se
