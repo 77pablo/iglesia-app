@@ -36,7 +36,32 @@ r.get('/resumen', (req, res) => {
   // equivocado) si no se ajusta antes de agrupar por mes.
   const ingMes = sum(ig, "AND tipo = 'ingreso' AND strftime('%Y-%m', fecha) = strftime('%Y-%m','now','localtime')");
   const gasMes = sum(ig, "AND tipo = 'gasto'   AND strftime('%Y-%m', fecha) = strftime('%Y-%m','now','localtime')");
-  res.json({ saldo: ing - gas, ingMes, gasMes, balanceMes: ingMes - gasMes });
+
+  // Rendicion (Camino C, 7-ago): lo que la caja pago en los eventos TAMBIEN
+  // es plata que salio de la iglesia, y el saldo tiene que decirlo. Se lee
+  // CALCULADO desde las hojas de Organizacion (la leccion de campañas: un
+  // solo dato, sin copias que sincronizar). SOLO fuente='caja' descuenta:
+  // 'aporte' fue voluntario, 'devuelve' no ha salido de la caja (y la
+  // iglesia no devuelve — decision del dueño), y NULL es "no se sabe".
+  const orgCaja = db.prepare(
+    `SELECT COALESCE(SUM(g.monto),0) AS n FROM evento_org_gasto g
+       JOIN evento_org o ON o.id = g.org_id
+      WHERE o.iglesia_id = ? AND g.fuente = 'caja'`
+  ).get(ig).n;
+  // El mes de un gasto de evento es el de su hoja (o el del evento de la
+  // hoja); sin ninguna fecha, el creado_en del gasto convertido a hora local
+  // (creado_en es UTC — ver reportes.js:21-29 antes de tocar fechas).
+  const orgCajaMes = db.prepare(
+    `SELECT COALESCE(SUM(g.monto),0) AS n FROM evento_org_gasto g
+       JOIN evento_org o ON o.id = g.org_id
+       LEFT JOIN evento e ON e.id = o.evento_id
+      WHERE o.iglesia_id = ? AND g.fuente = 'caja'
+        AND strftime('%Y-%m', COALESCE(o.fecha, e.fecha, datetime(g.creado_en,'localtime'))) = strftime('%Y-%m','now','localtime')`
+  ).get(ig).n;
+
+  // gasMes sigue siendo SOLO el libro (nada de mezclar peras con manzanas en
+  // un numero ya publicado): la linea nueva viaja aparte.
+  res.json({ saldo: ing - gas - orgCaja, ingMes, gasMes, balanceMes: ingMes - gasMes, gastosEventosMes: orgCajaMes });
 });
 
 // --- Movimientos (paginados; ?offset=0 -> devuelve hayMas para "ver más") ---
@@ -289,6 +314,37 @@ r.delete('/campanias/:id/aportes/:movId', soloTesorero, limiterSensible, (req, r
   res.json({ ok: true });
 });
 
+// --- Gastos de eventos (Camino C): el libro los LEE de las hojas ---
+// Agrupado por hoja, de la mas nueva a la mas vieja. Se corrigen en su hoja
+// (su casa); aqui son de lectura, siempre al dia porque no hay copia.
+r.get('/gastos-eventos', (req, res) => {
+  const ig = req.user.iglesia_id;
+  const LIMIT = 20;
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  const hojas = db.prepare(
+    `SELECT o.id, COALESCE(o.titulo, e.titulo, 'Lista') AS titulo,
+            COALESCE(o.fecha, e.fecha) AS fecha, o.evento_id
+       FROM evento_org o
+       LEFT JOIN evento e ON e.id = o.evento_id
+      WHERE o.iglesia_id = ?
+        AND EXISTS (SELECT 1 FROM evento_org_gasto g WHERE g.org_id = o.id)
+      ORDER BY COALESCE(o.fecha, e.fecha) DESC, o.id DESC
+      LIMIT ? OFFSET ?`
+  ).all(ig, LIMIT + 1, offset);
+  const hayMas = hojas.length > LIMIT;
+  const items = (hayMas ? hojas.slice(0, LIMIT) : hojas).map(h => ({
+    ...h,
+    // LEFT JOIN persona: el pagador anonimizado sale "Usuario eliminado" por
+    // su propia fila; sin fila, null (la pantalla pinta el generico).
+    gastos: db.prepare(
+      `SELECT g.id, g.concepto, g.monto, g.fuente, p.nombre AS pagado_por_nombre
+         FROM evento_org_gasto g LEFT JOIN persona p ON p.id = g.pagado_por
+        WHERE g.org_id = ? ORDER BY g.id`
+    ).all(h.id)
+  }));
+  res.json({ items, hayMas, offset });
+});
+
 // --- Transparencia (resumen sin datos personales) ---
 r.get('/transparencia', (req, res) => {
   const ig = req.user.iglesia_id;
@@ -300,7 +356,14 @@ r.get('/transparencia', (req, res) => {
   const porCategoria = db.prepare(
     "SELECT COALESCE(categoria,'otro') AS categoria, SUM(monto) AS monto FROM movimiento WHERE iglesia_id = ? AND tipo = 'gasto' GROUP BY COALESCE(categoria,'otro') ORDER BY monto DESC"
   ).all(ig);
-  res.json({ recaudado, gastado, saldo: recaudado - gastado, porCategoria });
+  // La misma verdad que el resumen (Camino C): lo que la caja pago en los
+  // eventos tambien salio de la iglesia, y la transparencia lo dice.
+  const gastosEventos = db.prepare(
+    `SELECT COALESCE(SUM(g.monto),0) AS n FROM evento_org_gasto g
+       JOIN evento_org o ON o.id = g.org_id
+      WHERE o.iglesia_id = ? AND g.fuente = 'caja'`
+  ).get(ig).n;
+  res.json({ recaudado, gastado, saldo: recaudado - gastado - gastosEventos, porCategoria, gastosEventos });
 });
 
 export default r;
