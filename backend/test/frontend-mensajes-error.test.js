@@ -38,6 +38,11 @@ function recortar(nombre) {
 }
 
 // Monta api() con una red de mentira y un navegador de mentira.
+//
+// El candado de los botones (_tomarBoton) se recorta REAL, no se simula: solo
+// entra en juego con POST/PATCH/PUT/DELETE, y sin el la primera prueba que
+// mandara algo distinto de un GET reventaria con un ReferenceError. Lo unico
+// simulado es botonActual(), que lee el `event` del navegador y aqui no hay.
 function montar({ responde, lanza, conToken = true, appVisible = true } = {}) {
   const estado = { toasts: [], recargas: 0, guardado: conToken ? 'tok-123' : null };
   const localStorage = {
@@ -58,12 +63,13 @@ function montar({ responde, lanza, conToken = true, appVisible = true } = {}) {
     };
   };
   const pushCortarDispositivoFn = () => {}; // fire-and-forget, nunca falla
-  const src = ['ERR_CONEXION', 'ERR_SESION', '_avisandoSesion', '_sesionCaducada', 'api']
+  const botonActual = () => null;           // no hay `event` ni DOM en esta prueba
+  const src = ['ERR_CONEXION', 'ERR_SESION', '_avisandoSesion', '_sesionCaducada', '_enVuelo', '_tomarBoton', 'api']
     .map(recortar).join('\n');
   const api = new Function(
-    'API', 'token', 'fetch', 'localStorage', '$', 'toast', 'location', 'setTimeout', 'pushCortarDispositivo',
+    'API', 'token', 'fetch', 'localStorage', '$', 'toast', 'location', 'setTimeout', 'pushCortarDispositivo', 'botonActual',
     `${src}\nreturn api;`
-  )('/api', () => estado.guardado, fetch, localStorage, $, toast, location, setTimeout_, pushCortarDispositivoFn);
+  )('/api', () => estado.guardado, fetch, localStorage, $, toast, location, setTimeout_, pushCortarDispositivoFn, botonActual);
   return { api, estado };
 }
 
@@ -120,6 +126,41 @@ test('los errores que el backend SI escribe bien se respetan tal cual', async ()
   // movimientos"). Esta funcion no puede taparlos con uno generico.
   const { api } = montar({ responde: { status: 403, cuerpo: { error: 'Solo el pastor puede administrar usuarios y roles.' } } });
   assert.equal(await mensaje(() => api('/admin/datos')), 'Solo el pastor puede administrar usuarios y roles.');
+});
+
+// El error que sale de api() no solo se LEE: hay un manejador que necesita
+// distinguir un choque de ediciones (dos personas corrigiendo el mismo gasto)
+// de cualquier otro fallo, y lo unico que se lo dice es `e.status`. Sin esta
+// prueba se podia borrar la linea `err.status=r.status` y la suite entera
+// seguia verde: guardarGasto se iba por el `catch` generico y el aviso pasaba
+// a ser "No se pudo guardar" — un fallo mudo, de los que solo se descubren con
+// dos personas y una hoja de verdad.
+test('un choque de ediciones llega con su codigo puesto, no solo con su texto', async () => {
+  const { api } = montar({
+    responde: { status: 409, cuerpo: { error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' } }
+  });
+  try {
+    await api('/organizacion/gastos/9', { method: 'PATCH', body: '{}' });
+    assert.fail('deberia haber lanzado');
+  } catch (e) {
+    assert.equal(e.status, 409, 'sin el codigo, la pantalla no puede distinguir este caso de un fallo cualquiera');
+    assert.equal(e.message, 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja');
+  }
+});
+
+test('los errores corrientes tambien traen su codigo (no es un apaño solo para el 409)', async () => {
+  const { api } = montar({ responde: { status: 500, sinCuerpo: true } });
+  try { await api('/me'); assert.fail('deberia haber lanzado'); }
+  catch (e) { assert.equal(e.status, 500); }
+});
+
+// Los dos errores que NO llevan codigo, porque se lanzan antes: quien escriba
+// un manejador nuevo tiene que poder ver aqui donde acaba la garantia.
+test('la sesion vencida y el limite de peticiones se lanzan sin codigo', async () => {
+  const sinSesion = montar({ responde: { status: 401, cuerpo: {} } });
+  try { await sinSesion.api('/me'); } catch (e) { assert.equal(e.status, undefined); }
+  const rapido = montar({ responde: { status: 429, cuerpo: {} } });
+  try { await rapido.api('/me'); } catch (e) { assert.equal(e.status, undefined); }
 });
 
 test('cuando todo va bien, devuelve los datos y no molesta', async () => {

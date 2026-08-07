@@ -46,7 +46,11 @@ function logAprobacion(actorId, actorNombre) {
 test('PATCH /api/directorio/perfil: corrige el propio nombre', async () => {
   const res = await corregirPropio(SEM.miembro1, 'Juan Pérez');
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { ok: true });
+  const data = await res.json();
+  assert.equal(data.ok, true);
+  // Desde la Tarea 2 (Cabo 2 de agosto): cuando el nombre cambia,
+  // responde los conteos de apariciones (incluso aunque sean 0).
+  assert.deepEqual(data.apariciones, { ninos: 0, predicas: 0 });
 
   const fila = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(SEM.miembro1.id);
   assert.equal(fila.nombre, 'Juan Pérez');

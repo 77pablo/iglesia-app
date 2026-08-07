@@ -407,11 +407,13 @@ r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
   const esCaja = req.body.fuente === 'caja';
   const quienPago = esCaja ? null : (req.body.pagado_por ?? req.user.persona_id);
   if (quienPago != null) {
-    // Solo gente de la misma iglesia: atribuirle un pago a un tercero de otra
-    // congregacion no significa nada y ensucia el resumen de a quien devolver.
-    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?')
+    // Solo gente de la misma iglesia Y activa: atribuirle un pago a un tercero
+    // de otra congregacion no significa nada, y a una cuenta dada de baja
+    // tampoco — un gasto NUEVO no puede nacer a nombre de quien ya no esta
+    // (el responsable de la hoja exige lo mismo, linea ~342).
+    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1')
       .get(quienPago, req.user.iglesia_id);
-    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
   }
   const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por, fuente) VALUES (?,?,?,?,?)')
     .run(org.id, req.body.concepto, req.body.monto, quienPago, req.body.fuente || null);
@@ -428,7 +430,17 @@ const editarGastoSchema = z.object({
   // MISMO mensaje que gastoSchema (Task 2): no puede contener la palabra
   // "fuente", que es el nombre tecnico del campo. validar() compone
   // "Datos invalidos: " + este texto y se lo suelta tal cual a la persona.
-  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional()
+  fuente: z.enum(FUENTES_GASTO, { error: 'el origen del gasto no es válido' }).optional(),
+  // Cabo 3: la instantanea de lo que la pantalla mostraba al abrir el ✏️.
+  // Opcional a proposito: un app.js viejo no la manda y el PATCH sigue
+  // funcionando (backend y frontend pueden no desplegarse juntos). Sin
+  // coerce: la construye nuestro propio codigo, no un formulario.
+  visto: z.object({
+    concepto: z.string(),
+    monto: z.number(),
+    fuente: z.enum(FUENTES_GASTO).nullable(),
+    pagado_por: z.number().int().nullable()
+  }).optional()
 });
 r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // Acotado por iglesia en la MISMA consulta: es el fallo que ya se colo una
@@ -443,6 +455,17 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' });
   const org = hojaEditable(req, res, gasto.org_id);   // valida permiso (403); iglesia ya validada arriba
   if (!org) return;
+
+  // Cabo 3: si la pantalla mando lo que estaba viendo y ya no coincide con lo
+  // guardado, otro corrigio este gasto en el medio (la hoja queda abierta
+  // durante todo el almuerzo). No se aplica nada: 409 y a recargar. NULL es un
+  // valor mas ("no se sabe quien puso" tambien se puede pisar).
+  const visto = req.body.visto;
+  if (visto && (visto.concepto !== gasto.concepto
+             || visto.monto !== gasto.monto
+             || visto.fuente !== gasto.fuente
+             || visto.pagado_por !== gasto.pagado_por))
+    return res.status(409).json({ error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' });
 
   const concepto = req.body.concepto ?? gasto.concepto;
   const monto = req.body.monto ?? gasto.monto;
@@ -468,8 +491,15 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
     if (pagadoPor == null) return res.status(400).json({ error: 'Elige quien puso el dinero, o marca que pago la caja' });
   }
   if (pagadoPor != null) {
-    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?').get(pagadoPor, req.user.iglesia_id);
+    const p = db.prepare('SELECT id, activo FROM persona WHERE id = ? AND iglesia_id = ?')
+      .get(pagadoPor, req.user.iglesia_id);
     if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+    // Activa solo se exige si la atribucion CAMBIA: el gasto historico de
+    // alguien que se dio de baja tiene que poder corregir su concepto o su
+    // monto sin que la app obligue a quitarle la atribucion (misma filosofia
+    // del PATCH parcial que gobierna fuente/pagado_por).
+    if (pagadoPor !== gasto.pagado_por && !p.activo)
+      return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
   }
 
   // El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo

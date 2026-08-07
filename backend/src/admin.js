@@ -9,6 +9,7 @@ import { z } from 'zod';
 import db from './db.js';
 import { authMiddleware, esPastor, hashPassword, auditar, generarPasswordTemporal } from './auth.js';
 import { validar } from './seguridad.js';
+import { aparicionesDeNombre } from './apariciones-nombre.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -204,10 +205,14 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   // Se compara contra el nombre que ya habia (`p` se leyo ANTES del UPDATE):
   // reenviar el mismo nombre no es una correccion, y anotarlo dejaria en el
   // rastro un `Juan Perez → Juan Perez` que afirma un cambio que nadie hizo.
+  let apariciones = null;
   if (typeof nombre === 'string' && nombre !== p.nombre) {
     db.prepare('UPDATE persona SET nombre = ? WHERE id = ?').run(nombre, p.id);
     db.prepare('UPDATE aprobacion_log SET actor_nombre = ? WHERE actor_id = ?').run(nombre, p.id);
     auditar(ig, yo, 'corregir_nombre_usuario', 'admin', `${p.nombre} → ${nombre}`);
+    // Cabo 2, version asistida: el pastor recibe el DETALLE (que fichas, ya
+    // las ve en la app) para corregir a mano donde corresponda.
+    apariciones = aparicionesDeNombre(p.nombre, ig);
   }
   // El 'editar_usuario' generico solo tiene sentido cuando de verdad se tocó
   // activo/es_pastor: si el PATCH solo traía nombre, ya quedó auditado arriba
@@ -216,7 +221,7 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
   if (typeof activo === 'boolean' || typeof es_pastor === 'boolean') {
     auditar(ig, yo, 'editar_usuario', 'admin', `${p.nombre}`);
   }
-  res.json({ ok: true });
+  res.json(apariciones ? { ok: true, apariciones } : { ok: true });
 });
 
 // --- Restablecer la contrasena de un miembro (clave TEMPORAL) ---

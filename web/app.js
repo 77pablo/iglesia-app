@@ -147,7 +147,13 @@ async function api(path, opts={}){
     const data = await r.json().catch(()=>({}));
     if(r.status===401 && teniaToken){ _sesionCaducada(); throw new Error(ERR_SESION); }
     if(r.status===429) throw new Error('Estás yendo muy rápido. Espera un momento y vuelve a intentarlo.');
-    if(!r.ok) throw new Error(data.error||'No se pudo completar la acción. Inténtalo otra vez.');
+    if(!r.ok){
+      // El status viaja en el error: hay manejadores que necesitan distinguir
+      // un 409 ("recarga y reintenta") de cualquier otro fallo (cabo 3).
+      const err=new Error(data.error||'No se pudo completar la acción. Inténtalo otra vez.');
+      err.status=r.status;
+      throw err;
+    }
     return data;
   } finally { if(soltar) soltar(); }
 }
@@ -3781,10 +3787,26 @@ async function guardarPerfilDirectorio(){
   await conBoton(botonActual(), async()=>{
     try{
       if(file) body.foto_url=await uploadArchivo(file);
-      await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
+      const resp=await api('/directorio/perfil',{method:'PATCH',body:JSON.stringify(body)});
       if(ME.persona){ ME.persona.nombre=body.nombre; pintarUsuarioLateral(); }
       toast('✅ Perfil actualizado');
       vistaDirectorio();
+      // Cabo 2: si el nombre cambio y el viejo sigue escrito en textos libres
+      // (lista de retiro de un nino, predicas), avisar. Solo CONTEOS: el
+      // backend no manda fichas al autoservicio, a proposito.
+      const a=resp&&resp.apariciones;
+      if(a&&(a.ninos>0||a.predicas>0)){
+        // La guarda es un OR, asi que el texto tambien: nombrar los dos lados
+        // siempre decia "en 0 ficha(s) de niños (…) y 2 prédica(s)" en los dos
+        // casos de un solo lado, que son los probables. Un cero ahi no informa
+        // de nada y hace dudar del numero de al lado.
+        //
+        // Tres ternarios (un trozo, la "y", el otro trozo), el mismo patron que
+        // el aviso del pastor de adminCorregirNombre: cada rama es un template
+        // literal completo con Number() sobre el contador, que es una forma que
+        // el barrido XSS del cuerpo reconoce sin excepciones.
+        modalAviso(`Tu nombre anterior sigue escrito en ${a.ninos>0?`${Number(a.ninos)} ficha(s) de niños (lista de quién puede retirarlos)`:''}${a.ninos>0&&a.predicas>0?' y ':''}${a.predicas>0?`${Number(a.predicas)} prédica(s)`:''}. Pídele a tu maestra o al pastor que lo actualicen donde corresponda.`,'Tu nombre aparece en otros lugares');
+      }
     }catch(e){ toast(e.message); }
   }, file?'Subiendo foto…':'Guardando…');
 }
@@ -3818,6 +3840,16 @@ function modalConfirm(msg, onYes, opts){
     <button class="${okClase}" id="cf-ok">${okLabel}</button></div></div></div>`;
   root.classList.add('show');
   $('cf-ok').onclick=()=>{ cerrarModal(); onYes(); };
+}
+// Informativo puro: un solo boton. msg llega YA escapado por el llamador
+// (misma convencion que modalConfirm). Existe porque toast() dura 2.8s y hay
+// avisos que la persona necesita LEER (donde sigue escrito su nombre viejo).
+function modalAviso(msg, titulo){
+  const root=$('modal-root');
+  root.innerHTML=`<div class="modal-bg"><div class="modal"><h3>${escHtml(titulo||'Aviso')}</h3>
+    <p class="muted" style="margin:8px 0 16px">${msg}</p>
+    <div class="row"><button class="btn" onclick="cerrarModal()">Entendido</button></div></div></div>`;
+  root.classList.add('show');
 }
 // Hermano de modalConfirm, pero con un campo de texto: sustituye a prompt(), que
 // abre una ventanita gris del sistema, sin el tipo de letra ni los colores de la
@@ -4165,12 +4197,24 @@ function adminCorregirNombre(id){
   // pantalla entera en vez de no hacer nada.
   const d=window._admin; const u=(d&&d.usuarios||[]).find(x=>x.id===id); if(!u) return;
   modalPrompt(`Nuevo nombre para <b>${escHtml(u.nombre)}</b>.`, async(nombre)=>{
-    try{ await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({nombre})});
+    try{ const resp=await api('/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({nombre})});
       // Este boton tambien sale sobre la propia fila del pastor: si se corrige
       // a si mismo, el pie de la barra lateral tiene que repintarse igual que
       // desde "Mi perfil".
       if(ME.persona&&ME.persona.id===id){ ME.persona.nombre=nombre; pintarUsuarioLateral(); }
-      toast('✅ Nombre corregido'); vistaAdmin(); }
+      toast('✅ Nombre corregido'); vistaAdmin();
+      // Cabo 2, detalle para el pastor: que fichas siguen diciendo el nombre
+      // viejo. La app no reescribe textos libres; el pastor corrige a mano.
+      const a=resp&&resp.apariciones;
+      if(a&&(a.ninos.length||a.predicas>0)){
+        // Une "fichas de niños" y "prédicas" con una "y" solo si hay ambas.
+        // Escrito como tres interpolaciones ternarias (no un array armado a
+        // mano con partes.push/partes.join) porque el barrido XSS del cuerpo
+        // no puede demostrar que ese array solo contenga texto ya escapado;
+        // cada rama de acá sí es una forma que el barrido reconoce (mapJoin
+        // o template literal completo).
+        modalAviso(`El nombre anterior sigue escrito en: ${a.ninos.length?a.ninos.map(n=>`la ficha de <b>${escHtml(n.nombre)}</b> (autorizados para retirarlo)`).join(', '):''}${a.ninos.length&&a.predicas>0?' y ':''}${a.predicas>0?`${Number(a.predicas)} prédica(s)`:''}. Corrígelo a mano donde corresponda.`,'El nombre viejo sigue escrito');
+      } }
     catch(e){ toast(e.message); }
   }, {titulo:'Corregir nombre', placeholder:'Nombre completo', valor:u.nombre, okLabel:'Guardar'});
 }
@@ -5074,9 +5118,25 @@ const Org = {
   },
   // Abre una hoja por id. `origen` solo se pasa al ENTRAR: las recargas de la
   // propia hoja (añadir una cosa, un gasto) lo omiten y conservan el de entrada.
-  async abrir(id, origen){
-    try{ const h=await api('/organizacion/'+id); Org._render(h, origen); }
-    catch(e){ toast((e&&e.message)||'No se pudo abrir'); }
+  //
+  // Devuelve si lo consiguió (true) o no (false), sin dejar de avisar por su
+  // cuenta como hacía siempre. Los cuatro llamantes que solo abren una hoja
+  // ignoran ese valor y no notan nada; quien lo necesita es _recargar, porque
+  // tras un choque de ediciones quedarse con la hoja vieja en pantalla ya no es
+  // inocuo (ver guardarGasto). Se devuelve un booleano en vez de propagar la
+  // excepción justo para no cambiarles el contrato a los demás: un
+  // `Org.abrir(...)` suelto en un onclick pasaría a ser una promesa rechazada
+  // que nadie escucha.
+  //
+  // `silencioso` apaga SOLO ese aviso propio (sigue contestando si lo consiguió).
+  // Lo pide quien mira el valor devuelto y da su propio aviso, más concreto:
+  // hoy, guardarGasto tras un choque de ediciones. Sin esto salen dos avisos
+  // apilados —delante el genérico ("Sin conexión") y detrás el único que dice
+  // qué hacer—, y el de arriba tapa al que sirve. Los demás llamantes no lo
+  // pasan y siguen avisando igual que siempre: son los que no miran el resultado.
+  async abrir(id, origen, silencioso){
+    try{ const h=await api('/organizacion/'+id); Org._render(h, origen); return true; }
+    catch(e){ if(!silencioso) toast((e&&e.message)||'No se pudo abrir'); return false; }
   },
   _origen:'organizacion',
   volver(){ (ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion).ir(); },
@@ -5098,6 +5158,7 @@ const Org = {
     Org._pagador='';           // ...ni arrastra el pagador de la correccion anterior
     Org._fuente='devuelve';    // ...ni la fuente elegida antes de repintar
     Org._origenTocado=false;   // ...ni la marca de "esto lo eligio una persona"
+    Org._visto=null;           // ...ni la instantanea del ✏️ anterior (cabo 3)
     if(origen && ORG_ORIGEN[origen]) Org._origen=origen;
     const volver=ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion;
     const ed=!!h.puede_editar;
@@ -5366,7 +5427,10 @@ const Org = {
     }else if(!mostrar && ya){ ya.remove(); }
   },
   _personas:null,
-  _recargar(){ if(Org._hoja) Org.abrir(Org._hoja.id); },
+  // Relee la hoja abierta y la repinta. Devuelve la promesa de si lo consiguió,
+  // para quien necesite esperarla: los seis llamantes que solo repintan tras un
+  // cambio propio la siguen ignorando y se comportan igual que antes.
+  _recargar(silencioso){ return Org._hoja ? Org.abrir(Org._hoja.id, undefined, silencioso) : Promise.resolve(false); },
   async addCosa(){
     const nombre=$('org-cosa-nombre').value.trim(); const cantidad=Number($('org-cosa-cant').value)||1;
     if(!nombre) return toast('Escribe qué llevar');
@@ -5391,6 +5455,7 @@ const Org = {
     }, {danger:true});
   },
   _gastoEditando:null,
+  _visto:null,
   // Quien puso el dinero, segun el formulario: '' = yo · 'caja' = la caja ·
   // 'sin' = no se sabe (no tocarlo) · null = no se pudo determinar (no tocarlo)
   // · un id = esa persona. Es lo que manda guardarGasto: NO se relee del DOM.
@@ -5415,6 +5480,10 @@ const Org = {
     const g=(Org._hoja&&Org._hoja.gastos||[]).find(x=>x.id===id); if(!g) return;
     Org._gastoEditando=id;
     Org._origenTocado=false;   // empieza limpia: nadie ha tocado el origen todavia
+    // Cabo 3: lo que la pantalla esta mostrando AHORA, para que el backend
+    // detecte si otro lo cambia mientras el ✏️ esta abierto. Se captura de la
+    // fila (la misma verdad que pinta el formulario), no del DOM.
+    Org._visto={concepto:g.concepto, monto:g.monto, fuente:g.fuente??null, pagado_por:g.pagado_por??null};
     $('org-gasto-concepto').value=g.concepto;
     $('org-gasto-monto').value=g.monto;
     // Un gasto de los antiguos (sin fuente y sin pagador) NO se puede pintar
@@ -5435,6 +5504,7 @@ const Org = {
   },
   cancelarEdicionGasto(){
     Org._gastoEditando=null;
+    Org._visto=null;
     Org._pagador='';                  // un gasto NUEVO lo pone quien lo registra
     Org._origenTocado=false;
     Org._opcionSinRegistrar(false);   // no debe quedar disponible para un gasto NUEVO
@@ -5482,14 +5552,88 @@ const Org = {
         cuerpo.pagado_por = quien?Number(quien):ME.persona.id;
       }
     }
+    if(id && Org._visto) cuerpo.visto=Org._visto;
     await conBoton(botonActual(), async()=>{
       try{
         if(id) await api('/organizacion/gastos/'+id,{method:'PATCH',body:JSON.stringify(cuerpo)});
         else   await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)});
         Org.cancelarEdicionGasto();
-        Org._recargar();
-        toast(id?'Gasto corregido':'Gasto añadido');
-      }catch(e){ toast((e&&e.message)||'No se pudo guardar'); }
+        // Se ESPERA la recarga (el bloque del 409 de abajo ya lo hacia; este
+        // no). Mientras el GET viaja, Org._hoja sigue siendo la hoja de ANTES
+        // de la correccion: sin el await, el boton se reactiva y el ✏️ vuelve a
+        // ser clicable en ese hueco, y la instantanea que capture sera la
+        // caduca. Con el await, conBoton lo mantiene apagado hasta que la hoja
+        // este repintada.
+        const alDia=await Org._recargar(true);
+        // Y si el GET falla, el hueco no se cierra solo: Org._hoja se queda con
+        // la fila vieja para siempre, el proximo ✏️ manda esa instantanea, el
+        // backend la compara con la fila que uno MISMO acaba de actualizar y
+        // responde 409 — "Otra persona cambió este gasto", acusando a un
+        // compañero de lo propio y borrando lo tecleado. Un "Gasto corregido" a
+        // secas afirma justo lo contrario de lo que pasa. Silenciosa (true) por
+        // lo mismo que el bloque del 409: el aviso de aqui ya lo dice todo, y
+        // el "Sin conexión" generico de abrir solo lo taparia.
+        if(alDia) toast(id?'Gasto corregido':'Gasto añadido');
+        else modalAviso(id
+          ? 'Tu corrección sí se guardó, pero la hoja no se pudo actualizar. Recarga la página antes de seguir corrigiendo gastos.'
+          : 'El gasto sí se anotó, pero la hoja no se pudo actualizar. Recarga la página antes de seguir.',
+          id?'Corrección guardada':'Gasto anotado');
+      }catch(e){
+        // El 409 solo puede darse en una CORRECCION (id puesto): es el backend
+        // detectando que la instantanea `visto` ya no coincide con la fila
+        // guardada, y `visto` solo viaja en el PATCH. Un ALTA (POST, sin id) no
+        // manda `visto` y hoy no puede chocar por esta via; sin el `id&&` de
+        // aqui, el aviso de mas abajo ("Otra persona cambió este gasto") saldria
+        // en un alta donde no hay ningun gasto previo que haya podido cambiar.
+        if(id && e&&e.status===409){
+          // Otro corrigio este gasto con el ✏️ abierto. No se fusiona nada: se
+          // cierra la edicion y se relee la hoja para mirar lo nuevo. Cerrarla
+          // VACIA el formulario, asi que lo que la persona acababa de teclear
+          // desaparece de la pantalla: si el aviso no lo dice, se queda creyendo
+          // que guardo.
+          Org.cancelarEdicionGasto();
+          // Se ESPERA la recarga, y se mira si funciono. Si el GET tambien falla
+          // (datos moviles), Org._hoja se queda con la version vieja: el ✏️
+          // siguiente captura otra instantanea caduca, vuelve a chocar y vuelve a
+          // borrar lo tecleado, indefinidamente. La unica salida es recargar la
+          // pagina, y desde dentro eso no se distingue de la mala suerte: hay que
+          // decirlo.
+          // Silenciosa a propósito: si el GET también falla, el catch de `abrir`
+          // soltaría su "Sin conexión" genérico justo delante del aviso de aquí
+          // abajo, que es el único que dice qué hacer. Dos avisos apilados de
+          // 2,8 s, y el que sirve debajo.
+          const alDia=await Org._recargar(true);
+          // El mensaje NO es el del backend: aquel manda "recarga la hoja", y
+          // para cuando esto se lee la hoja ya se releyo sola — la persona
+          // recargaria el navegador sin necesidad, o se quedaria esperando a
+          // hacer algo que ya esta hecho.
+          //
+          // Tampoco basta con decir "vuelve a escribirla": para cuando se lee
+          // esto, cancelarEdicionGasto() ya vacio el formulario y _render lo
+          // repinto como el de un gasto NUEVO (boton "Añadir"). Quien tecleara
+          // ahi la correccion crearia un gasto duplicado en vez de corregir el
+          // que choco. Hay que nombrar el paso que falta: abrir el ✏️ de ese
+          // gasto otra vez.
+          // Y va por modalAviso, no por toast: un toast dura 2,8 s y se emite
+          // en el mismo instante en que la hoja se repinta sola debajo de la
+          // persona y el formulario se vacia. Quien levante la vista un segundo
+          // se encuentra la pantalla cambiada, su correccion perdida y ningun
+          // mensaje — y el formulario que tiene delante es el de ALTA, asi que
+          // volver a teclear ahi crea un gasto DUPLICADO: justo lo que todo
+          // este bloque existe para evitar. El arreglo depende por completo de
+          // que el aviso se lea, y modalAviso es lo que la app tiene escrito
+          // para "avisos que la persona necesita LEER".
+          //
+          // Los dos textos son literales sin interpolacion: no hay dato de
+          // nadie que escapar (modalAviso mete el mensaje crudo en innerHTML).
+          modalAviso(alDia
+            ? 'Otra persona cambió este gasto. Tu corrección no se guardó: abre el ✏️ de ese gasto y corrígelo de nuevo.'
+            : 'Tu corrección no se guardó y la hoja no se pudo actualizar. Recarga la página y vuelve a intentarlo.',
+            'Tu corrección no se guardó');
+          return;
+        }
+        toast((e&&e.message)||'No se pudo guardar');
+      }
     });
   },
   // Un gasto lleva el monto y quién puso el dinero: es el registro con el que se
