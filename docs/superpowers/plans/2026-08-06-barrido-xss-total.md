@@ -35,7 +35,7 @@ este plan registra lo ejecutado y deja anotada la deuda.
 - [x] Merge `--no-ff` a `main`, borrar rama, suite sobre la fusión.
 
 ## 🔥 Deuda que deja esta tanda (para quemar por lotes)
-- **135 firmas en `PENDIENTES` de `xss-cuerpo.test.js`** (eran 199; lote 1: 36 con `Number()` + excepciones verificadas; lote 2: 28 con la regla `mapJoin` — `.map(flecha-template u ayudante).join(literal)` es contenedor, con autocomprobación de que la flecha que devuelve crudo NO pasa). Lote sugerido:
+- ✅ **QUEMADA ENTERA el mismo 6-ago (lotes 1-3): `PENDIENTES` quedó VACÍA y así se queda.** Lote 1: 36 (Number() + 25 excepciones); lote 2: 28 (regla `mapJoin`); lote 3: las 135 restantes — ~36 arreglos en código (escHtml en horas y nombres, Number() en contadores, `ME.iglesia.nombre` iba crudo en el saludo), reglas nuevas (paréntesis, flecha-que-llama-ayudante, destructuring en mapJoin), 7 ayudantes más verificados, y ~88 excepciones con motivo tras leer cada sitio. Todo sitio vive en una de tres casas: reglas mecánicas, ayudantes verificados, o excepciones con motivo y zombie-check. Lote sugerido:
   20-30 firmas por tanda — verificar el sitio (¿el dato puede venir de una
   persona?), arreglar con escHtml/Number o anotar el motivo si se promueve a
   regla/ayudante, y BORRAR la firma. La suite obliga a borrar firmas cuyo
