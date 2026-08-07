@@ -407,11 +407,13 @@ r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
   const esCaja = req.body.fuente === 'caja';
   const quienPago = esCaja ? null : (req.body.pagado_por ?? req.user.persona_id);
   if (quienPago != null) {
-    // Solo gente de la misma iglesia: atribuirle un pago a un tercero de otra
-    // congregacion no significa nada y ensucia el resumen de a quien devolver.
-    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?')
+    // Solo gente de la misma iglesia Y activa: atribuirle un pago a un tercero
+    // de otra congregacion no significa nada, y a una cuenta dada de baja
+    // tampoco — un gasto NUEVO no puede nacer a nombre de quien ya no esta
+    // (el responsable de la hoja exige lo mismo, linea ~342).
+    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1')
       .get(quienPago, req.user.iglesia_id);
-    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
   }
   const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por, fuente) VALUES (?,?,?,?,?)')
     .run(org.id, req.body.concepto, req.body.monto, quienPago, req.body.fuente || null);
@@ -468,8 +470,15 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
     if (pagadoPor == null) return res.status(400).json({ error: 'Elige quien puso el dinero, o marca que pago la caja' });
   }
   if (pagadoPor != null) {
-    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ?').get(pagadoPor, req.user.iglesia_id);
+    const p = db.prepare('SELECT id, activo FROM persona WHERE id = ? AND iglesia_id = ?')
+      .get(pagadoPor, req.user.iglesia_id);
     if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
+    // Activa solo se exige si la atribucion CAMBIA: el gasto historico de
+    // alguien que se dio de baja tiene que poder corregir su concepto o su
+    // monto sin que la app obligue a quitarle la atribucion (misma filosofia
+    // del PATCH parcial que gobierna fuente/pagado_por).
+    if (pagadoPor !== gasto.pagado_por && !p.activo)
+      return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
   }
 
   // El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo
