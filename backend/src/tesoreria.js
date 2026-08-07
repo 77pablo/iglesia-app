@@ -36,7 +36,32 @@ r.get('/resumen', (req, res) => {
   // equivocado) si no se ajusta antes de agrupar por mes.
   const ingMes = sum(ig, "AND tipo = 'ingreso' AND strftime('%Y-%m', fecha) = strftime('%Y-%m','now','localtime')");
   const gasMes = sum(ig, "AND tipo = 'gasto'   AND strftime('%Y-%m', fecha) = strftime('%Y-%m','now','localtime')");
-  res.json({ saldo: ing - gas, ingMes, gasMes, balanceMes: ingMes - gasMes });
+
+  // Rendicion (Camino C, 7-ago): lo que la caja pago en los eventos TAMBIEN
+  // es plata que salio de la iglesia, y el saldo tiene que decirlo. Se lee
+  // CALCULADO desde las hojas de Organizacion (la leccion de campañas: un
+  // solo dato, sin copias que sincronizar). SOLO fuente='caja' descuenta:
+  // 'aporte' fue voluntario, 'devuelve' no ha salido de la caja (y la
+  // iglesia no devuelve — decision del dueño), y NULL es "no se sabe".
+  const orgCaja = db.prepare(
+    `SELECT COALESCE(SUM(g.monto),0) AS n FROM evento_org_gasto g
+       JOIN evento_org o ON o.id = g.org_id
+      WHERE o.iglesia_id = ? AND g.fuente = 'caja'`
+  ).get(ig).n;
+  // El mes de un gasto de evento es el de su hoja (o el del evento de la
+  // hoja); sin ninguna fecha, el creado_en del gasto convertido a hora local
+  // (creado_en es UTC — ver reportes.js:21-29 antes de tocar fechas).
+  const orgCajaMes = db.prepare(
+    `SELECT COALESCE(SUM(g.monto),0) AS n FROM evento_org_gasto g
+       JOIN evento_org o ON o.id = g.org_id
+       LEFT JOIN evento e ON e.id = o.evento_id
+      WHERE o.iglesia_id = ? AND g.fuente = 'caja'
+        AND strftime('%Y-%m', COALESCE(o.fecha, e.fecha, datetime(g.creado_en,'localtime'))) = strftime('%Y-%m','now','localtime')`
+  ).get(ig).n;
+
+  // gasMes sigue siendo SOLO el libro (nada de mezclar peras con manzanas en
+  // un numero ya publicado): la linea nueva viaja aparte.
+  res.json({ saldo: ing - gas - orgCaja, ingMes, gasMes, balanceMes: ingMes - gasMes, gastosEventosMes: orgCajaMes });
 });
 
 // --- Movimientos (paginados; ?offset=0 -> devuelve hayMas para "ver más") ---
