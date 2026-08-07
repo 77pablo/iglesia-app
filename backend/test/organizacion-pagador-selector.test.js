@@ -205,8 +205,15 @@ test('corregir el concepto de un gasto de alguien DADO DE BAJA no le pasa la deu
   assert.equal(llamadas[0].metodo, 'PATCH');
   // Ni siquiera se nombra al pagador: nadie toco el origen, asi que el PATCH
   // (parcial) deja fuente y pagado_por como estaban. La deuda sigue siendo de
-  // Maria porque no se manda nada sobre ella.
-  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Pan', monto: 5000 });
+  // Maria porque no se manda nada sobre ella. `visto` viaja siempre en una
+  // correccion (cabo 3): es la instantanea de la fila que editarGasto capturo
+  // AL ABRIR el ✏️ (con la Maria dada de baja, no con lo que haya en el
+  // formulario), y el backend la usa para detectar si alguien mas cambio el
+  // gasto mientras el ✏️ seguia abierto.
+  assert.deepEqual(llamadas[0].cuerpo, {
+    concepto: 'Pan', monto: 5000,
+    visto: { concepto: 'Pna', monto: 5000, fuente: 'devuelve', pagado_por: 7 }
+  });
 });
 
 test('si ademas cambia el origen, la deuda del DADO DE BAJA sigue siendo suya (no de quien edita)', async () => {
@@ -243,7 +250,13 @@ test('con /directorio caido, corregir un gasto DE LA CAJA lo deja pagado por la 
   await Org.guardarGasto();
 
   // Sin tocar el origen no se manda: el backend conserva el 'caja' que ya tenia.
-  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Bencina', monto: 20000 });
+  // `visto` es la fila que editarGasto capturo al abrir el ✏️ (con el 'Bencna'
+  // sin corregir, la caja como fuente y sin pagador): el backend la compara con
+  // lo guardado para detectar si otra persona cambio el gasto entretanto.
+  assert.deepEqual(llamadas[0].cuerpo, {
+    concepto: 'Bencina', monto: 20000,
+    visto: { concepto: 'Bencna', monto: 20000, fuente: 'caja', pagado_por: null }
+  });
 
   // Y si ademas se toca el origen, lo que viaja sigue siendo la caja — no una
   // deuda con quien esta corrigiendo.
@@ -264,7 +277,12 @@ test('con /directorio caido, corregir el gasto de una persona no le cambia de du
   assert.equal(Org._pagador, '7', 'con el directorio caido, la opcion inyectada mantiene a Maria');
   await Org.guardarGasto();
 
-  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Pan', monto: 5000 });
+  // `visto` es la fila que editarGasto capturo al abrir el ✏️, antes de la
+  // correccion de ortografia.
+  assert.deepEqual(llamadas[0].cuerpo, {
+    concepto: 'Pan', monto: 5000,
+    visto: { concepto: 'Pna', monto: 5000, fuente: 'devuelve', pagado_por: 7 }
+  });
 });
 
 // --- 3) la carrera con el llenado del selector ----------------------------
@@ -283,8 +301,12 @@ test('tocar ✏️ mientras el directorio viaja no deja el gasto historico en "L
   assert.equal(sel.value, 'sin', 'el directorio no puede pisar la correccion en curso');
   nodos['org-gasto-concepto'].value = 'Carne asada';
   await Org.guardarGasto();
-  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Carne asada', monto: 20000 },
-    'sin fuente ni pagado_por: el backend deja los dos como estaban');
+  // `visto` es la fila (fuente y pagador NULL, el caso de un gasto historico)
+  // que editarGasto capturo al abrir el ✏️, antes de que llegara el directorio.
+  assert.deepEqual(llamadas[0].cuerpo, {
+    concepto: 'Carne asada', monto: 20000,
+    visto: { concepto: 'Carne', monto: 20000, fuente: null, pagado_por: null }
+  }, 'sin fuente ni pagado_por: el backend deja los dos como estaban');
 });
 
 // --- 4) la cuarta puerta: mandar el origen sin que nadie lo haya tocado ----
@@ -311,8 +333,12 @@ test('corregir SOLO el concepto de un gasto historico (fuente NULL) manda concep
   await Org.guardarGasto();
 
   assert.equal(llamadas[0].metodo, 'PATCH');
-  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Pan', monto: 5000 },
-    'sin fuente ni pagado_por: el NULL se conserva y el historial no inventa un cambio de origen');
+  // `visto` es la fila tal como la mostraba la pantalla al abrir el ✏️ (con la
+  // fuente NULL de un gasto historico), no lo que la persona acaba de escribir.
+  assert.deepEqual(llamadas[0].cuerpo, {
+    concepto: 'Pan', monto: 5000,
+    visto: { concepto: 'Pna', monto: 5000, fuente: null, pagado_por: 7 }
+  }, 'sin fuente ni pagado_por: el NULL se conserva y el historial no inventa un cambio de origen');
 });
 
 test('el gasto historico se PINTA como "Se devuelve" pero eso no basta para mandarlo', async () => {
@@ -325,13 +351,24 @@ test('el gasto historico se PINTA como "Se devuelve" pero eso no basta para mand
   assert.equal(nodos['org-gasto-fuente'].value, 'devuelve', 'el desplegable no tiene un tercer estado que dibujar');
   nodos['org-gasto-monto'].value = '21000';
   await Org.guardarGasto();
-  assert.deepEqual(llamadas[0].cuerpo, { concepto: 'Carne', monto: 21000 });
+  // `visto` es la fila real (fuente NULL): lo que se PINTA en el desplegable
+  // ("Se devuelve", porque no hay un tercer estado que dibujar) no es lo que
+  // el backend usa para comparar.
+  assert.deepEqual(llamadas[0].cuerpo, {
+    concepto: 'Carne', monto: 21000,
+    visto: { concepto: 'Carne', monto: 20000, fuente: null, pagado_por: 7 }
+  });
 
-  // Pero en cuanto la persona lo elige de verdad, si viaja.
+  // Pero en cuanto la persona lo elige de verdad, si viaja. El gasto de
+  // Org._hoja no cambio (guardarGasto no lo muta; _recargar es un mock vacio
+  // aqui), asi que el segundo editarGasto(12) captura el mismo `visto`.
   Org.editarGasto(12);
   Org.cambioFuente('devuelve', true);   // el onchange, aunque el valor no cambie
   await Org.guardarGasto();
-  assert.deepEqual(llamadas[1].cuerpo, { concepto: 'Carne', monto: 20000, fuente: 'devuelve', pagado_por: 7 });
+  assert.deepEqual(llamadas[1].cuerpo, {
+    concepto: 'Carne', monto: 20000, fuente: 'devuelve', pagado_por: 7,
+    visto: { concepto: 'Carne', monto: 20000, fuente: null, pagado_por: 7 }
+  });
 });
 
 // --- el rotulo falso "(cuenta inactiva)" sobre alguien activo -------------
