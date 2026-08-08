@@ -242,22 +242,76 @@ test('sin respuesta el lector calla en los dos modos: es el caso legítimo de re
 //  grita) solo cierran el caso mientras NO vuelva a haber un segundo lector:
 //  si alguien re-escribe `a.ninos.length` dentro de un manejador, vuelve el
 //  fallo silencioso de siempre. Esto lo prohibe por escrito.
+//
+//  Compara la linea NORMALIZADA, no la linea tal cual. La primera version
+//  comparaba el texto crudo y se ponia roja porque alguien separase los
+//  argumentos con un espacio o dejase un comentario al final — y encima
+//  acusaba de "hay un segundo lector" a quien solo habia reformateado, que es
+//  la peor forma de fallar: manda al siguiente a buscar un lector que no
+//  existe. Lo que se normaliza es SOLO presentacion (espacios y comentarios
+//  fuera de las comillas); lo que se compara —a quien se llama, que se le pasa
+//  y con que modo— no se toca.
 // ------------------------------------------------------------
+
+// Quita comentarios y espacios de una linea de codigo, respetando las
+// comillas: dentro de un texto, un // es parte del texto y un espacio tambien.
+// (Un /* ... */ repartido en varias lineas no lo entiende, y hoy no hay
+// ninguno en web/app.js; si algun dia lo hay, esta prueba lo dira gritando.)
+function normalizarLinea(linea) {
+  let salida = '';
+  for (let i = 0; i < linea.length; i++) {
+    const c = linea[i];
+    if (c === '"' || c === "'" || c === '`') {
+      let j = i + 1;
+      while (j < linea.length) {
+        if (linea[j] === '\\') { j += 2; continue; }
+        if (linea[j] === c) break;
+        j++;
+      }
+      salida += linea.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if (c === '/' && linea[i + 1] === '/') break;              // comentario al final: fuera
+    if (c === '/' && linea[i + 1] === '*') {
+      const fin = linea.indexOf('*/', i + 2);
+      if (fin === -1) break;
+      i = fin + 1;
+      continue;
+    }
+    if (/\s/.test(c)) continue;                                 // espacios de presentacion: fuera
+    salida += c;
+  }
+  return salida;
+}
+
+test('normalizarLinea solo borra presentación: espacios y comentarios de fuera de las comillas', () => {
+  assert.equal(normalizarLinea("  f( a && b , 'x' );  "), "f(a&&b,'x');");
+  assert.equal(normalizarLinea("f(a,'x'); // ojo con esto"), "f(a,'x');");
+  assert.equal(normalizarLinea("f(a,'x'); /* ojo */"), "f(a,'x');");
+  assert.equal(normalizarLinea("   // linea entera de comentario"), '');
+  assert.equal(normalizarLinea("f('a // b', 'c d');"), "f('a // b','c d');",
+    'dentro de las comillas no se toca nada: ni el // ni los espacios');
+});
+
 test('B1: en web/app.js solo hay UN lector de la respuesta; las pantallas se limitan a pasarla con su modo', () => {
   const sinLector = fuente.replace(AVISO, '');
   const lineas = sinLector.split('\n')
-    .map(l => l.trim())
-    .filter(l => l.includes('apariciones') || l.includes('ninos_n'))
-    .filter(l => !l.startsWith('//'));
+    .map(normalizarLinea)
+    .filter(l => l.includes('apariciones') || l.includes('ninos_n'));
 
   assert.equal(lineas.length, 2,
-    'fuera de avisoNombreViejo la respuesta del aviso solo puede aparecer en las DOS llamadas (Mi perfil y la del pastor):\n' + lineas.join('\n'));
+    'fuera de avisoNombreViejo la respuesta del aviso solo puede aparecer en las DOS llamadas (Mi perfil y la del pastor).\n' +
+    'Lineas encontradas (ya sin espacios ni comentarios, o sea: esto es codigo de verdad, no formato):\n' + lineas.join('\n'));
   const modos = [];
   for (const l of lineas) {
     const m = l.match(/^avisoNombreViejo\(resp&&resp\.apariciones,'(conteo|detalle)'\);$/);
-    assert.ok(m, `esta linea lee la respuesta por su cuenta en vez de pasarsela al lector: ${l}`);
+    assert.ok(m,
+      'esta linea toca la respuesta del aviso sin limitarse a pasarsela al lector (o el lector cambio de nombre).\n' +
+      'No es un problema de formato: la comparacion ya ignora espacios y comentarios.\n' +
+      `Linea normalizada: ${l}`);
     modos.push(m[1]);
   }
   assert.deepEqual(modos.sort(), ['conteo', 'detalle'],
-    'una llamada por pantalla: Mi perfil pide conteo y la del pastor pide detalle');
+    'una llamada por pantalla: Mi perfil pide conteo y la del pastor pide detalle. Si salen dos iguales, hay una pantalla leyendo la respuesta de la otra — que es exactamente el fallo silencioso que este cabo vino a cerrar');
 });
