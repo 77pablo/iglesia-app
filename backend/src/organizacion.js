@@ -82,8 +82,25 @@ function montoTxt(n) {
 // fuente NULL + persona: es el estado de TRANSICION que ya entendia armarHoja
 // antes de esta casilla (ver 'gasto antiguo CON persona pero sin fuente sigue
 // contando como "por devolver"') — se describe igual que 'devuelve'.
-// Acotada por iglesia como el resto de las consultas a persona de este modulo
-// (ver el POST y el PATCH de gastos): pagadoPorId sale de una fila YA guardada,
+// La UNICA forma de mirar a una persona desde este modulo. Siempre acotada por
+// la iglesia de quien pregunta: esa es la linea que aisla a las congregaciones,
+// y escrita a mano en cuatro sitios es una linea que alguien puede olvidar en
+// el quinto.
+//
+// Devuelve la fila TAL CUAL, con su `activo`, y la REGLA se queda en cada
+// llamador, porque las cuatro son distintas:
+//   - responsable de una cosa y pagador de un gasto NUEVO: tiene que estar activa
+//   - pagador de un gasto que se corrige: activa solo si la atribucion cambia
+//   - el rastro de auditoria: solo quiere el nombre
+// Un helper con un booleano para elegir cual de las tres aplicar seria peor que
+// la duplicacion que sustituye.
+function personaDeLaIglesia(personaId, iglesiaId) {
+  return db.prepare('SELECT id, nombre, activo FROM persona WHERE id = ? AND iglesia_id = ?')
+    .get(personaId, iglesiaId);
+}
+
+// Pasa por personaDeLaIglesia, y no por el id a secas, porque aqui importa el
+// acotador por iglesia: pagadoPorId sale de una fila YA guardada,
 // que esta ruta no valida —solo valida lo que entra—, asi que una fila legada
 // con un pagador de otra congregacion pondria el nombre de un desconocido en el
 // rastro de esta iglesia. Hoy ninguna ruta permite crear ese gasto; esto es
@@ -91,8 +108,7 @@ function montoTxt(n) {
 function descOrigenGasto(fuente, pagadoPorId, iglesiaId) {
   if (fuente === 'caja') return 'pagó la caja';
   if (pagadoPorId == null) return 'sin registrar quién puso';
-  const persona = db.prepare('SELECT nombre FROM persona WHERE id = ? AND iglesia_id = ?')
-    .get(pagadoPorId, iglesiaId);
+  const persona = personaDeLaIglesia(pagadoPorId, iglesiaId);
   const nombre = persona ? persona.nombre : 'alguien que ya no está';
   return fuente === 'aporte' ? `aporte de ${nombre}` : `se devuelve a ${nombre}`;
 }
@@ -339,9 +355,8 @@ r.patch('/cosas/:cosaId', validar(editarCosaSchema), (req, res) => {
   // es suelta y no cuelga de ningun grupo, y quien trae la torta a veces no
   // esta en el grupo.
   if (responsable_id != null) {
-    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1')
-      .get(responsable_id, req.user.iglesia_id);
-    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
+    const p = personaDeLaIglesia(responsable_id, req.user.iglesia_id);
+    if (!p || !p.activo) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
   }
 
   const cambiaResponsable = responsable_id !== undefined && responsable_id !== cosa.responsable_id;
@@ -410,10 +425,9 @@ r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
     // Solo gente de la misma iglesia Y activa: atribuirle un pago a un tercero
     // de otra congregacion no significa nada, y a una cuenta dada de baja
     // tampoco — un gasto NUEVO no puede nacer a nombre de quien ya no esta
-    // (el responsable de la hoja exige lo mismo, linea ~342).
-    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1')
-      .get(quienPago, req.user.iglesia_id);
-    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
+    // (el responsable de la hoja exige lo mismo, en el PATCH de las cosas).
+    const p = personaDeLaIglesia(quienPago, req.user.iglesia_id);
+    if (!p || !p.activo) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
   }
   const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por, fuente) VALUES (?,?,?,?,?)')
     .run(org.id, req.body.concepto, req.body.monto, quienPago, req.body.fuente || null);
@@ -491,8 +505,7 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
     if (pagadoPor == null) return res.status(400).json({ error: 'Elige quien puso el dinero, o marca que pago la caja' });
   }
   if (pagadoPor != null) {
-    const p = db.prepare('SELECT id, activo FROM persona WHERE id = ? AND iglesia_id = ?')
-      .get(pagadoPor, req.user.iglesia_id);
+    const p = personaDeLaIglesia(pagadoPor, req.user.iglesia_id);
     if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
     // Activa solo se exige si la atribucion CAMBIA: el gasto historico de
     // alguien que se dio de baja tiene que poder corregir su concepto o su
