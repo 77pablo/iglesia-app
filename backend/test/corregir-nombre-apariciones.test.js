@@ -187,6 +187,61 @@ test('escapar no ciega la busqueda: un nombre con \\ encuentra su propio rastro 
   assert.equal(apariciones.predicas, 2, 'la predica y el sermon con barra, no los senuelos');
 });
 
+// --- Higiene A3: el cruce que faltaba. Corregir el nombre y desactivar la
+// cuenta en el MISMO PATCH. Cada uno por separado ya estaba cubierto; juntos,
+// no — y es justo donde el aviso de "tu nombre sigue escrito en N sitios" se
+// encuentra con la baja de la cuenta.
+function auditoriaDe(S, accion) {
+  return db.prepare('SELECT detalle FROM auditoria WHERE iglesia_id = ? AND accion = ? ORDER BY id')
+    .all(S.iglesiaId, accion);
+}
+
+test('nombre Y activo en el mismo PATCH: se aplican los dos y el aviso sigue llegando', async () => {
+  const b = await servidor();
+  const S = sembrar('AP10');
+  sembrarRastros(S);
+  const res = await fetch(b + `/api/admin/usuarios/${S.rosaId}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(S.pastorId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: 'Rosa Diaz Perez', activo: false })
+  });
+  assert.equal(res.status, 200);
+
+  const fila = db.prepare('SELECT nombre, activo FROM persona WHERE id = ?').get(S.rosaId);
+  assert.equal(fila.nombre, 'Rosa Diaz Perez', 'el nombre se corrigio');
+  assert.equal(fila.activo, 0, 'y la cuenta quedo desactivada: ninguno de los dos se come al otro');
+
+  // Dar de baja la cuenta NO borra el nombre viejo de la ficha del nino ni del
+  // portal: el pastor tiene que seguir viendo donde queda por corregir.
+  const { apariciones } = await res.json();
+  assert.deepEqual(apariciones.ninos.map(n => n.nombre), ['Pedrito']);
+  assert.equal(apariciones.predicas, 2);
+
+  // Los dos rastros, no uno: el detallado del nombre y el generico del cambio
+  // de estado. Se comprueba que ninguno se pierde por venir acompanado.
+  assert.deepEqual(auditoriaDe(S, 'corregir_nombre_usuario').map(a => a.detalle),
+    ['Rosa Diaz → Rosa Diaz Perez']);
+  assert.equal(auditoriaDe(S, 'editar_usuario').length, 1,
+    'el cambio de estado deja su propia linea aunque el PATCH tambien trajera nombre');
+});
+
+test('nombre Y desactivarse a si mismo: 400 y no se aplica NADA, tampoco el nombre', async () => {
+  const b = await servidor();
+  const S = sembrar('AP11');
+  sembrarRastros(S);
+  const res = await fetch(b + `/api/admin/usuarios/${S.pastorId}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(S.pastorId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: 'Pastor Nuevo Nombre', activo: false })
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /No puedes desactivar tu propia cuenta/);
+  const fila = db.prepare('SELECT nombre, activo FROM persona WHERE id = ?').get(S.pastorId);
+  assert.equal(fila.nombre, 'Pastor', 'el PATCH se rechaza entero: el nombre tampoco se toco');
+  assert.equal(fila.activo, 1);
+  assert.equal(auditoriaDe(S, 'corregir_nombre_usuario').length, 0, 'y no queda rastro de un cambio que no ocurrio');
+});
+
 test('asistido: activar/desactivar sin tocar el nombre no trae apariciones', async () => {
   const b = await servidor();
   const S = sembrar('AP6');
