@@ -7,6 +7,13 @@
 //  predicador de una predica o sermon (se ve en el portal). Esta funcion
 //  BUSCA y el llamador AVISA; nadie toca esos textos.
 //
+//  La ficha del nino tiene OTRO texto libre, `familia`, y aqui NO se mira a
+//  proposito: ahi va el apellido de la familia ("Gomez", "Ruiz"), que el
+//  frontend pinta como `Familia ${x.familia}`, no un nombre de persona — y
+//  esta busqueda es un LIKE del nombre COMPLETO viejo, que en un apellido no
+//  cabe. Decidido el 8-ago-2026 (spec de corregir-nombre, seccion 2-bis) y
+//  fijado con un test que se pone rojo si alguien amplia el LIKE.
+//
 //  Limite asumido (spec): es un LIKE por texto. "la sra. Juanita" no se
 //  encuentra (falso negativo) y un tocayo genera un aviso de mas (falso
 //  positivo aceptable: el aviso pide revisar, no afirma). LIKE de SQLite no

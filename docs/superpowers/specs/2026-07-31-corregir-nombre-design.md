@@ -91,6 +91,27 @@ limpia: viene mezclado dentro de una frase (*"🎵 Te toca tocar"*, *"Nuevo rol
 asignado"*), así que "corregirlo" significaría reescribir frases completas en
 docenas de sitios para un beneficio que dura, como mucho, un par de días.
 
+### 2-bis. `nino.familia` — encontrado, fuera de alcance (decidido el 8 ago 2026)
+
+La ficha del niño tiene **dos** textos libres, y esta spec solo razonó sobre
+uno. El que sí entra es `autorizados` (*"Ana (mamá), Carlos (papá)"* —
+se mira en la puerta de la sala). El otro es `familia`, y durante un mes
+quedó sin decidir: ni entre los sitios que se buscan, ni aquí.
+
+**Queda fuera, y el motivo es lo que de verdad se guarda ahí:** `familia` es
+el *apellido* de la familia — `'Gomez'`, `'Ruiz'` en el seed —, y el frontend
+lo pinta como `Familia ${x.familia}` (`web/app.js:3148`), con el `placeholder`
+"Familia" en su campo. No es un nombre de persona. La búsqueda del aviso es un
+`LIKE` del **nombre completo viejo** (*"Rosa Diaz"*), que en un apellido suelto
+no cabe: mirar ahí sería una consulta que casi siempre devuelve cero, y las
+veces que no, sería por un tocayo.
+
+Fijado con un test que se pone rojo si alguien amplía el `LIKE`
+(`corregir-nombre-apariciones.test.js`, *"decidido: el aviso NO mira
+nino.familia"*), verificado por mutación. **Si algún día `familia` pasa a
+usarse para escribir nombres completos de los padres, esta decisión caduca** —
+y el sitio donde mirarlo es el `placeholder` del campo, no esta línea.
+
 ### 3. `auditoria.detalle` — encontrado, fuera de alcance por diseño
 
 Todas las llamadas a `auditar()` que mencionan a una persona lo hacen dentro
