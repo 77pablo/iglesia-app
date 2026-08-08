@@ -62,16 +62,20 @@ const lineas = fuente.split('\n');
 // la siguiente se tragaba el metodo de al lado. Se corta cuando el saldo vuelve
 // a cero HABIENDO abierto al menos una llave, que es lo mismo para los metodos
 // de varias lineas y lo correcto para los de una.
+// Y desde hoy el desbordamiento tampoco pasa callado: si el bucle llega al
+// final del fichero sin que el saldo vuelva a cero, el assert del final lo
+// dice en vez de devolver medio app.js.
 function recortarMetodo(nombre) {
   const i = lineas.findIndex(l => new RegExp(`^  (?:async )?${nombre}\\(`).test(l));
   assert.ok(i >= 0, `no se encontro el metodo ${nombre} en web/app.js`);
-  let saldo = 0, abierta = false;
+  let saldo = 0, abierta = false, cerro = false;
   const trozo = [];
   for (let j = i; j < lineas.length; j++) {
     trozo.push(lineas[j]);
     for (const ch of lineas[j]) { if (ch === '{') { saldo++; abierta = true; } else if (ch === '}') saldo--; }
-    if (abierta && saldo <= 0) break;
+    if (abierta && saldo <= 0) { cerro = true; break; }
   }
+  assert.ok(cerro, `el recorte del metodo ${nombre} llego al final de web/app.js sin cerrar: el saldo de llaves nunca volvio a cero, asi que esto devolveria desde la declaracion hasta el final del fichero. Desbordado no revienta nada y las comprobaciones de abajo -- la invariante de _render la primera -- buscarian su cadena en medio app.js, en verde. Mira si ${nombre} lleva una llave suelta dentro de una plantilla, de una cadena o de un comentario: lo que hay que arreglar es el corte, no la prueba`);
   return trozo.join('\n');
 }
 
