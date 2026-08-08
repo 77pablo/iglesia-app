@@ -334,6 +334,41 @@ const firmaDe = (it) =>
   fuente.slice(Math.max(0, it.inicio - 25), it.inicio).replace(/\s+/g, ' ')
   + '⟨⟩' + it.expr.replace(/\s+/g, ' ');
 
+// ------------------------------------------------------------
+//  IDENTIFICAR, no solo contar (el cabo que ESTADO.md tenia anotado).
+//
+//  El candado de `sitios` cuenta cuantos sitios cubre cada excepcion, y eso
+//  caza que aparezca uno de mas o de menos. Lo que NO caza es la SUSTITUCION:
+//  si de los dos sitios que cubre una excepcion desaparece uno y nace otro en
+//  una funcion distinta, el total sigue siendo 2 y el permiso —que se dio
+//  tras auditar aquel codigo— lo hereda un codigo que nadie miro.
+//
+//  Aqui se anota EN QUE FUNCION vive cada firma. Si un sitio cambia de casa,
+//  el inventario deja de cuadrar y hay que mirarlo.
+// ------------------------------------------------------------
+const lineasApp = fuente.split('\n');
+const RESERVADAS = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'else', 'do', 'try', 'function', 'with']);
+// Un metodo de literal de objeto: dos espacios, nombre, (args) y la llave al
+// final. Exigir la llave al final es lo que distingue una DECLARACION de una
+// llamada como `  $('org-x').onclick=...`; las reservadas se descartan aparte
+// porque `  if (x) {` cumple la misma forma y no es ninguna funcion.
+const RE_METODO = /^ {2}(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{\s*$/;
+const RE_FUNCION = /^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/;
+const RE_CONST = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/;
+
+function funcionDe(nLinea) {
+  for (let j = nLinea - 1; j >= 0; j--) {
+    const l = lineasApp[j];
+    const m = l.match(RE_METODO);
+    if (m && !RESERVADAS.has(m[1])) return m[1];
+    const f = l.match(RE_FUNCION);
+    if (f) return f[1];
+    const c = l.match(RE_CONST);
+    if (c) return c[1];
+  }
+  return '(nivel superior)';
+}
+
 test('las tablas MAYUSCULAS indexadas se declaran con puros literales (condición de la regla tablasMayusculas)', () => {
   const { cuerpo } = clasificarInterpolaciones(fuente);
   const nombres = new Set();
@@ -417,6 +452,64 @@ test('cada excepción del cuerpo cubre exactamente los sitios que declara (una f
   }
   assert.deepEqual(descuadres, [],
     'excepciones cuyo número de sitios no cuadra. Si SOBRAN sitios, hay código nuevo que heredó el permiso de otra función sin que nadie lo auditara: audítalo y nómbralo en el motivo (o dale su propia firma). Si FALTAN, uno de los sitios desapareció: re-audita el que queda antes de bajar el número.\n' + descuadres.join('\n'));
+});
+
+// El inventario vive en un JSON al lado, no aqui dentro, por una razon
+// practica: son mas de cien firmas y se REGENERA. Para actualizarlo tras un
+// cambio legitimo:
+//
+//     cd backend && ACTUALIZAR_SITIOS_XSS=1 node --test test/xss-cuerpo.test.js
+//
+// y MIRA EL DIFF antes de commitearlo: cada linea que cambie es un permiso de
+// XSS que se muda de funcion. Regenerar sin leer convierte este candado en un
+// sello de goma.
+test('cada firma sigue viviendo en la MISMA función (contar sitios no basta: dos pueden intercambiarse)', () => {
+  const { cuerpo } = clasificarInterpolaciones(fuente);
+  const malas = cuerpo.filter(it => !esExprSegura(it.expr, AYUDANTES_CUERPO, OPTS));
+  const actual = {};
+  for (const it of malas) {
+    const firma = firmaDe(it);
+    (actual[firma] ||= []).push(funcionDe(it.linea));
+  }
+  // Ordenadas y sin repetir: mover dos sitios de sitio dentro de la misma
+  // funcion no es una sustitucion, y no debe hacer ruido.
+  for (const k of Object.keys(actual)) actual[k] = [...new Set(actual[k])].sort();
+
+  const RUTA = path.join(__dirname, 'xss-cuerpo-sitios.json');
+  if (process.env.ACTUALIZAR_SITIOS_XSS) {
+    fs.writeFileSync(RUTA, JSON.stringify(actual, null, 1) + '\n');
+    console.log(`[xss] inventario regenerado: ${Object.keys(actual).length} firmas`);
+  }
+  assert.ok(fs.existsSync(RUTA),
+    `falta el inventario ${RUTA}. Generalo con ACTUALIZAR_SITIOS_XSS=1 y revisa el resultado antes de commitear`);
+  const guardado = JSON.parse(fs.readFileSync(RUTA, 'utf8'));
+
+  const problemas = [];
+  for (const [firma, funcs] of Object.entries(actual)) {
+    const antes = guardado[firma];
+    if (!antes) { problemas.push(`NUEVA firma ${JSON.stringify(firma)} en ${funcs.join(', ')}`); continue; }
+    if (antes.join('|') !== funcs.join('|'))
+      problemas.push(`la firma ${JSON.stringify(firma)} vivia en [${antes.join(', ')}] y ahora vive en [${funcs.join(', ')}]`);
+  }
+  for (const firma of Object.keys(guardado))
+    if (!actual[firma]) problemas.push(`DESAPARECIO la firma ${JSON.stringify(firma)} (estaba en ${guardado[firma].join(', ')})`);
+
+  assert.deepEqual(problemas, [],
+    'el inventario de sitios no cuadra. Una firma que cambia de función es un permiso de XSS que hereda un código que nadie auditó — que es exactamente como modalAviso entró blanqueado. Audita el sitio nuevo y solo entonces regenera con ACTUALIZAR_SITIOS_XSS=1:\n' + problemas.join('\n'));
+});
+
+// Autocomprobacion del localizador: sin esto, si funcionDe empezara a devolver
+// siempre lo mismo (o '(nivel superior)'), el inventario cuadraria SIEMPRE y el
+// candado de arriba seria un adorno.
+test('autocomprobación: funcionDe nombra funciones de verdad y distingue unas de otras', () => {
+  const { cuerpo } = clasificarInterpolaciones(fuente);
+  const malas = cuerpo.filter(it => !esExprSegura(it.expr, AYUDANTES_CUERPO, OPTS));
+  const nombres = new Set(malas.map(it => funcionDe(it.linea)));
+  assert.ok(nombres.size >= 10,
+    `funcionDe solo distingue ${nombres.size} contenedores: si colapsa todo en uno, el inventario cuadra siempre y no vigila nada`);
+  assert.ok(!nombres.has('(nivel superior)'),
+    'algun sitio no cae dentro de ninguna función reconocible: el localizador se rompió o hay HTML en el cuerpo del fichero');
+  for (const n of nombres) assert.ok(!RESERVADAS.has(n), `funcionDe devolvio la palabra reservada "${n}": esta leyendo un if como si fuera una función`);
 });
 
 test('todas las excepciones del cuerpo tienen un motivo real (no solo un nombre)', () => {
