@@ -79,8 +79,12 @@ function recortarMetodo(nombre) {
   return trozo.join('\n');
 }
 
+// `_porQue` esta aqui porque guardarGasto lo llama para meter en su aviso el
+// motivo concreto del fallo de recarga. Se recorta el REAL (no un doble): si
+// faltara, guardarGasto reventaria con un TypeError a mitad y el aviso —lo
+// unico que estos tests miden— no llegaria a emitirse nunca.
 const METODOS = ['_llenarQuienPago', 'cambioQuienPago', 'cambioFuente', '_ponerPagador', '_opcionAusente',
-  '_opcionSinRegistrar', 'editarGasto', 'cancelarEdicionGasto', 'guardarGasto'];
+  '_opcionSinRegistrar', 'editarGasto', 'cancelarEdicionGasto', 'guardarGasto', '_porQue'];
 
 // _llenarQuienPago llama a quitarAusenteDuplicada, una funcion de nivel
 // superior (fuera del objeto Org). recortarMetodo solo sabe cortar metodos

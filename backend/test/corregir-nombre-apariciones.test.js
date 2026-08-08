@@ -94,6 +94,29 @@ test('reenviar el MISMO nombre no busca nada: la respuesta no trae apariciones',
     '"Mi perfil" manda el nombre en cada guardado; sin cambio real no hay aviso');
 });
 
+// `nino.familia` es el otro texto libre de la ficha del nino, y durante un mes
+// estuvo sin decidir: ni entre los sitios que se buscan ni en el "Fuera de
+// alcance" de la spec. Queda FUERA, y la razon es lo que se guarda ahi: el
+// campo es el apellido de la familia ("Gomez", "Ruiz" en el seed), y el
+// frontend lo pinta como `Familia ${x.familia}` — no un nombre de persona. La
+// busqueda es un LIKE del nombre COMPLETO viejo, que en un apellido suelto no
+// cabe: mirar ahi seria una consulta que casi siempre devuelve cero, y cuando
+// no lo devolviera seria por un tocayo. Este test existe para que anadir
+// `familia` al LIKE cueste leer esto primero.
+test('decidido: el aviso NO mira nino.familia — ahi va el apellido de la familia, no un nombre', async () => {
+  const b = await servidor();
+  const S = sembrar('AP4F');
+  db.prepare('INSERT INTO nino (iglesia_id, nombre, familia, autorizados) VALUES (?,?,?,?)')
+    .run(S.iglesiaId, 'Hijo de Rosa', 'Rosa Diaz', 'tia Carmen');
+  const res = await fetch(b + '/api/directorio/perfil', {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(S.rosaId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: 'Rosa Diaz Perez' })
+  });
+  assert.deepEqual((await res.json()).apariciones, { ninos_n: 0, predicas: 0 },
+    'la ficha tiene el nombre viejo SOLO en `familia`: si esto da 1, alguien amplio el LIKE — la decision y su motivo estan en el comentario de arriba y en la spec de corregir-nombre');
+});
+
 test('acotado por iglesia: el nino de OTRA congregacion no aparece en el conteo', async () => {
   const b = await servidor();
   const S = sembrar('AP4');

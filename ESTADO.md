@@ -1,5 +1,70 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
 
+## 🆕 8 DE AGOSTO DE 2026 · TARDE — 🪢 tres cabos cortos cerrados (rama `chore/cabos-cortos`)
+
+**3 commits sobre `main`, SIN FUSIONAR al escribirse esto** — compruébalo con
+`git branch --no-merged main`, no te fíes de esta línea. Suite **787** verde
+(partía de 784, que es lo que dejó la fusión del arnés de recortes).
+
+**El día empezó midiendo, y desmintió a las notas dos veces:**
+1. Lo del 7 y 8 de agosto **ya estaba subido y desplegado** (`main` ==
+   `origin/main` en `6245410`, `/api/health` en 200). La memoria decía "12
+   commits sin subir": caducado.
+2. Había una rama viva que **ninguna nota mencionaba**, `chore/arnes-recortes`,
+   con la suite verde medida sobre ella. Fusionada (`c838d43`), 778 verde sobre
+   la fusión, y borrada junto a `chore/limpieza-profunda`, que ya estaba dentro
+   de `main` entera.
+
+**Los tres cabos:**
+
+- **`admin.js` — el `UPDATE` que se aplicaba y después devolvía 400.** Las dos
+  guardias de "no puedes hacerte esto a ti mismo" vivían cada una dentro de su
+  bloque, así que un PATCH con `{activo:true, es_pastor:false}` sobre la propia
+  cuenta escribía el `activo` y **luego** rechazaba: un 400 con media petición
+  hecha. Ahora van juntas y antes de la primera escritura.
+  ⚠️ **Ninguna prueba de comportamiento puede distinguir el código bueno del
+  malo aquí** —sobre la propia cuenta `activo` solo puede escribirse a `true`,
+  y quien pide ya está activo—, y por eso el candado mira la **forma**
+  (`admin-guardias-antes-de-escribir.test.js`), acreditado por los dos lados
+  con el fichero real: sin el arreglo (sha `5F413BFC`) rojo citando la línea,
+  con él (sha `B278F246`) verde.
+- **`nino.familia` queda FUERA del aviso del nombre, y por fin con motivo
+  escrito** (spec de corregir-nombre, sección 2-bis nueva). El motivo es lo que
+  de verdad se guarda ahí: el *apellido* de la familia (`'Gomez'`, `'Ruiz'`), que
+  el frontend pinta como `Familia ${x.familia}` — y la búsqueda es un `LIKE` del
+  nombre **completo** viejo, que en un apellido no cabe. Fijado con un test y
+  **acreditado por mutación** (ampliar el `LIKE` a `familia`, sha `74dd2911` →
+  `90dec1ad`, lo pone rojo).
+- **El motivo del fallo de recarga deja de perderse** en los dos caminos
+  silenciosos de `guardarGasto`. Decía "la hoja no se pudo actualizar. Recarga
+  la página" y se tragaba lo que `api()` ya sabía: con un 429 la app tiene
+  escrito *"Espera un momento"* y la persona leía lo contrario de lo que hay que
+  hacer. `abrir()` guarda el motivo en `Org._motivoFallo` y **sigue devolviendo
+  un booleano a propósito** (quien lo llama hace `if(alDia)`, y un texto no
+  vacío siempre sería "sí" — el mismo fallo que este bloque ya pagó con una
+  promesa sin `await`). `Org._porQue()` lo entrega **escapado**, con test de
+  `<img onerror>`, porque `modalAviso` mete su texto crudo en `innerHTML`.
+
+**Una corrección a este mismo documento:** la sección del 8-ago · madrugada
+decía que hacía falta "un arnés que sepa recortar métodos del literal
+`const Org = {`" y que eso no era un arreglo de cinco líneas. **Ya existía**,
+en `organizacion-pagador-selector.test.js:68`, y monta nueve métodos reales de
+`Org`. Lo que sí faltaba, y se añadió, es la comprobación
+**anti-desbordamiento por hermanos**: un recorte que se pasa de largo mide
+código ajeno *en verde*. Cazó un fallo real del arnés nuevo mientras se
+escribía — con `_porQue`, un método de una línea, el corte no paraba nunca.
+Es la misma lección de siempre: **lo que este documento da por imposible hay
+que medirlo antes de creerlo.**
+
+**Lo que sigue abierto de la lista corta:** la asimetría de
+`addCosa`/`borrarCosa`/`toggleCosa`, que `sitios` **cuente pero no
+identifique**, y el `wip` `125c954`. Y uno **nuevo, medido hoy**: el barrido de
+clase de "escribir y después rechazar" ve **20 handlers** de los 198 de `src/`
+con esa forma (la mayoría son ramas distintas, no defectos) — clasificarlos uno
+a uno es una tanda propia, no un cabo.
+
+---
+
 ## 🆕 8 DE AGOSTO DE 2026 · MADRUGADA — 🧹 higiene de agosto: se cerraron los cabos, y aparecieron cuatro cosas que valen más
 
 **Rama `chore/higiene-agosto`, 9 commits sobre `main`, aprobada para fusionar y
@@ -493,24 +558,28 @@ al tiro; abrir "🗒️ Gastos de eventos" y saltar a la hoja con "Ver hoja ›"
 Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
 
 ---
-*Última actualización: 8 de agosto de 2026, madrugada (**higiene de agosto**: los seis cabos del 7-ago cerrados, suite **778**). ⚠️ **Queda UNA rama local sin fusionar, `chore/higiene-agosto`** — aprobada; la fusión `--no-ff`, el borrado de la rama y el push son de Pablo. Compruébalo con `git branch --no-merged main`, no te fíes de esta línea. ⬆️ **Sin subir:** hoy `main` va **1** commit por delante de `origin/main`, y con esta rama fusionada serán **12** — los 9 de la rama, el commit de documentación que estás leyendo, y el commit de fusión. (Esta cuenta se equivocó **tres veces seguidas** el 7-ago, siempre por olvidar el commit que se estaba haciendo; ahora se cuentan los tres sumandos por separado a propósito. Mídelo igual: `git log origin/main..main --oneline`.) ⚠️ **Ningún commit de esta rama toca `web/app.js` salvo comentarios**, así que el despliegue no se verifica buscando código nuevo en el `app.js` de Render.*
+*Última actualización: 8 de agosto de 2026, **tarde** (**tres cabos cortos**: el 400 que escribía media petición, `nino.familia` decidido, y el motivo del fallo de recarga dentro del aviso; suite **787**). ⚠️ **Queda UNA rama local sin fusionar, `chore/cabos-cortos`** (3 commits) — la fusión, el borrado y el push son de Pablo; mídelo con `git branch --no-merged main` y `git log origin/main..main --oneline`, no con esta línea. ⬆️ **Sin subir:** los 3 de la rama, más el commit de documentación que estás leyendo, más el de fusión si se hace — y encima los **3 del arnés de recortes ya fusionado hoy** (`c838d43`), que tampoco están arriba. **Cuéntalos, no los heredes:** esta línea se equivocó tres veces seguidas el 7-ago por olvidar el commit que se estaba escribiendo. ⚠️ Esta tanda **sí toca `web/app.js`** (`Org._porQue`, `Org._motivoFallo`), así que el despliegue sí se puede verificar buscando ese símbolo en el `app.js` que sirve Render — comparando por CONTENIDO, nunca por tamaño (el servido pesa un byte menos por línea, LF contra CRLF).*
+
+*Lo anterior, que ya caducó y se deja solo como aviso de cómo envejecen estas líneas: 8 de agosto de 2026, madrugada (**higiene de agosto**: los seis cabos del 7-ago cerrados, suite **778**). ⚠️ **Queda UNA rama local sin fusionar, `chore/higiene-agosto`** — aprobada; la fusión `--no-ff`, el borrado de la rama y el push son de Pablo. Compruébalo con `git branch --no-merged main`, no te fíes de esta línea. ⬆️ **Sin subir:** hoy `main` va **1** commit por delante de `origin/main`, y con esta rama fusionada serán **12** — los 9 de la rama, el commit de documentación que estás leyendo, y el commit de fusión. (Esta cuenta se equivocó **tres veces seguidas** el 7-ago, siempre por olvidar el commit que se estaba haciendo; ahora se cuentan los tres sumandos por separado a propósito. Mídelo igual: `git log origin/main..main --oneline`.) ⚠️ **Ningún commit de esta rama toca `web/app.js` salvo comentarios**, así que el despliegue no se verifica buscando código nuevo en el `app.js` de Render.*
 *Lo anterior, que sigue valiendo: los **cabos de agosto** (merge `1961032`) y el **candado de los sitios en los tres barridos XSS** (merge `a85de3c`, suite 755 medida sobre la fusión) ✅ **SUBIDOS Y DESPLEGADOS el mismo 7-ago:** Pablo hizo el push de los 33 commits; `main` y `origin/main` sincronizados, `/api/health` en 200, y el `app.js` que sirve Render ya trae `modalAviso` (8 apariciones, las mismas que el local) y el mensaje del choque de ediciones. ⚠️ Antes de subirse, esta línea llegó a decir **31** y luego **32**: las dos veces por no contar el commit de documentación que se estaba haciendo. Mide el número, no lo heredes. ⚠️ Y al comparar el `app.js` de producción con el local, **el desplegado pesa menos**: exactamente un byte por línea (CRLF contra LF). Eso **no** es un despliegue viejo — compara por contenido (`modalAviso`, una frase nueva), nunca por tamaño. **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está fusionada, subida o desplegada caducan con cada rama** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (7-ago · noche 2)" aquí abajo, y compruébalo con `npm test`, `git branch --no-merged main` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
-## 👉 POR DÓNDE RETOMAR (8-ago · madrugada)
+## 👉 POR DÓNDE RETOMAR (8-ago · tarde)
 
 **Lo primero es de Pablo, no de código, y en este orden:**
-1. **Fusionar `chore/higiene-agosto`** (`git merge --no-ff`, borrar la rama, y re-correr `cd backend && npm test` **sobre la fusión** — 778 en verde). Es la única rama viva: los cabos de agosto (merge `1961032`) y el candado de los barridos (merge `a85de3c`) ya están dentro.
-2. **Push** con GitHub Desktop. Serán **12** commits (ver la cabecera); compruébalo con `git log origin/main..main --oneline`, no te fíes del número. Lo del 7-ago **ya está subido y desplegado**, verificado contra el `app.js` de Render. ⚠️ Si algo "no cambió", sospecha de la **caché del service worker** antes que de un bug: `web/sw.js` es cache-first, probar en incógnito. ⚠️ Y al comparar con producción, **compara por contenido, nunca por tamaño**: el `app.js` servido pesa un byte menos por línea que el local (LF contra CRLF).
+1. **Fusionar `chore/cabos-cortos`** (`git merge --no-ff`, borrar la rama, y re-correr `cd backend && npm test` **sobre la fusión** — 787 en verde medido sobre la rama). Es la única rama viva: el arnés de recortes ya se fusionó hoy (`c838d43`) y `chore/limpieza-profunda` se borró por estar entera dentro de `main`.
+2. **Push** con GitHub Desktop — y esta vez sube también lo del arnés. Cuenta los commits con `git log origin/main..main --oneline`, no te fíes de ningún número escrito aquí. ⚠️ Esta tanda **sí toca `web/app.js`**: tras el deploy, `Org._motivoFallo` tiene que aparecer en el `app.js` que sirve Render. ⚠️ Si algo "no cambió", sospecha de la **caché del service worker** antes que de un bug: `web/sw.js` es cache-first, probar en incógnito.
+3. ⚠️ **Sigue en GitHub la rama `origin/chore/higiene-agosto`** en `3573032` (estado intermedio, anterior a los arreglos de su review). No contiene nada que `main` no tenga; borrarla es decisión de Pablo.
+
    ⚠️ En `main` sigue el `wip` `125c954` con la **suite roja a sabiendas**: explicado en la sección del 7-ago · noche. Aplastarlo con un rebase o dejarlo **sigue siendo decisión suya**, y cada tanda le añade commits encima.
-3. **Las cuatro comprobaciones de navegador de los cabos de agosto** (el pisotón en dos ventanas, la recarga que falla con la red cortada, el gasto a una cuenta inactiva, el aviso del nombre) — están escritas paso a paso en la sección del 7-ago · noche. **Ninguna prueba de Node puede hacerlas**: nadie ha abierto todavía esta app en dos navegadores a la vez. ⚠️ **La higiene del 8-ago cambió el aviso del nombre por dentro** (un solo lector con comprobación de forma), así que al hacer la del nombre hay que mirar además que el modal siga saliendo bien en las **dos** pantallas: conteos en "Mi perfil", ficha del niño en la del pastor.
-4. **Las comprobaciones de navegador que siguen pendientes de antes:** las tres del 5-ago (como `raquel`, corregir un movimiento de Tesorería; como `marta`, editar/borrar clases y lecciones y leer el 409; como `pastor`, ver historiales sin lápiz), la de la tanda E (borrar un mensaje de la bandeja y marcar todos como atendidos), la de la tanda F (Registro de actividad filtrado por `raquel`, con la casilla de accesos), la de la tanda H (crear "Culto — todos los domingos" y borrar "esta y las siguientes") y la del Camino C (un gasto "lo pagó la caja" y ver bajar el saldo de Tesorería).
-5. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
+4. **Las cuatro comprobaciones de navegador de los cabos de agosto** (el pisotón en dos ventanas, la recarga que falla con la red cortada, el gasto a una cuenta inactiva, el aviso del nombre) — están escritas paso a paso en la sección del 7-ago · noche. **Ninguna prueba de Node puede hacerlas**: nadie ha abierto todavía esta app en dos navegadores a la vez. ⚠️ **La higiene del 8-ago cambió el aviso del nombre por dentro** (un solo lector con comprobación de forma), así que al hacer la del nombre hay que mirar además que el modal siga saliendo bien en las **dos** pantallas: conteos en "Mi perfil", ficha del niño en la del pastor.
+5. **Las comprobaciones de navegador que siguen pendientes de antes:** las tres del 5-ago (como `raquel`, corregir un movimiento de Tesorería; como `marta`, editar/borrar clases y lecciones y leer el 409; como `pastor`, ver historiales sin lápiz), la de la tanda E (borrar un mensaje de la bandeja y marcar todos como atendidos), la de la tanda F (Registro de actividad filtrado por `raquel`, con la casilla de accesos), la de la tanda H (crear "Culto — todos los domingos" y borrar "esta y las siguientes") y la del Camino C (un gasto "lo pagó la caja" y ver bajar el saldo de Tesorería).
+6. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo. **`SMTP_USER`/`SMTP_PASS` es lo único roto de cara a la gente:** sin ellas nadie recupera su contraseña (503).
 
 **Y queda una conversación abierta, no de código:** qué cosa nueva necesita la iglesia. Pablo iba a contarlo y no llegó a responderse.
 
-**No queda ninguna tanda aprobada pendiente.** Los cabos que dejaron los cabos de agosto están cerrados en dos tandas: el candado de los sitios en los tres barridos (`chore/candado-barridos-xss`, esa misma noche) y los seis restantes (`chore/higiene-agosto`, esta madrugada). **Lo que sigue abierto, y es corto:** los tres cabos nuevos del 8-ago (el `UPDATE` antes del 400 en `admin.js:193-199`, la razón principal del `await` sin prueba —hace falta un arnés que sepa recortar métodos de `const Org = {`—, y `nino.familia`), más los cuatro que ninguna tanda tocó (el texto del error en los caminos silenciosos, la asimetría de `addCosa`, que `sitios` cuente pero no identifique, y el `wip` `125c954`). Y lo que **ningún** candado cubre sigue en el **mapa de bordes** de la sección "7-ago · noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
+**No queda ninguna tanda aprobada pendiente.** Los cabos que dejaron los cabos de agosto están cerrados en dos tandas: el candado de los sitios en los tres barridos (`chore/candado-barridos-xss`, esa misma noche) y los seis restantes (`chore/higiene-agosto`, esta madrugada). **Lo que sigue abierto, y es corto** (actualizado la tarde del 8-ago, ver la sección de arriba): ~~el `UPDATE` antes del 400 en `admin.js`~~ **cerrado**, ~~`nino.familia`~~ **decidido y escrito**, ~~el texto del error en los caminos silenciosos~~ **cerrado**. Queda: **la razón principal del `await` sin prueba** —y ojo, la excusa que había escrita aquí era falsa: el arnés que recorta métodos de `const Org = {` **ya existía** en `organizacion-pagador-selector.test.js:68`, así que esa prueba se puede escribir hoy—, la asimetría de `addCosa`, que `sitios` cuente pero no identifique, y el `wip` `125c954`. **Nuevo, medido el 8-ago por la tarde:** 20 de los 198 handlers de `src/` tienen la forma "escribe y después rechaza" (la mayoría son ramas distintas, no defectos): clasificarlos es una tanda, no un cabo. Y lo que **ningún** candado cubre sigue en el **mapa de bordes** de la sección "7-ago · noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
 
 **Las tandas que Pablo aprobó el 5-ago, todas cerradas** (se dejan aquí porque cada una explica qué cazó y qué dejó anotado):
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
