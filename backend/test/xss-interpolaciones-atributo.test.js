@@ -359,15 +359,27 @@ test('fechaSelectHTML: el prefijo de cada llamada es un literal fijo (o \'el\'+u
   //
   // Formas admitidas para el PRIMER argumento, y solo estas dos:
   //   (a) una cadena literal: 'ev', 'dp-cumple', 'prp-desde'...
-  //   (b) 'literal'+identificador: la única es 'el'+id, de formEditarLeccion.
-  //       Que ese id sea un entero tampoco se da por supuesto — se fija abajo.
+  //   (b) EXACTAMENTE 'el'+id, la de formEditarLeccion. No "cualquier
+  //       'literal'+identificador": esa forma general se admitió hasta el
+  //       7-ago y era una puerta abierta, porque fechaSelectHTML('x'+nombre)
+  //       pasaba en verde y su prefijo sale literal dentro de
+  //       onchange="fechaSelectAjustarDias('${prefijo}')", donde una comilla
+  //       simple se sale del literal JS. Detrás no hay otra red: añadir una
+  //       LLAMADA no crea sitios de atributo nuevos, así que el conteo de
+  //       sitios no puede verlo — es ciego a esto por construcción, y esta
+  //       prueba es lo único que mira. Que ese id sea entero tampoco se da
+  //       por supuesto: se fija abajo.
   // Si aparece una llamada que no encaja, NO ensanches esta lista para que
   // quepa: averigua de dónde sale ese prefijo. Si puede venir de una persona,
   // es un fallo de seguridad, no un número que ajustar.
-  const cabezaSegura = /^fechaSelectHTML\(\s*(?:'[\w-]+'|'[\w-]+'\s*\+\s*[A-Za-z_$][\w$]*)\s*[,)]/;
+  const cabezaSegura = /^fechaSelectHTML\(\s*(?:'[\w-]+'|'el'\s*\+\s*id\b)\s*[,)]/;
   // El archivo menciona fechaSelectHTML( en un comentario de documentación
-  // (la firma de la función); eso no es una llamada.
-  const enComentario = (pos) => fuente.slice(fuente.lastIndexOf('\n', pos) + 1, pos).includes('//');
+  // (la firma de la función); eso no es una llamada. Se descarta solo si la
+  // línea EMPIEZA por //: buscar '//' en cualquier posición contaba el de un
+  // https:// dentro de una cadena, y entonces una llamada escondida en una
+  // línea con una URL se descartaba sola y pasaba en verde. En una red de
+  // seguridad, el descarte tiene que fallar cerrado: ante la duda, se mira.
+  const enComentario = (pos) => /^\s*\/\//.test(fuente.slice(fuente.lastIndexOf('\n', pos) + 1, pos));
   const sitios = [...fuente.matchAll(/fechaSelectHTML\(/g)]
     .filter(m => !/function $/.test(fuente.slice(Math.max(0, m.index - 9), m.index)))
     .filter(m => !enComentario(m.index));
