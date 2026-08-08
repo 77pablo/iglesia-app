@@ -38,3 +38,20 @@ export function aparicionesDeNombre(nombreViejo, iglesiaId) {
   ).get(iglesiaId, like, iglesiaId, like).n;
   return { ninos, predicas };
 }
+
+// La MISMA busqueda, contada. Existe aparte porque las dos respuestas del
+// aviso son distintas a proposito y la diferencia es de privacidad (spec):
+// quien se corrige el nombre a si mismo recibe CUANTOS sitios, nunca cuales
+// —un LIKE con un nombre comun casa fichas de ninos ajenas—, y el pastor
+// recibe la lista, que ya puede ver en la app.
+//
+// La clave se llama `ninos_n`, distinta de la `ninos` del detalle, y eso es
+// deliberado: mientras las dos formas compartieron nombre, un lector del
+// frontend podia leer la equivocada y el aviso DESAPARECIA en silencio
+// (`[{…}] > 0` es false). Envolverlo aqui, en vez de dejar el `.length` en el
+// llamador, es lo que impide que un descuido de una linea (`= ap` en vez de
+// `= ap.ninos.length`) mande las fichas al autoservicio.
+export function conteoDeApariciones(nombreViejo, iglesiaId) {
+  const ap = aparicionesDeNombre(nombreViejo, iglesiaId);
+  return { ninos_n: ap.ninos.length, predicas: ap.predicas };
+}

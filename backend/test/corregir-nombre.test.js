@@ -49,8 +49,10 @@ test('PATCH /api/directorio/perfil: corrige el propio nombre', async () => {
   const data = await res.json();
   assert.equal(data.ok, true);
   // Desde la Tarea 2 (Cabo 2 de agosto): cuando el nombre cambia,
-  // responde los conteos de apariciones (incluso aunque sean 0).
-  assert.deepEqual(data.apariciones, { ninos: 0, predicas: 0 });
+  // responde los conteos de apariciones (incluso aunque sean 0). La clave es
+  // `ninos_n` (higiene B1): el numero y la lista del pastor ya no se llaman
+  // igual, para que nadie pueda leer una creyendo que es la otra.
+  assert.deepEqual(data.apariciones, { ninos_n: 0, predicas: 0 });
 
   const fila = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(SEM.miembro1.id);
   assert.equal(fila.nombre, 'Juan Pérez');

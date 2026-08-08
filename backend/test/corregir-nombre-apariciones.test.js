@@ -4,6 +4,13 @@
 //  reescribe un texto libre: busca y avisa. Autoservicio ve CONTEOS (un LIKE
 //  con un nombre comun puede casar fichas ajenas); el pastor ve el detalle.
 //  Spec: docs/superpowers/specs/2026-08-07-cabos-agosto-design.md
+//
+//  Higiene B1: las dos respuestas usan CLAVES DISTINTAS —`ninos_n` (un numero)
+//  en el autoservicio y `ninos` (la lista) en la del pastor— y aqui se fija el
+//  tipo de cada extremo. Mientras compartieron la clave `ninos`, un manejador
+//  del frontend que leyera la respuesta equivocada hacia desaparecer el aviso
+//  sin romper nada (`[{…}] > 0` es false). Ahora las dos formas son
+//  distinguibles a simple vista y el lector del frontend exige la suya.
 // ============================================================
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -55,9 +62,11 @@ test('autoservicio: el PATCH /perfil que cambia el nombre responde CONTEOS, sin 
   });
   assert.equal(res.status, 200);
   const data = await res.json();
-  assert.deepEqual(data.apariciones, { ninos: 1, predicas: 2 },
+  assert.deepEqual(data.apariciones, { ninos_n: 1, predicas: 2 },
     'un nino la autoriza y su nombre esta en una predica y un sermon');
-  assert.equal(typeof data.apariciones.ninos, 'number', 'al autoservicio NUNCA le llegan fichas, solo numeros');
+  assert.equal(typeof data.apariciones.ninos_n, 'number', 'al autoservicio NUNCA le llegan fichas, solo numeros');
+  assert.equal('ninos' in data.apariciones, false,
+    'la clave de la lista NO existe en esta respuesta: es la del pastor, y aqui seria una fuga');
 });
 
 test('autoservicio: sin rastros, los conteos van en cero (el aviso no inventa nada)', async () => {
@@ -68,7 +77,7 @@ test('autoservicio: sin rastros, los conteos van en cero (el aviso no inventa na
     headers: { Authorization: 'Bearer ' + tok(S.rosaId, S.iglesiaId), 'Content-Type': 'application/json' },
     body: JSON.stringify({ nombre: 'Rosa Cambiada' })
   });
-  assert.deepEqual((await res.json()).apariciones, { ninos: 0, predicas: 0 });
+  assert.deepEqual((await res.json()).apariciones, { ninos_n: 0, predicas: 0 });
 });
 
 test('reenviar el MISMO nombre no busca nada: la respuesta no trae apariciones', async () => {
@@ -96,7 +105,7 @@ test('acotado por iglesia: el nino de OTRA congregacion no aparece en el conteo'
     headers: { Authorization: 'Bearer ' + tok(S.rosaId, S.iglesiaId), 'Content-Type': 'application/json' },
     body: JSON.stringify({ nombre: 'Rosa Distinta' })
   });
-  assert.deepEqual((await res.json()).apariciones, { ninos: 0, predicas: 0 });
+  assert.deepEqual((await res.json()).apariciones, { ninos_n: 0, predicas: 0 });
 });
 
 test('asistido: el pastor recibe el DETALLE — que fichas de ninos y cuantas predicas', async () => {
@@ -110,9 +119,42 @@ test('asistido: el pastor recibe el DETALLE — que fichas de ninos y cuantas pr
   });
   assert.equal(res.status, 200);
   const { apariciones } = await res.json();
+  assert.ok(Array.isArray(apariciones.ninos), 'al pastor le llega la LISTA, nunca solo el numero');
   assert.equal(apariciones.ninos.length, 1);
   assert.equal(apariciones.ninos[0].nombre, 'Pedrito', 'el pastor ve QUE ficha revisar');
   assert.equal(apariciones.predicas, 2);
+  assert.equal('ninos_n' in apariciones, false,
+    'la clave del conteo NO existe aqui: si estuviera, un lector podria quedarse con el numero y no nombrar ninguna ficha');
+});
+
+// B1: el candado del backend. Las dos respuestas del MISMO aviso salen del
+// mismo modulo y antes viajaban con la misma clave `ninos` — una con un numero
+// dentro y la otra con una lista. Este test las pide las dos seguidas y exige
+// que sus claves no se solapen: ninguna respuesta puede pasar por la otra.
+test('B1: las dos respuestas del aviso no comparten ninguna clave de niños (`ninos_n` numero frente a `ninos` lista)', async () => {
+  const b = await servidor();
+  const S = sembrar('AP12');
+  sembrarRastros(S);
+
+  const propio = await (await fetch(b + '/api/directorio/perfil', {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(S.rosaId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: 'Rosa Diaz Uno' })
+  })).json();
+  const delPastor = await (await fetch(b + `/api/admin/usuarios/${S.rosaId}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(S.pastorId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: 'Rosa Diaz Dos' })
+  })).json();
+
+  assert.deepEqual(Object.keys(propio.apariciones).sort(), ['ninos_n', 'predicas']);
+  assert.deepEqual(Object.keys(delPastor.apariciones).sort(), ['ninos', 'predicas']);
+  assert.equal(typeof propio.apariciones.ninos_n, 'number');
+  assert.ok(Array.isArray(delPastor.apariciones.ninos));
+  const compartidas = Object.keys(propio.apariciones)
+    .filter(k => k !== 'predicas' && k in delPastor.apariciones);
+  assert.deepEqual(compartidas, [],
+    'si vuelven a compartir una clave de niños, cruzar los dos lectores del frontend vuelve a ser posible');
 });
 
 // --- Higiene A1: el nombre viaja dentro de un LIKE, y un LIKE tiene comodines.
@@ -141,7 +183,7 @@ test('el % de un nombre no es un comodin: no arrastra las fichas ni las predicas
   const S = sembrar('AP7');
   sembrarRastros(S);   // un nino autoriza a "Rosa Diaz"; una predica y un sermon suyos
   const comodinId = persona(S, 'com_AP7', '%');
-  assert.deepEqual(await renombrarse(b, S, comodinId, 'Juana Soto'), { ninos: 0, predicas: 0 },
+  assert.deepEqual(await renombrarse(b, S, comodinId, 'Juana Soto'), { ninos_n: 0, predicas: 0 },
     'el texto literal "%" no esta escrito en ningun sitio; sin escapar saldrian 1 y 2');
 });
 
@@ -150,7 +192,7 @@ test('el _ de un nombre tampoco: "R_sa Diaz" no encuentra a "Rosa Diaz"', async 
   const S = sembrar('AP8');
   sembrarRastros(S);
   const guionId = persona(S, 'gui_AP8', 'R_sa Diaz');
-  assert.deepEqual(await renombrarse(b, S, guionId, 'Rosa Diaz'), { ninos: 0, predicas: 0 },
+  assert.deepEqual(await renombrarse(b, S, guionId, 'Rosa Diaz'), { ninos_n: 0, predicas: 0 },
     'el _ casa "cualquier caracter" para SQLite, pero para una persona es solo un guion bajo');
 });
 

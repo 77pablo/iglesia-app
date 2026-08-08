@@ -211,7 +211,10 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
     db.prepare('UPDATE aprobacion_log SET actor_nombre = ? WHERE actor_id = ?').run(nombre, p.id);
     auditar(ig, yo, 'corregir_nombre_usuario', 'admin', `${p.nombre} → ${nombre}`);
     // Cabo 2, version asistida: el pastor recibe el DETALLE (que fichas, ya
-    // las ve en la app) para corregir a mano donde corresponda.
+    // las ve en la app) para corregir a mano donde corresponda. Sale con la
+    // clave `ninos` y la LISTA dentro; el autoservicio manda `ninos_n` con un
+    // numero (directorio.js). Los dos nombres son distintos a proposito: asi
+    // ninguna de las dos respuestas puede leerse como si fuera la otra.
     apariciones = aparicionesDeNombre(p.nombre, ig);
   }
   // El 'editar_usuario' generico solo tiene sentido cuando de verdad se tocó
