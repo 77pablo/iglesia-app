@@ -80,11 +80,31 @@ test('de Notificaciones se puede salir', () => {
   assert.match(vista, /‹/, 'con la misma forma que los demas: "‹ Inicio"');
 });
 
+// Recorta un metodo del literal `const Org = {` contando llaves, igual que
+// organizacion-pagador-selector.test.js:68. Sustituye a un `slice(i, i + 14)`
+// —una ventana de 14 lineas— que se rompio en cuanto borrarCosa crecio: el
+// `danger:true` se salio por abajo y el test acuso al codigo de un defecto que
+// no tenia. Un numero magico de lineas mide el tamano del metodo, no lo que
+// dice; esto para donde el metodo acaba de verdad, y avisa si se desborda.
+function recortarMetodoDeOrg(nombre) {
+  const i = lineas.findIndex(l => new RegExp(`^  (?:async )?${nombre}\\s*\\(`).test(l));
+  assert.ok(i >= 0, `no se encontro el metodo ${nombre} en el literal Org de web/app.js`);
+  let saldo = 0, abierta = false, cerro = false;
+  const trozo = [];
+  for (let j = i; j < lineas.length; j++) {
+    trozo.push(lineas[j]);
+    for (const ch of lineas[j]) { if (ch === '{') { saldo++; abierta = true; } else if (ch === '}') saldo--; }
+    if (abierta && saldo <= 0) { cerro = true; break; }
+  }
+  assert.ok(cerro, `el recorte del metodo ${nombre} llego al final de web/app.js sin cerrar: devolveria medio fichero y las comprobaciones de abajo dejarian de cubrir lo que cubren, en verde`);
+  const hermanos = trozo.slice(1).filter(l => /^ {2}(?:async )?[a-zA-Z_$][\w$]*\s*\(/.test(l));
+  assert.deepEqual(hermanos, [], `el recorte de ${nombre} se comio otro(s) metodo(s) de Org: ${hermanos.join(' | ')}`);
+  return trozo.join('\n');
+}
+
 test('borrar un gasto y borrar una cosa preguntan antes', () => {
   for (const [nombre, debe] of [['borrarGasto', /No queda registro/], ['borrarCosa', /¿Quitar/]]) {
-    const i = lineas.findIndex(l => new RegExp(`async ${nombre}\\(`).test(l));
-    assert.ok(i >= 0, `no se encontro ${nombre}()`);
-    const cuerpo = lineas.slice(i, i + 14).join('\n');
+    const cuerpo = recortarMetodoDeOrg(nombre);
     assert.match(cuerpo, /modalConfirm\(/, `${nombre} tiene que preguntar antes de borrar`);
     assert.match(cuerpo, /danger:\s*true/, `${nombre} es destructivo: el boton va en rojo`);
     assert.match(cuerpo, debe);
