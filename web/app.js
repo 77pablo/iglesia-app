@@ -5608,11 +5608,23 @@ const Org = {
         else   await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)});
         Org.cancelarEdicionGasto();
         // Se ESPERA la recarga (el bloque del 409 de abajo ya lo hacia; este
-        // no). Mientras el GET viaja, Org._hoja sigue siendo la hoja de ANTES
-        // de la correccion: sin el await, el boton se reactiva y el ✏️ vuelve a
-        // ser clicable en ese hueco, y la instantanea que capture sera la
-        // caduca. Con el await, conBoton lo mantiene apagado hasta que la hoja
-        // este repintada.
+        // no), y lo que da el await son dos cosas:
+        //
+        //  1. `alDia` es un si/no de verdad. Sin el await seria una promesa, y
+        //     una promesa siempre es "si": el mensaje de abajo diria "Gasto
+        //     corregido" tambien cuando el GET se cae, que es justo lo que el
+        //     else esta ahi para no decir.
+        //  2. conBoton mantiene apagado EL BOTON QUE SE PULSO hasta que todo
+        //     esto termina, asi que no se puede encadenar otra correccion
+        //     sobre una hoja caduca desde el mismo boton.
+        //
+        // Lo que el await NO hace es apagar los ✏️ de las filas: a esos no los
+        // desactiva nadie, y mientras el GET viaja Org._hoja sigue siendo la
+        // hoja de ANTES, asi que un ✏️ pulsado en ese hueco captura la
+        // instantanea caduca. Es una ventana corta que se cierra sola en
+        // cuanto el GET aterriza y repinta la hoja; el caso que no se cierra
+        // solo —que el GET falle— es exactamente el que cubre el else de aqui
+        // abajo, que manda recargar la pagina antes de seguir.
         const alDia=await Org._recargar(true);
         // Y si el GET falla, el hueco no se cierra solo: Org._hoja se queda con
         // la fila vieja para siempre, el proximo ✏️ manda esa instantanea, el
