@@ -16,6 +16,27 @@
 //  EXCEPCIONES con motivo, y los motivos que cargan mas peso tienen su
 //  propia prueba mas abajo (la leccion del barrido de atributos: una
 //  afirmacion en un comentario no protege nada; una prueba si).
+//
+//  CUANTOS SITIOS CUBRE CADA EXCEPCION (`sitios`, por defecto 1). La firma
+//  es el atributo + el texto completo de su valor, y eso NO es unico: dos
+//  manejadores escritos igual dan la misma firma. Mientras el barrido solo
+//  preguntaba "¿existe algun sitio con esta firma?", una excepcion escrita
+//  para una funcion blanqueaba en silencio a cualquier otra que naciera con
+//  el mismo texto. Paso de verdad (7-ago) en el barrido de cuerpo:
+//  `modalAviso` nacio con el mismo `<p class="muted" style="margin:8px 0
+//  16px">${msg}</p>` que `modalConfirm`, entro como sumidero de innerHTML
+//  NUEVO, y ni el barrido ni el zombie-check pudieron decir nada. Aqui el
+//  agujero era el mismo: el bloque `sobrantes` de abajo caza excepciones sin
+//  sitio, pero no excepciones que cubren MAS sitios de los que auditaron.
+//
+//  Por eso cada excepcion declara a CUANTOS sitios cubre y el conteo se
+//  comprueba. Rompe la suite en las dos direcciones, que son los dos
+//  agujeros:
+//   - de mas: un manejador nuevo que colisiona de firma con uno viejo y
+//     hereda su permiso sin que nadie lo audite — obliga a auditarlo y
+//     nombrarlo en el motivo.
+//   - de menos: desaparece uno de los sitios que la excepcion cubria —
+//     obliga a re-auditar el que queda en vez de heredarle el permiso.
 // ============================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,7 +58,8 @@ const fuente = fs.readFileSync(APP_JS, 'utf8').replace(/\r\n/g, '\n');
 const EXCEPCIONES = [
   {
     firma: "onchange::fechaSelectAjustarDias('${prefijo}')",
-    motivo: 'prefijo es el parametro de fechaSelectHTML(prefijo,...); en cada llamada del archivo se le pasa un literal fijo (\'en\',\'ev\',\'dp-cumple\'...), nunca un dato que escriba una persona. Mismo motivo que las excepciones id::${prefijo}-dia/-mes/-anio del barrido de atributos.'
+    sitios: 2,
+    motivo: 'prefijo es el parametro de fechaSelectHTML(prefijo,...); en cada llamada del archivo se le pasa un literal fijo (\'en\',\'ev\',\'dp-cumple\'...) o \'el\'+id con un id entero, nunca un dato que escriba una persona. No es una promesa: lo fija la prueba "fechaSelectHTML: el prefijo de cada llamada es un literal fijo" del barrido de atributos, que recorre TODAS las llamadas — la misma que sostiene las excepciones id::${prefijo}-dia/-mes/-anio de alli. DOS sitios con el mismo onchange, los dos dentro de fechaSelectHTML y con el mismo prefijo: el <select> del mes y el del año (los dos recalculan los dias del mes elegido).'
   },
   {
     firma: "onclick::verDia('${fecha}')",
@@ -107,6 +129,45 @@ test('barrido: toda interpolación ${...} dentro de un manejador de evento pasa 
   const sobrantes = EXCEPCIONES.filter(e => !firmasUsadas.has(e.firma));
   assert.deepEqual(sobrantes.map(e => e.firma), [],
     'excepciones que ya no corresponden a ningún sitio del código: bórralas');
+});
+
+// Un "sitio" es un MANEJADOR ENTERO (un grupo: un onclick="..." concreto),
+// no cada ${...} suelto de dentro. Y solo cuentan los manejadores que de
+// verdad necesitan la lista: los que tienen al menos una interpolación que
+// las reglas mecánicas no aprueban. Contar los ${...} daría un número que no
+// significa nada — onclick="${editFn}(${id})" son dos interpolaciones y un
+// solo sitio que auditar, e `id` ahí ya pasa solo por la regla numérica.
+function sitiosQueNecesitanExcepcion() {
+  const { manejador } = clasificarInterpolaciones(fuente);
+  const porFirma = new Map();
+  for (const g of manejador) {
+    if (!g.items.some(item => !esExprSegura(item.expr))) continue;
+    if (!porFirma.has(g.firma)) porFirma.set(g.firma, []);
+    porFirma.get(g.firma).push(g.linea);
+  }
+  return porFirma;
+}
+
+// El bloque `sobrantes` de arriba solo pregunta "¿queda ALGUN manejador con
+// esta firma?", y la firma (atributo + texto del valor) no es única. Esto
+// cuenta los sitios: una excepción tiene que cubrir exactamente los que dice.
+//
+// Sin este candado, un manejador NUEVO escrito con el mismo texto que uno
+// viejo entra blanqueado y en silencio — que es lo que le pasó a modalAviso
+// en el barrido de cuerpo al nacer (ver la cabecera).
+test('cada excepción de manejador cubre exactamente los sitios que declara (una firma NO es única: dos manejadores escritos igual la comparten)', () => {
+  const porFirma = sitiosQueNecesitanExcepcion();
+  const descuadres = [];
+  for (const exc of EXCEPCIONES) {
+    const lineas = porFirma.get(exc.firma) || [];
+    const declarados = exc.sitios || 1;
+    if (lineas.length !== declarados) {
+      descuadres.push(`${JSON.stringify(exc.firma)}: declara ${declarados} sitio(s), el barrido ve ${lineas.length}` +
+        (lineas.length ? ` (líneas ${lineas.join(', ')})` : ''));
+    }
+  }
+  assert.deepEqual(descuadres, [],
+    'excepciones cuyo número de sitios no cuadra. Si SOBRAN sitios, hay un manejador nuevo que heredó el permiso de otro sin que nadie lo auditara: audítalo y nómbralo en el motivo (o dale su propia firma). Si FALTAN, uno de los sitios desapareció: re-audita el que queda antes de bajar el número.\n' + descuadres.join('\n'));
 });
 
 // ------------------------------------------------------------

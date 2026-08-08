@@ -1,5 +1,100 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
 
+## 🆕 7 DE AGOSTO DE 2026 · NOCHE (2) — 🔒 el candado de los sitios, ya en los tres barridos XSS
+
+**Rama `chore/candado-barridos-xss`, 5 commits sobre `main`, aprobada para
+fusionar y SIN FUSIONAR al escribirse esto** — la fusión, el borrado de la rama
+y el push son de Pablo; compruébalo con `git branch --no-merged main`. Cierra el
+cabo que dejaron los cabos de agosto unas horas antes: el candado nuevo estaba
+en **uno de los tres** barridos. Ahora está en los tres. **Ningún commit toca
+`web/app.js`**: es todo red de seguridad. Informe y revisión en
+`.superpowers/sdd/candado-barridos-report.md` y `…-review.md`.
+
+**Qué ganó cada barrido.** `xss-manejadores.test.js` gana el conteo de sitios;
+`xss-interpolaciones-atributo.test.js` gana el conteo **y el zombie-check, que
+no tenía** (nadie comprobaba allí que una excepción siguiera correspondiendo a
+algún sitio del código). Las **tres colisiones** que se midieron al cerrar los
+cabos están declaradas con `sitios: 2` y sus **seis sitios re-auditados uno a
+uno**: `onchange::fechaSelectAjustarDias('${prefijo}')` (los `<select>` de mes y
+de año), `class::${okClase}` (el `cf-ok` de `modalConfirm` y el `mp-ok` de
+`modalPrompt`) y `class::estado-chip ${cls}` (la lista de casos y el detalle).
+
+**Se borró un atajo que era código muerto ESTRUCTURALMENTE, no por casualidad.**
+El barrido de atributos perdonaba `editFn`/`delFn` cuando el atributo era
+`onclick`, y ese `if` era inalcanzable: `clasificarInterpolaciones()` enruta cada
+grupo por su atributo, `'onclick'` está en `ATRIBUTOS_DE_MANEJADOR`, y
+`hallarAtributos()` devuelve solo la otra mitad. **El revisor lo midió en vez de
+razonarlo:** sacando `'onclick'` de ese `Set`, con el `if` quedaban 9 sitios sin
+clasificar y sin él **11** — los dos de diferencia son exactamente `editFn` y
+`delFn`. O sea que el día del refactor ese `if` habría **regalado un permiso
+general a dos sitios sin contarlos**, mientras el barrido mandaba auditar los
+otros nueve: justo el agujero que esta rama existe para cerrar. Sin él, salen en
+la lista de fallos. **Falla cerrado**, que es la única dirección aceptable en una
+red de seguridad.
+
+**Cuatro excepciones que descansaban en un comentario tienen ahora una prueba
+detrás:** las tres `id::${prefijo}-dia/-mes/-anio` y el `onchange` del otro
+fichero decían que `prefijo` nunca trae un dato de una persona. Ahora lo fija una
+prueba que recorre **las 12 llamadas** a `fechaSelectHTML` del archivo y solo
+admite dos formas: un literal, o exactamente `'el'+id` (la de
+`formEditarLeccion`) — y que ese `id` sea entero tampoco se da por supuesto: otra
+aserción exige que su único llamador lo siga envolviendo en `Number()`.
+
+🔴 **La lección de esta rama, que es lo que este documento premia: la prueba
+nueva nació BURLABLE DE DOS FORMAS, y las dos las encontró el revisor MUTANDO, no
+leyendo.**
+1. El regex admitía cualquier `'literal'+identificador`, así que
+   `fechaSelectHTML('x'+nombre, …)` pasaba en verde — y ese prefijo sale literal
+   dentro de `onchange="fechaSelectAjustarDias('${prefijo}')"`, donde una comilla
+   simple se sale del literal JS.
+2. El descarte del comentario de documentación usaba `includes('//')`, que se
+   traga cualquier línea con un `https://` dentro: una llamada escondida en una
+   línea con una URL **se autodescartaba**. Es decir, un descarte que falla
+   **abierto** dentro de una red de seguridad. Ahora es `/^\s*\/\//` (solo si la
+   línea empieza por `//`), y el revisor comprobó con un control positivo que ese
+   descarte **sigue haciendo falta**: quitándolo, la prueba salta sobre el
+   comentario de la línea 1010.
+
+⚠️ **Y hubo un FALSO VERDE por CRLF, que le pasó al implementador y al revisor.**
+Un script de mutación buscaba `\n` en ficheros que git devuelve con **CRLF**, así
+que no llegó a mutar nada y la mutación "pasó" sin haberse aplicado — que se
+parece muchísimo a un candado que no muerde. De ahí sale **la regla que conviene
+no olvidar: un resultado ROJO se demuestra solo** (el `AssertionError` de estos
+candados cita el texto mutado — `'x'+nombre`, `líneas 1039, 1040`…, y eso no puede
+salir de un archivo sin mutar); **el VERDE no prueba nada** sin (a) enseñar que el
+archivo cambió de verdad y (b) un control positivo que salga rojo por el mismo
+camino. Las rojas se autoacreditan; las verdes hay que acreditarlas.
+
+**Y lo que más vale de la rama no es el arreglo: es que se dejó de declarar la
+zona limpia.** El cierre anterior decía *"ya no queda ninguna afirmación conocida
+sin prueba detrás"*, y era falso — **tres veces en esta misma rama** una frase
+prometió más de lo que el código sostiene. En su lugar hay ahora un **mapa de los
+bordes**, de lo que cada candado **NO** cubre (está en la sección "N-3" del
+informe, y los bordes de cada pieza también en los comentarios de cada fichero):
+- **El conteo de sitios** no dice si un motivo es *cierto*, solo que el número
+  cuadra; **no ve las llamadas** a los helpers (añadir una llamada no crea sitios
+  de atributo), que solo cubren las pruebas propias de `fechaSelectHTML`,
+  `accionesBtns`, `formAporte`, `formMov`, `errCargar`, `opt` y `alternarGrupo`
+  — cualquier helper sin una de esas siete sigue descansando en un comentario; y
+  no alcanza al atajo de `location.origin`, que **perdona sin contar** (puede,
+  porque perdona una *expresión* segura en cualquier sitio, no un *sitio* seguro
+  por quien lo llama — y con su condición de caducidad escrita: si algún día se
+  ensancha a algo que dependa del contexto, baja a `EXCEPCIONES` y cuenta).
+- **La prueba del prefijo** no fija que `'el'+id` siga siendo el único caso de esa
+  forma si mañana aparece otro con ese mismo nombre de variable (se ata al
+  nombre, no a la procedencia; el revisor lo reprodujo en las dos direcciones),
+  ni mira el segundo argumento.
+- **Los tres barridos miran `web/app.js` y solo ese archivo, por análisis de
+  texto:** HTML generado en el servidor o cargado aparte no pasa por aquí.
+
+Si alguien encuentra otro borde, **el sitio de apuntarlo es esa lista, no una
+frase que diga que ya no quedan.**
+
+Suite: **755** (752 + 3; medida sobre el head `fd0bee1` con
+`cd backend && npm test`, 755 pass / 0 fail; **caduca con la próxima rama**).
+
+---
+
 ## 🆕 7 DE AGOSTO DE 2026 · NOCHE — 🧵 los tres cabos de agosto: el gasto a quien existe, el nombre que se quedó escrito, y la hoja que se pisaba
 
 **Rama `feat/cabos-agosto` TERMINADA y revisada (14 commits sobre `8b89fb4`),
@@ -125,7 +220,14 @@ la repitas de memoria).
 **Lo que queda anotado y sin cerrar.** Ninguno bloquea; los dos primeros son los
 que hay que entender antes de tocar nada:
 
-- 🔴 **La misma clase de agujero sigue abierta en los otros dos barridos XSS.**
+- **(cerrado esa misma noche, unas horas después, por la rama
+  `chore/candado-barridos-xss`** — ver la sección "7 de agosto · noche (2)". Los
+  tres barridos cuentan ya los sitios, el de atributos ganó además el
+  zombie-check que le faltaba, y **las tres colisiones que se midieron aquí están
+  declaradas con `sitios: 2` y sus seis sitios re-auditados**. De paso cayó un
+  atajo que era código muerto y habría perdonado dos sitios sin contarlos el día
+  de un refactor. La medición de abajo es la que abrió esa rama, así que se deja
+  escrita entera.**)** ~~🔴 **La misma clase de agujero sigue abierta en los otros dos barridos XSS.**
   El `sitios` solo se aplicó a `xss-cuerpo.test.js`. `xss-manejadores.test.js:79`
   y `xss-interpolaciones-atributo.test.js:186` siguen construyendo su
   `EXCEPCIONES_MAP` con la clave-firma y comprobando **mera existencia**, que es
@@ -140,7 +242,10 @@ que hay que entender antes de tocar nada:
   `web/app.js` al cerrar la tanda. La adenda de la review afirma que no hay
   colisiones vivas en las otras dos listas — **es falso**, son tres.* El arreglo
   se aplicó a **uno de los tres** barridos: candidato claro para la próxima tanda
-  de higiene.
+  de higiene.~~
+  ⚠️ **Lo que NO cerró esa rama y sigue en pie:** el `sitios` **cuenta, no
+  identifica** (bullet de abajo), y el mapa de bordes de la sección "noche (2)"
+  lista lo que ningún candado cubre. La frase "ya no queda nada" no vale aquí.
 - 🔴 **El commit `125c954` es un `wip` con la suite ROJA a sabiendas, y aterriza
   en `main` con el merge `--no-ff`. Se deja a propósito.** Está ahí porque la
   sesión se cortó a mitad de la tarea 6 y se prefirió guardar el estado real a
@@ -234,22 +339,23 @@ al tiro; abrir "🗒️ Gastos de eventos" y saltar a la hoja con "Ver hoja ›"
 Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
 
 ---
-*Última actualización: 7 de agosto de 2026, noche (cierre de los **cabos de agosto**: los tres cabos hechos y revisados, suite **752**). ⚠️ **Queda UNA rama local sin fusionar, `feat/cabos-agosto`** — la fusión `--no-ff`, el borrado de la rama y el push son de Pablo; compruébalo con `git branch --no-merged main`, no te fíes de esta línea. ⬆️ **`main` sigue SIN SUBIR**: al escribirse esto iban **8 commits** por delante de `origin/main` (los 6 del Camino C más la spec y el plan de esta tanda), y encima irá el merge — el push lo hace Pablo con GitHub Desktop y es lo que dispara el redespliegue. **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está fusionada, subida o desplegada caducan con cada rama** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (7-ago · noche)" aquí abajo, y compruébalo con `npm test`, `git branch --no-merged main` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 7 de agosto de 2026, noche, segunda pasada (los **cabos de agosto** ya fusionados a `main` con el merge `1961032`, rama borrada; encima, el **candado de los sitios en los tres barridos XSS**, suite **755**). ⚠️ **Queda UNA rama local sin fusionar, `chore/candado-barridos-xss`** — aprobada; la fusión `--no-ff`, el borrado de la rama y el push son de Pablo. Compruébalo con `git branch --no-merged main`, no te fíes de esta línea. ⬆️ **`main` sigue SIN SUBIR**: al escribirse esto iban **25 commits** por delante de `origin/main`, y con esta rama fusionada `--no-ff` serán **31** (los 5 de la rama más el commit de fusión) — el push lo hace Pablo con GitHub Desktop y es lo que dispara el redespliegue. ⚠️ Ojo: **ni un solo commit de esta rama toca `web/app.js`**, así que el despliegue no se puede verificar buscando código nuevo en el `app.js` que sirve Render; lo que hay que buscar allí es lo de los cabos (`modalAviso`). **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está fusionada, subida o desplegada caducan con cada rama** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (7-ago · noche 2)" aquí abajo, y compruébalo con `npm test`, `git branch --no-merged main` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
-## 👉 POR DÓNDE RETOMAR (7-ago · noche)
+## 👉 POR DÓNDE RETOMAR (7-ago · noche 2)
 
 **Lo primero es de Pablo, no de código, y en este orden:**
-1. **Fusionar `feat/cabos-agosto`** (`git merge --no-ff`, borrar la rama, y re-correr `cd backend && npm test` **sobre la fusión** — 752 en verde). ⚠️ Con `--no-ff` entra también el `wip` `125c954`, que tiene la **suite roja a sabiendas**: está explicado en la sección del 7-ago · noche, y aplastarlo con un rebase o dejarlo es **decisión suya**.
-2. **Push** con GitHub Desktop. Al escribirse esto iban 8 commits sin subir más lo que añada el merge; el push dispara el redespliegue en Render. Verificarlo después buscando `modalAviso` en el `app.js` que sirve Render.
-3. **Las cuatro comprobaciones de navegador de los cabos de agosto** (el pisotón en dos ventanas, la recarga que falla con la red cortada, el gasto a una cuenta inactiva, el aviso del nombre) — están escritas paso a paso en la sección del 7-ago · noche. **Ninguna prueba de Node puede hacerlas**: nadie ha abierto todavía esta app en dos navegadores a la vez.
+1. **Fusionar `chore/candado-barridos-xss`** (`git merge --no-ff`, borrar la rama, y re-correr `cd backend && npm test` **sobre la fusión** — 755 en verde). Los cabos de agosto **ya están fusionados** (merge `1961032`, rama borrada); esta es la única rama viva.
+2. **Push** con GitHub Desktop. Al escribirse esto `main` iba **25** commits sin subir, y con esta fusión serán **31** — compruébalo con `git log origin/main..main --oneline`, no te fíes del número. El push dispara el redespliegue en Render; verificarlo después buscando **`modalAviso`** en el `app.js` que sirve Render (⚠️ **no busques nada de la rama del candado: no toca `web/app.js`**, es todo pruebas).
+   ⚠️ Con `--no-ff`, en `main` ya está el `wip` `125c954` de los cabos, con la **suite roja a sabiendas**: explicado en la sección del 7-ago · noche. Aplastarlo con un rebase o dejarlo **sigue siendo decisión suya**, y ahora hay commits encima.
+3. **Las cuatro comprobaciones de navegador de los cabos de agosto** (el pisotón en dos ventanas, la recarga que falla con la red cortada, el gasto a una cuenta inactiva, el aviso del nombre) — están escritas paso a paso en la sección del 7-ago · noche. **Ninguna prueba de Node puede hacerlas**: nadie ha abierto todavía esta app en dos navegadores a la vez. La rama del candado **no añade ninguna**: no cambia nada que se vea.
 4. **Las comprobaciones de navegador que siguen pendientes de antes:** las tres del 5-ago (como `raquel`, corregir un movimiento de Tesorería; como `marta`, editar/borrar clases y lecciones y leer el 409; como `pastor`, ver historiales sin lápiz), la de la tanda E (borrar un mensaje de la bandeja y marcar todos como atendidos), la de la tanda F (Registro de actividad filtrado por `raquel`, con la casilla de accesos), la de la tanda H (crear "Culto — todos los domingos" y borrar "esta y las siguientes") y la del Camino C (un gasto "lo pagó la caja" y ver bajar el saldo de Tesorería).
 5. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
 
 **Y queda una conversación abierta, no de código:** qué cosa nueva necesita la iglesia. Pablo iba a contarlo y no llegó a responderse.
 
-**Con los cabos de agosto cerrados no queda ninguna tanda aprobada pendiente.** Lo que hay anotado para una próxima tanda de higiene está al final de la sección del 7-ago · noche; lo más gordo es que el candado nuevo del barrido XSS (`sitios`) solo se aplicó a **uno de los tres** barridos.
+**No queda ninguna tanda aprobada pendiente.** El cabo más gordo que dejaron los cabos de agosto —el candado de los sitios aplicado a **uno de los tres** barridos XSS— lo cerró esa misma noche la rama `chore/candado-barridos-xss`. Lo que queda anotado para una próxima tanda de higiene está al final de las dos secciones del 7-ago; y lo que **ningún** candado cubre está en el **mapa de bordes** de la sección "noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
 
 **Las tandas que Pablo aprobó el 5-ago, todas cerradas** (se dejan aquí porque cada una explica qué cazó y qué dejó anotado):
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
