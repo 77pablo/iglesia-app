@@ -1,10 +1,142 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
 
+## 🆕 8 DE AGOSTO DE 2026 · MADRUGADA — 🧹 higiene de agosto: se cerraron los cabos, y aparecieron cuatro cosas que valen más
+
+**Rama `chore/higiene-agosto`, 9 commits sobre `main`, aprobada para fusionar y
+SIN FUSIONAR al escribirse esto** — la fusión, el borrado de la rama y el push
+son de Pablo; compruébalo con `git branch --no-merged main`. Informe y revisión
+en `.superpowers/sdd/higiene-a-report.md` y `…-review.md`.
+⚠️ **Los 9 commits llevan el trailer `Claude Opus 5 (1M context)`** en vez del
+`Claude Fable 5` del resto de agosto, porque los escribió otro modelo. La rama
+queda con los dos mezclados: no es un error que haya que arreglar, solo que no
+sorprenda a quien mire el historial.
+
+**Lo que cerró** (los seis cabos que la sección del 7-ago dejó anotados, ya
+tachados allí): los comodines `LIKE` escapados en `apariciones-nombre.js` · el
+helper de consulta de persona · la prueba que faltaba del
+`PATCH /admin/usuarios/:id` con `nombre` **y** `activo` a la vez · la
+comparación del 409, ahora dentro de la transacción · el comentario del `await`
+que prometía un mecanismo que no actúa · y `apariciones.ninos` con dos tipos
+bajo la misma clave.
+⚠️ **Un matiz del helper que la nota vieja tenía mal:** eran **cuatro** sitios,
+no tres — había una cuarta consulta parecida en `descOrigenGasto` que nadie
+había contado. Y lo que se repetía y se podía olvidar en el quinto **no era la
+consulta, era el `AND iglesia_id = ?`**, que es la línea que aísla a las
+congregaciones. `personaDeLaIglesia()` devuelve la fila tal cual y **la regla se
+queda en cada llamador**, porque las cuatro son distintas (responsable y pagador
+nuevo exigen cuenta activa; el pagador de una corrección solo si la atribución
+cambia; el rastro solo quiere el nombre). Un booleano en el helper para elegir
+cuál aplicar habría sido peor que la duplicación que sustituye.
+
+🔴 **Y ahora lo que de verdad importa de esta tanda: cuatro hallazgos, ninguno
+en el encargo.**
+
+**1. La app YA corre con un segundo proceso escribiendo el mismo fichero, y
+nadie lo sabía.** `Dockerfile:53` arranca `docker-entrypoint.sh`, y ese script
+en su **línea 64** hace `exec litestream replicate … -exec "node
+src/server.js"`: Litestream es un proceso aparte con su propia conexión a
+`/data/iglesia.db`, y escribe en la base. O sea que el TOCTOU del 409 **no era
+"el día que la app corra en más de un proceso"**: ese día ya llegó.
+⚠️ Y por eso hizo falta **`BEGIN IMMEDIATE`, no el `BEGIN` a secas** del resto
+del módulo — esta es la única transacción del repo que **lee antes de
+escribir**. Con el diferido el candado de escritura se pide recién en el
+`UPDATE`, y si otro confirma en el medio SQLite rechaza subir a escritor
+(`SQLITE_BUSY_SNAPSHOT`) **y el `busy_timeout` no lo reintenta**: la corrección
+**se pierde** y la persona lee un 500. Verificado con dos conexiones de verdad,
+no razonado: con `BEGIN` el monto final era el del otro y la corrección se
+esfumó; con `IMMEDIATE`, se aplica.
+⚠️ **El precio, escrito para que nadie lo descubra de golpe:** el que llega
+segundo espera el `busy_timeout` **entero — 5 s** (`PRAGMA` de `db.js:21`;
+medido, 5,5 s) y, como `DatabaseSync` es **síncrono**, esos segundos son el
+bucle de eventos de ese proceso **parado**. Es el intercambio correcto —antes se
+perdía el dato, ahora se espera—, pero no es gratis.
+*(Revisadas las otras 20 transacciones del repo: ninguna lee antes de escribir
+dentro de su `BEGIN`, así que ninguna necesita cambiar. La única excepción
+parcial es `eliminarIglesia.js:73-92`, preexistente y ruta de super-admin:
+anotada, no tocada.)*
+
+**2. "Ninguna prueba de Node puede observar esto" resultó FALSO, y la frase iba
+a quedarse escrita en el repo.** El implementador la usó como justificación de
+por qué el arreglo del 409 no llevaba prueba del escenario real. El revisor la
+desmintió de la única forma que vale: **escribiendo la prueba**, en ~40 líneas y
+sin dependencias nuevas — una segunda conexión `DatabaseSync` al mismo fichero
+(que es literalmente lo que sería otro proceso) y una costura síncrona en
+`db.exec` que la dispara justo cuando el manejador abre su transacción. Y lo que
+midió es peor de lo que se temía: sobre el código de **antes** del arreglo, el
+escenario no solo respondía **200** — **devolvía el monto a su valor viejo,
+llevándose por delante la corrección del otro proceso**. Si la frase se queda,
+le enseña a la siguiente tanda a no intentarlo.
+
+**3. La prueba que guardaba el cabo de riesgo no lo guardaba.** Comprobaba
+**dónde estaba una cadena de texto**, no que la fila se releyera: sustituyendo
+la relectura por `.get(-999) || gasto` —la forma se conserva, la relectura no—
+la suite entera seguía en verde. Se podía vaciar el arreglo de sustancia sin que
+cayera una sola prueba. **Es la tercera vez este mes** que un candado resulta
+guardar la forma en vez del comportamiento.
+
+**4. Renombrar no basta para que un fallo deje de ser silencioso — y la nota que
+este documento tenía escrita era falsa.** Decía que un `ninos_n` / `ninos` haría
+el cruce de los dos avisos "imposible". **Está medido que no:** con las claves ya
+distintas y sin comprobación de forma, la lista del pastor leída en modo conteo
+produce *«Tu nombre anterior sigue escrito en 1 prédica(s)»* — la ficha del niño
+**se cae del aviso y lo que queda parece un aviso completo**, que es peor que
+desaparecer, porque nadie sospecha que falta justo la mitad que importa. Hicieron
+falta **tres** piezas, no una: claves distintas, **un solo lector**
+(`avisoNombreViejo(apariciones, modo)`, `web/app.js:3801`) al que cada pantalla
+le **declara qué forma espera** y que **grita** ante una que no cuadra en vez de
+enseñar medio aviso, y un candado que impide que vuelva a haber un segundo
+lector. Ese candado no es decorativo: hay una mutación (la pantalla del pastor
+pidiendo el modo `conteo`) que **solo él** detecta, de las 778 pruebas.
+
+⚠️ **La regla de método, que ya nos ha costado ocho veces y va aquí en grande.**
+Un mutador por **shell se come las barras** (tres intentos perdidos del
+implementador, y otros tres del revisor), y un patrón **multilínea con `\n` no
+casa nunca** porque estos ficheros están en **CRLF** (tres más del revisor). En
+los dos casos el resultado es un **verde que no significa nada**. Lo que sí
+funciona, y es lo que hay que usar de aquí en adelante: **mutador en Node,
+cadenas de una sola línea, que EXIJA encontrar el texto y enseñe el hash del
+fichero antes y después.** Léase junto con el falso verde por CRLF de la sección
+"7-ago · noche (2)": **es la misma enfermedad**, y su regla es la misma — un rojo
+se demuestra solo, un verde hay que acreditarlo.
+
+**Tres cabos nuevos, anotados a propósito y NO arreglados:**
+- ⚠️ **`backend/src/admin.js:193-199` — un `UPDATE` que se aplica y después
+  devuelve 400.** Un `PATCH /admin/usuarios/:id` con `{activo:true,
+  es_pastor:false}` sobre la propia cuenta escribe el `activo` y **luego** choca
+  con la guardia de `es_pastor`. Hoy es **inocuo por una razón sólida que
+  conviene tener escrita**: `auth.js:157-158` relee `activo` en cada petición y
+  401ea a una cuenta desactivada, así que quien llega ahí estaba activo por
+  fuerza y el `UPDATE` no cambia nada. Pero el patrón "guardia **después** del
+  `UPDATE`" está a una sustitución de volverse real.
+- ⚠️ **La razón principal del `await` no la fija ninguna prueba.** Sin él,
+  `alDia` es una promesa —y una promesa siempre es "sí"—, así que el `else` que
+  avisa de "la hoja no se pudo actualizar" sería **código muerto en el 100 % de
+  las ejecuciones** y la app diría "Gasto corregido" con el GET caído. Quitar los
+  dos `await` deja la suite en verde: hoy la única defensa es un comentario. Lo
+  que haría falta no es un arreglo de cinco líneas: que el arnés sepa recortar
+  **métodos del literal `const Org = {`**, no solo funciones de nivel superior —
+  y eso no serviría solo aquí, `Org` tiene hoy más manejadores sin arnés posible.
+- `nino.familia` sigue siendo otro texto libre que puede nombrar a una persona y
+  **no está ni entre los sitios que busca el aviso del nombre ni en el "Fuera de
+  alcance" de la spec**. Probablemente correcto dejarlo fuera; solo que no está
+  escrito.
+
+**Lo que NO cerró esta tanda y sigue abierto** (comprobado): la pérdida del texto
+específico del error en los dos caminos silenciosos (intercambio aceptado), la
+asimetría de `addCosa`/`borrarCosa`/`toggleCosa`, que `sitios` **cuenta pero no
+identifica**, y el `wip` `125c954` con la suite roja ya dentro de `main`.
+
+Suite: **778** (partía de 755; medida sobre el head `fad70a3` con
+`cd backend && npm test`; **caduca con la próxima rama**).
+
+---
+
 ## 🆕 7 DE AGOSTO DE 2026 · NOCHE (2) — 🔒 el candado de los sitios, ya en los tres barridos XSS
 
-**Rama `chore/candado-barridos-xss`, 5 commits sobre `main`, aprobada para
-fusionar y SIN FUSIONAR al escribirse esto** — la fusión, el borrado de la rama
-y el push son de Pablo; compruébalo con `git branch --no-merged main`. Cierra el
+**Rama `chore/candado-barridos-xss`, 5 commits sobre `main`.** ~~Aprobada para
+fusionar y SIN FUSIONAR al escribirse esto~~ — **fusionada el mismo 7-ago (merge
+`a85de3c`, rama borrada, suite 755 verde sobre la fusión) y subida a GitHub esa
+noche**; compruébalo con `git branch --no-merged main`, no con esta línea. Cierra el
 cabo que dejaron los cabos de agosto unas horas antes: el candado nuevo estaba
 en **uno de los tres** barridos. Ahora está en los tres. **Ningún commit toca
 `web/app.js`**: es todo red de seguridad. Informe y revisión en
@@ -257,13 +389,17 @@ que hay que entender antes de tocar nada:
 - ⚠️ **`sitios` cuenta, no identifica.** Si uno de los dos sitios que cubre una
   excepción lo sustituye otra función distinta y el total sigue en 2, el candado
   no lo ve. Mucho mejor que antes, pero no es hermético.
-- **El comentario del `await` promete un mecanismo que no es el que actúa**
+- **(cerrado el 8-ago, higiene de agosto** — el comentario dice ahora las dos
+  cosas que el `await` sí da: que `alDia` sea un sí/no y no una promesa, y que no
+  se pueda encadenar otra corrección desde el mismo botón. ⚠️ **Pero de ahí salió
+  un cabo nuevo:** esa razón principal **no la fija ninguna prueba** — ver la
+  sección del 8-ago.**)** ~~**El comentario del `await` promete un mecanismo que no es el que actúa**
   (`web/app.js:5561-5566`): dice que `conBoton` mantiene el botón apagado "hasta
   que la hoja esté repintada" para justificar que se cierra la carrera del ✏️,
   pero `conBoton` apaga **solo el botón que se pulsó**, no los ✏️ de las filas,
   que no los desactiva nadie. Esa ventana se cura sola cuando el GET aterriza (y
   si falla, es justo el caso que cubre el `else` nuevo). El código es correcto;
-  la frase, no.
+  la frase, no.~~
 - **Se pierde el texto específico del error en los dos caminos silenciosos:** si
   el GET falla, la persona lee "recarga la página" en vez del mensaje concreto de
   `api()` (con un 429 diría eso en lugar de "espera un momento"). Intercambio
@@ -273,32 +409,50 @@ que hay que entender antes de tocar nada:
   la persona ve el "Sin conexión" genérico y no se entera de que su cambio sí se
   guardó. Justificado —solo el gasto compara-y-guarda, y por tanto solo ahí una
   hoja caduca provoca una acusación falsa—, pero visible.
-- **`apariciones.ninos` viaja con dos tipos bajo la misma clave:** número desde
+- **(cerrado el 8-ago, higiene de agosto** — ver la sección del 8-ago. 🔴 **Y la
+  última frase de aquí abajo era FALSA, está medido:** renombrar a secas no lo
+  hace imposible. Con las claves ya distintas y sin comprobación de forma, el
+  cruce produce *«…sigue escrito en 1 prédica(s)»* — la ficha del niño se cae y
+  el aviso **parece completo**, que es peor que desaparecer. Hicieron falta tres
+  piezas: claves distintas, **un solo lector** que grita ante una forma que no
+  cuadra, y un candado contra el segundo lector.**)** ~~**`apariciones.ninos` viaja con dos tipos bajo la misma clave:** número desde
   autoservicio, array desde admin. La diferencia de privacidad es correcta y está
   en la spec, pero si alguien cruza los manejadores, `[{…}] > 0` es `false` y el
   aviso **desaparece en silencio** en vez de romperse. Un `ninos_n` / `ninos` lo
-  haría imposible.
-- **Comodines `LIKE` sin escapar** (`backend/src/apariciones-nombre.js:20`):
+  haría imposible.~~
+- **(cerrado el 8-ago, higiene de agosto** — `comoTextoLiteral()` escapa `%`, `_`
+  y la propia barra, y las tres consultas declaran `ESCAPE '\'`.**)** ~~**Comodines `LIKE` sin escapar** (`backend/src/apariciones-nombre.js:20`):
   `perfilSchema` solo exige 1..120 caracteres, así que quien se ponga `%` de
   nombre y luego lo corrija recibe el recuento de **todas** las fichas de niños
   con autorizados y de todas las prédicas **de su propia iglesia**. Es solo un
   número, el aislamiento entre iglesias se respeta y las prédicas ya son públicas
   en el portal: daño bajo. Se cierra escapando `%`, `_`, `\` y añadiendo
-  `ESCAPE '\'`.
-- **La comparación del 409 vive fuera de la transacción**
+  `ESCAPE '\'`.~~
+- **(cerrado el 8-ago, higiene de agosto:** la comparación vive dentro, y la
+  transacción es `BEGIN IMMEDIATE`. 🔴 **La frase tachada de abajo era falsa en su
+  parte clave, y el error fue mío:** grepear `cluster`/`worker_threads` en
+  `server.js`, `render.yaml` y `Dockerfile` **no es comprobar que hay un solo
+  proceso**. El segundo escritor entra por un fichero que no abrí,
+  `docker-entrypoint.sh:64`, donde `litestream replicate -exec "node
+  src/server.js"` corre desde el `ENTRYPOINT` del `Dockerfile:53`. **Ya había dos
+  procesos contra el mismo `iglesia.db` cuando esto se escribió.** Ver la sección
+  del 8-ago.**)** ~~**La comparación del 409 vive fuera de la transacción**
   (`backend/src/organizacion.js:463-468` frente al `BEGIN` de `:536`), al revés
   de lo que dice la spec. **Hoy no hay fallo:** el manejador es síncrono desde el
   `SELECT` hasta el `COMMIT` y Node es de un solo hilo, y no hay cluster ni
   workers en `server.js`, `render.yaml` ni `Dockerfile` (verificado). Pasa a ser
-  un TOCTOU real el día que la app corra en más de un proceso o instancia.
-- La consulta de persona-activa está **duplicada en tres sitios**
+  un TOCTOU real el día que la app corra en más de un proceso o instancia.~~
+- **(cerrado el 8-ago, higiene de agosto:** `personaDeLaIglesia()`. ⚠️ **Eran
+  cuatro sitios, no tres** — faltaba contar el de `descOrigenGasto` —, y lo que se
+  repetía no era la consulta sino el `AND iglesia_id = ?`.**)** ~~La consulta de persona-activa está **duplicada en tres sitios**
   (`organizacion.js:342`, `:414` y la del `PATCH` en `:494`, que lee `activo` en
-  vez de filtrarlo): candidato natural a helper, sin urgencia.
-- **Dos huecos de cobertura y alcance:** falta la prueba del
-  `PATCH /admin/usuarios/:id` con `nombre` **y** `activo` a la vez, y
-  `nino.familia` es otro texto libre que puede nombrar a la persona y que no está
-  ni entre los tres sitios que busca el cabo 2 ni en el "Fuera de alcance" de la
-  spec (probablemente correcto dejarlo fuera; solo que no está escrito).
+  vez de filtrarlo): candidato natural a helper, sin urgencia.~~
+- **Dos huecos de cobertura y alcance:** ~~falta la prueba del
+  `PATCH /admin/usuarios/:id` con `nombre` **y** `activo` a la vez~~ **(escrita el
+  8-ago)**, y `nino.familia` es otro texto libre que puede nombrar a la persona y
+  que no está ni entre los tres sitios que busca el cabo 2 ni en el "Fuera de
+  alcance" de la spec (probablemente correcto dejarlo fuera; solo que no está
+  escrito) — **este sigue abierto**.
 
 
 ## 🆕 7 DE AGOSTO DE 2026 — 💰 el libro de la tesorera por fin cuenta los eventos (Camino C)
@@ -339,23 +493,24 @@ al tiro; abrir "🗒️ Gastos de eventos" y saltar a la hoja con "Ver hoja ›"
 Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
 
 ---
-*Última actualización: 7 de agosto de 2026, noche, segunda pasada (los **cabos de agosto** ya fusionados a `main` con el merge `1961032`, rama borrada; encima, el **candado de los sitios en los tres barridos XSS**, suite **755**). ✅ **No queda ninguna rama local sin fusionar:** `chore/candado-barridos-xss` se fusionó `--no-ff` (merge `a85de3c`) con la suite en **755 verde medida SOBRE la fusión**, y la rama se borró. Compruébalo con `git branch --no-merged main`, no te fíes de esta línea. ✅ **SUBIDO Y DESPLEGADO el mismo 7-ago:** Pablo hizo el push de los 33 commits; `main` y `origin/main` sincronizados, `/api/health` en 200, y el `app.js` que sirve Render ya trae `modalAviso` (8 apariciones, las mismas que el local) y el mensaje del choque de ediciones. ⚠️ Antes de subirse, esta línea llegó a decir **31** y luego **32**: las dos veces por no contar el commit de documentación que se estaba haciendo. Mide el número, no lo heredes. ⚠️ Y al comparar el `app.js` de producción con el local, **el desplegado pesa menos**: exactamente un byte por línea (CRLF contra LF). Eso **no** es un despliegue viejo — compara por contenido (`modalAviso`, una frase nueva), nunca por tamaño. **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está fusionada, subida o desplegada caducan con cada rama** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (7-ago · noche 2)" aquí abajo, y compruébalo con `npm test`, `git branch --no-merged main` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
+*Última actualización: 8 de agosto de 2026, madrugada (**higiene de agosto**: los seis cabos del 7-ago cerrados, suite **778**). ⚠️ **Queda UNA rama local sin fusionar, `chore/higiene-agosto`** — aprobada; la fusión `--no-ff`, el borrado de la rama y el push son de Pablo. Compruébalo con `git branch --no-merged main`, no te fíes de esta línea. ⬆️ **Sin subir:** hoy `main` va **1** commit por delante de `origin/main`, y con esta rama fusionada serán **12** — los 9 de la rama, el commit de documentación que estás leyendo, y el commit de fusión. (Esta cuenta se equivocó **tres veces seguidas** el 7-ago, siempre por olvidar el commit que se estaba haciendo; ahora se cuentan los tres sumandos por separado a propósito. Mídelo igual: `git log origin/main..main --oneline`.) ⚠️ **Ningún commit de esta rama toca `web/app.js` salvo comentarios**, así que el despliegue no se verifica buscando código nuevo en el `app.js` de Render.*
+*Lo anterior, que sigue valiendo: los **cabos de agosto** (merge `1961032`) y el **candado de los sitios en los tres barridos XSS** (merge `a85de3c`, suite 755 medida sobre la fusión) ✅ **SUBIDOS Y DESPLEGADOS el mismo 7-ago:** Pablo hizo el push de los 33 commits; `main` y `origin/main` sincronizados, `/api/health` en 200, y el `app.js` que sirve Render ya trae `modalAviso` (8 apariciones, las mismas que el local) y el mensaje del choque de ediciones. ⚠️ Antes de subirse, esta línea llegó a decir **31** y luego **32**: las dos veces por no contar el commit de documentación que se estaba haciendo. Mide el número, no lo heredes. ⚠️ Y al comparar el `app.js` de producción con el local, **el desplegado pesa menos**: exactamente un byte por línea (CRLF contra LF). Eso **no** es un despliegue viejo — compara por contenido (`modalAviso`, una frase nueva), nunca por tamaño. **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está fusionada, subida o desplegada caducan con cada rama** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (7-ago · noche 2)" aquí abajo, y compruébalo con `npm test`, `git branch --no-merged main` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
 
 ---
 
-## 👉 POR DÓNDE RETOMAR (7-ago · noche 2)
+## 👉 POR DÓNDE RETOMAR (8-ago · madrugada)
 
 **Lo primero es de Pablo, no de código, y en este orden:**
-1. ~~**Fusionar `chore/candado-barridos-xss`**~~ **(hecho el mismo 7-ago: merge `a85de3c`, rama borrada, suite 755 verde medida SOBRE la fusión).** Los cabos de agosto también (merge `1961032`). **No queda ninguna rama viva.**
-2. ~~**Push** con GitHub Desktop~~ **(hecho el mismo 7-ago: 33 commits subidos, `main` sincronizada, y verificado que Render sirve `modalAviso` y el mensaje del choque).** Compruébalo igualmente con `git log origin/main..main --oneline` — esta línea ha estado equivocada en los dos sentidos más de una vez. ⚠️ Si algo "no cambió", sospecha de la **caché del service worker** antes que de un bug: `web/sw.js` es cache-first, probar en incógnito.
-   ⚠️ Con `--no-ff`, en `main` ya está el `wip` `125c954` de los cabos, con la **suite roja a sabiendas**: explicado en la sección del 7-ago · noche. Aplastarlo con un rebase o dejarlo **sigue siendo decisión suya**, y ahora hay commits encima.
-3. **Las cuatro comprobaciones de navegador de los cabos de agosto** (el pisotón en dos ventanas, la recarga que falla con la red cortada, el gasto a una cuenta inactiva, el aviso del nombre) — están escritas paso a paso en la sección del 7-ago · noche. **Ninguna prueba de Node puede hacerlas**: nadie ha abierto todavía esta app en dos navegadores a la vez. La rama del candado **no añade ninguna**: no cambia nada que se vea.
+1. **Fusionar `chore/higiene-agosto`** (`git merge --no-ff`, borrar la rama, y re-correr `cd backend && npm test` **sobre la fusión** — 778 en verde). Es la única rama viva: los cabos de agosto (merge `1961032`) y el candado de los barridos (merge `a85de3c`) ya están dentro.
+2. **Push** con GitHub Desktop. Serán **12** commits (ver la cabecera); compruébalo con `git log origin/main..main --oneline`, no te fíes del número. Lo del 7-ago **ya está subido y desplegado**, verificado contra el `app.js` de Render. ⚠️ Si algo "no cambió", sospecha de la **caché del service worker** antes que de un bug: `web/sw.js` es cache-first, probar en incógnito. ⚠️ Y al comparar con producción, **compara por contenido, nunca por tamaño**: el `app.js` servido pesa un byte menos por línea que el local (LF contra CRLF).
+   ⚠️ En `main` sigue el `wip` `125c954` con la **suite roja a sabiendas**: explicado en la sección del 7-ago · noche. Aplastarlo con un rebase o dejarlo **sigue siendo decisión suya**, y cada tanda le añade commits encima.
+3. **Las cuatro comprobaciones de navegador de los cabos de agosto** (el pisotón en dos ventanas, la recarga que falla con la red cortada, el gasto a una cuenta inactiva, el aviso del nombre) — están escritas paso a paso en la sección del 7-ago · noche. **Ninguna prueba de Node puede hacerlas**: nadie ha abierto todavía esta app en dos navegadores a la vez. ⚠️ **La higiene del 8-ago cambió el aviso del nombre por dentro** (un solo lector con comprobación de forma), así que al hacer la del nombre hay que mirar además que el modal siga saliendo bien en las **dos** pantallas: conteos en "Mi perfil", ficha del niño en la del pastor.
 4. **Las comprobaciones de navegador que siguen pendientes de antes:** las tres del 5-ago (como `raquel`, corregir un movimiento de Tesorería; como `marta`, editar/borrar clases y lecciones y leer el 409; como `pastor`, ver historiales sin lápiz), la de la tanda E (borrar un mensaje de la bandeja y marcar todos como atendidos), la de la tanda F (Registro de actividad filtrado por `raquel`, con la casilla de accesos), la de la tanda H (crear "Culto — todos los domingos" y borrar "esta y las siguientes") y la del Camino C (un gasto "lo pagó la caja" y ver bajar el saldo de Tesorería).
 5. Las acciones de Render de siempre siguen abiertas (SMTP, `SUPERADMIN_PASSWORD`, confirmar `R2_*`, `VAPID_*`, abogado) — ver su sección más abajo.
 
 **Y queda una conversación abierta, no de código:** qué cosa nueva necesita la iglesia. Pablo iba a contarlo y no llegó a responderse.
 
-**No queda ninguna tanda aprobada pendiente.** El cabo más gordo que dejaron los cabos de agosto —el candado de los sitios aplicado a **uno de los tres** barridos XSS— lo cerró esa misma noche la rama `chore/candado-barridos-xss`. Lo que queda anotado para una próxima tanda de higiene está al final de las dos secciones del 7-ago; y lo que **ningún** candado cubre está en el **mapa de bordes** de la sección "noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
+**No queda ninguna tanda aprobada pendiente.** Los cabos que dejaron los cabos de agosto están cerrados en dos tandas: el candado de los sitios en los tres barridos (`chore/candado-barridos-xss`, esa misma noche) y los seis restantes (`chore/higiene-agosto`, esta madrugada). **Lo que sigue abierto, y es corto:** los tres cabos nuevos del 8-ago (el `UPDATE` antes del 400 en `admin.js:193-199`, la razón principal del `await` sin prueba —hace falta un arnés que sepa recortar métodos de `const Org = {`—, y `nino.familia`), más los cuatro que ninguna tanda tocó (el texto del error en los caminos silenciosos, la asimetría de `addCosa`, que `sitios` cuente pero no identifique, y el `wip` `125c954`). Y lo que **ningún** candado cubre sigue en el **mapa de bordes** de la sección "7-ago · noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
 
 **Las tandas que Pablo aprobó el 5-ago, todas cerradas** (se dejan aquí porque cada una explica qué cazó y qué dejó anotado):
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.

@@ -75,6 +75,35 @@ function montoTxt(n) {
   return '$' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+// Buscar a una persona POR SU ID cuando el id lo manda el cliente: siempre
+// acotado por la iglesia de quien pregunta, que es la linea que aisla a las
+// congregaciones, y escrita a mano en cuatro sitios es una linea que alguien
+// puede olvidar en el quinto.
+//
+// Ojo con lo que esto NO es: no es la unica lectura de `persona` del modulo.
+// armarHoja() la lee cinco veces mas por JOIN (responsable de una cosa, pagador
+// de un gasto, los dos resumenes de quien-puso-que y el actor del historial) y
+// ninguna lleva predicado de iglesia_id. Hoy no es un agujero —todas cuelgan de
+// org_id, o de auditoria.iglesia_id, que si estan acotados—, pero no hay una
+// sola puerta vigilada: hay una vigilada y cinco que dependen de por donde se
+// entra. Si alguna deja de colgar de la hoja, hay que acotarla.
+//
+// El nombre es largo a proposito: admin.js tiene un `personaDeIglesia` que
+// devuelve `SELECT *`. A una letra de distancia y con otra forma, confundirlos
+// era cuestion de tiempo.
+//
+// Devuelve la fila TAL CUAL, con su `activo`, y la REGLA se queda en cada
+// llamador, porque las cuatro son distintas:
+//   - responsable de una cosa y pagador de un gasto NUEVO: tiene que estar activa
+//   - pagador de un gasto que se corrige: activa solo si la atribucion cambia
+//   - el rastro de auditoria: solo quiere el nombre
+// Un helper con un booleano para elegir cual de las tres aplicar seria peor que
+// la duplicacion que sustituye.
+function personaDeLaMismaIglesia(personaId, iglesiaId) {
+  return db.prepare('SELECT id, nombre, activo FROM persona WHERE id = ? AND iglesia_id = ?')
+    .get(personaId, iglesiaId);
+}
+
 // Describe en castellano llano quien puso la plata de un gasto, para el
 // detalle de auditoria (Task 4, punto 1 de la revision). Nada de "fuente" ni
 // "pagado_por": esto lo lee una persona, no un programador.
@@ -82,17 +111,17 @@ function montoTxt(n) {
 // fuente NULL + persona: es el estado de TRANSICION que ya entendia armarHoja
 // antes de esta casilla (ver 'gasto antiguo CON persona pero sin fuente sigue
 // contando como "por devolver"') — se describe igual que 'devuelve'.
-// Acotada por iglesia como el resto de las consultas a persona de este modulo
-// (ver el POST y el PATCH de gastos): pagadoPorId sale de una fila YA guardada,
-// que esta ruta no valida —solo valida lo que entra—, asi que una fila legada
-// con un pagador de otra congregacion pondria el nombre de un desconocido en el
-// rastro de esta iglesia. Hoy ninguna ruta permite crear ese gasto; esto es
-// defensa en profundidad, y si pasara cae solo en 'alguien que ya no está'.
+//
+// Pasa por personaDeLaMismaIglesia, y no por el id a secas, porque aqui importa
+// el acotador por iglesia: pagadoPorId sale de una fila YA guardada, que esta
+// ruta no valida —solo valida lo que entra—, asi que una fila legada con un
+// pagador de otra congregacion pondria el nombre de un desconocido en el rastro
+// de esta iglesia. Hoy ninguna ruta permite crear ese gasto; esto es defensa en
+// profundidad, y si pasara cae solo en 'alguien que ya no está'.
 function descOrigenGasto(fuente, pagadoPorId, iglesiaId) {
   if (fuente === 'caja') return 'pagó la caja';
   if (pagadoPorId == null) return 'sin registrar quién puso';
-  const persona = db.prepare('SELECT nombre FROM persona WHERE id = ? AND iglesia_id = ?')
-    .get(pagadoPorId, iglesiaId);
+  const persona = personaDeLaMismaIglesia(pagadoPorId, iglesiaId);
   const nombre = persona ? persona.nombre : 'alguien que ya no está';
   return fuente === 'aporte' ? `aporte de ${nombre}` : `se devuelve a ${nombre}`;
 }
@@ -339,9 +368,8 @@ r.patch('/cosas/:cosaId', validar(editarCosaSchema), (req, res) => {
   // es suelta y no cuelga de ningun grupo, y quien trae la torta a veces no
   // esta en el grupo.
   if (responsable_id != null) {
-    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1')
-      .get(responsable_id, req.user.iglesia_id);
-    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
+    const p = personaDeLaMismaIglesia(responsable_id, req.user.iglesia_id);
+    if (!p || !p.activo) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
   }
 
   const cambiaResponsable = responsable_id !== undefined && responsable_id !== cosa.responsable_id;
@@ -410,10 +438,9 @@ r.post('/:id/gastos', validar(gastoSchema), (req, res) => {
     // Solo gente de la misma iglesia Y activa: atribuirle un pago a un tercero
     // de otra congregacion no significa nada, y a una cuenta dada de baja
     // tampoco — un gasto NUEVO no puede nacer a nombre de quien ya no esta
-    // (el responsable de la hoja exige lo mismo, linea ~342).
-    const p = db.prepare('SELECT id FROM persona WHERE id = ? AND iglesia_id = ? AND activo = 1')
-      .get(quienPago, req.user.iglesia_id);
-    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
+    // (el responsable de la hoja exige lo mismo, en el PATCH de las cosas).
+    const p = personaDeLaMismaIglesia(quienPago, req.user.iglesia_id);
+    if (!p || !p.activo) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
   }
   const info = db.prepare('INSERT INTO evento_org_gasto (org_id, concepto, monto, pagado_por, fuente) VALUES (?,?,?,?,?)')
     .run(org.id, req.body.concepto, req.body.monto, quienPago, req.body.fuente || null);
@@ -442,6 +469,68 @@ const editarGastoSchema = z.object({
     pagado_por: z.number().int().nullable()
   }).optional()
 });
+// Que queda guardado tras una correccion. `fila` es la fila REAL —la releida
+// dentro de la transaccion—, no la que se leyo al llegar la peticion: es lo que
+// el PATCH parcial conserva cuando el cuerpo no trae un campo, asi que tiene que
+// ser la de verdad o se escribirian valores de una fila que ya no existe.
+// Devuelve {error} (siempre un 400) si lo que se pide no es coherente.
+function correccionDeGasto(body, fila, iglesiaId) {
+  const concepto = body.concepto ?? fila.concepto;
+  const monto = body.monto ?? fila.monto;
+
+  // fuente y pagado_por se corrigen juntos, pero SOLO se exige coherencia
+  // cuando el PATCH toca alguno de los dos. Un gasto historico (fuente y
+  // pagado_por ambos NULL, "no se sabe quien puso") tiene que poder corregir
+  // su concepto o su monto SIN verse obligado a inventarle un pagador: si no,
+  // arreglar una falta de ortografia le adjudicaria a alguien una deuda que
+  // nadie contrajo.
+  const tocaFuente = body.fuente !== undefined;
+  const tocaPagador = body.pagado_por !== undefined;
+  const fuente = tocaFuente ? body.fuente : fila.fuente;
+  let pagadoPor = tocaPagador ? body.pagado_por : fila.pagado_por;
+
+  if (fuente === 'caja') {
+    // Pago la caja: no hay persona, pase lo que pase se haya mandado.
+    pagadoPor = null;
+  } else if (tocaFuente || tocaPagador) {
+    // Solo aqui se exige que haya alguien: el PATCH esta cambiando de verdad
+    // quien puso el dinero. Si no toca ninguno de los dos, se conserva lo que
+    // hubiera -- incluido "no se sabe".
+    if (pagadoPor == null) return { error: 'Elige quien puso el dinero, o marca que pago la caja' };
+  }
+  if (pagadoPor != null) {
+    const p = personaDeLaMismaIglesia(pagadoPor, iglesiaId);
+    if (!p) return { error: 'Esa persona no esta en tu iglesia' };
+    // Activa solo se exige si la atribucion CAMBIA: el gasto historico de
+    // alguien que se dio de baja tiene que poder corregir su concepto o su
+    // monto sin que la app obligue a quitarle la atribucion (misma filosofia
+    // del PATCH parcial que gobierna fuente/pagado_por).
+    if (pagadoPor !== fila.pagado_por && !p.activo)
+      return { error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' };
+  }
+  return { concepto, monto, fuente, pagadoPor };
+}
+
+// El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo
+// (actor_id y fecha son columnas propias de la tabla auditoria). El "antes"
+// sale de `fila`, la releida: un rastro que dijera "X -> Y" con una X que
+// nunca fue el valor previo seria peor que no tener rastro.
+//
+// El cambio de ORIGEN solo se anota si cambio de verdad. Importa porque pasar
+// un gasto de "se devuelve a Carolina" a "pago la caja" BORRA una deuda con
+// una persona, y sin esta parte el rastro decia literalmente
+//   "Carne" $20.000 -> "Carne" $20.000
+// o sea, aparentaba que no habia cambiado nada justo en el unico cambio que
+// hace desaparecer plata que se le debia a alguien. Si solo se corrigio el
+// concepto o el monto no se anade: seria ruido en el historial de la hoja.
+function detalleDeCorreccion(fila, c, iglesiaId) {
+  const cambioOrigen = c.fuente !== fila.fuente || c.pagadoPor !== fila.pagado_por;
+  const origen = cambioOrigen
+    ? ` · ${descOrigenGasto(fila.fuente, fila.pagado_por, iglesiaId)} -> ${descOrigenGasto(c.fuente, c.pagadoPor, iglesiaId)}`
+    : '';
+  return `"${fila.concepto}" ${montoTxt(fila.monto)} -> "${c.concepto}" ${montoTxt(c.monto)}${origen}`;
+}
+
 r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // Acotado por iglesia en la MISMA consulta: es el fallo que ya se colo una
   // vez en musica.js (borrado que cruzaba congregaciones). El resto de las
@@ -456,67 +545,10 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   const org = hojaEditable(req, res, gasto.org_id);   // valida permiso (403); iglesia ya validada arriba
   if (!org) return;
 
-  // Cabo 3: si la pantalla mando lo que estaba viendo y ya no coincide con lo
-  // guardado, otro corrigio este gasto en el medio (la hoja queda abierta
-  // durante todo el almuerzo). No se aplica nada: 409 y a recargar. NULL es un
-  // valor mas ("no se sabe quien puso" tambien se puede pisar).
+  // Lo unico que sale de esta lectura temprana es el 404 y el permiso (org_id
+  // no lo cambia nadie: un gasto no se muda de hoja). TODO lo que se escribe se
+  // calcula mas abajo desde la fila releida dentro de la transaccion.
   const visto = req.body.visto;
-  if (visto && (visto.concepto !== gasto.concepto
-             || visto.monto !== gasto.monto
-             || visto.fuente !== gasto.fuente
-             || visto.pagado_por !== gasto.pagado_por))
-    return res.status(409).json({ error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' });
-
-  const concepto = req.body.concepto ?? gasto.concepto;
-  const monto = req.body.monto ?? gasto.monto;
-
-  // fuente y pagado_por se corrigen juntos, pero SOLO se exige coherencia
-  // cuando el PATCH toca alguno de los dos. Un gasto historico (fuente y
-  // pagado_por ambos NULL, "no se sabe quien puso") tiene que poder corregir
-  // su concepto o su monto SIN verse obligado a inventarle un pagador: si no,
-  // arreglar una falta de ortografia le adjudicaria a alguien una deuda que
-  // nadie contrajo.
-  const tocaFuente = req.body.fuente !== undefined;
-  const tocaPagador = req.body.pagado_por !== undefined;
-  const fuente = tocaFuente ? req.body.fuente : gasto.fuente;
-  let pagadoPor = tocaPagador ? req.body.pagado_por : gasto.pagado_por;
-
-  if (fuente === 'caja') {
-    // Pago la caja: no hay persona, pase lo que pase se haya mandado.
-    pagadoPor = null;
-  } else if (tocaFuente || tocaPagador) {
-    // Solo aqui se exige que haya alguien: el PATCH esta cambiando de verdad
-    // quien puso el dinero. Si no toca ninguno de los dos, se conserva lo que
-    // hubiera -- incluido "no se sabe".
-    if (pagadoPor == null) return res.status(400).json({ error: 'Elige quien puso el dinero, o marca que pago la caja' });
-  }
-  if (pagadoPor != null) {
-    const p = db.prepare('SELECT id, activo FROM persona WHERE id = ? AND iglesia_id = ?')
-      .get(pagadoPor, req.user.iglesia_id);
-    if (!p) return res.status(400).json({ error: 'Esa persona no esta en tu iglesia' });
-    // Activa solo se exige si la atribucion CAMBIA: el gasto historico de
-    // alguien que se dio de baja tiene que poder corregir su concepto o su
-    // monto sin que la app obligue a quitarle la atribucion (misma filosofia
-    // del PATCH parcial que gobierna fuente/pagado_por).
-    if (pagadoPor !== gasto.pagado_por && !p.activo)
-      return res.status(400).json({ error: 'Esa persona no esta en tu iglesia o su cuenta esta inactiva' });
-  }
-
-  // El detalle guarda que cambio; quien y cuando ya los guarda auditar() solo
-  // (actor_id y fecha son columnas propias de la tabla auditoria).
-  //
-  // El cambio de ORIGEN solo se anota si cambio de verdad. Importa porque pasar
-  // un gasto de "se devuelve a Carolina" a "pago la caja" BORRA una deuda con
-  // una persona, y sin esta parte el rastro decia literalmente
-  //   "Carne" $20.000 -> "Carne" $20.000
-  // o sea, aparentaba que no habia cambiado nada justo en el unico cambio que
-  // hace desaparecer plata que se le debia a alguien. Si solo se corrigio el
-  // concepto o el monto no se anade: seria ruido en el historial de la hoja.
-  const cambioOrigen = fuente !== gasto.fuente || pagadoPor !== gasto.pagado_por;
-  const origen = cambioOrigen
-    ? ` · ${descOrigenGasto(gasto.fuente, gasto.pagado_por, req.user.iglesia_id)} -> ${descOrigenGasto(fuente, pagadoPor, req.user.iglesia_id)}`
-    : '';
-  const detalle = `"${gasto.concepto}" ${montoTxt(gasto.monto)} -> "${concepto}" ${montoTxt(monto)}${origen}`;
 
   // El UPDATE y su apunte van en UNA transaccion. Si auditar() fallara despues
   // del UPDATE, quedaria una correccion de dinero APLICADA Y SIN RASTRO — justo
@@ -533,18 +565,73 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // borra el gasto, su correccion sigue apareciendo en el historial de la hoja.
   // Apuntando al gasto, el rastro quedaria huerfano justo en el caso en que mas
   // importa (alguien corrige un monto y despues borra la linea entera).
-  db.exec('BEGIN');
-  try {
-    db.prepare('UPDATE evento_org_gasto SET concepto=?, monto=?, pagado_por=?, fuente=? WHERE id=?')
-      .run(concepto, monto, pagadoPor, fuente, gasto.id);
-    auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-      detalle, { tabla: 'evento_org', id: gasto.org_id });
-    db.exec('COMMIT');
+  //
+  // IMMEDIATE, y no el BEGIN a secas del resto del archivo, porque esta es la
+  // unica transaccion del modulo que LEE antes de escribir. Con un BEGIN
+  // diferido el candado de escritura se pide recien en el UPDATE: si otro
+  // confirma entre nuestra relectura y nuestro UPDATE, SQLite rechaza subir a
+  // escritor (SQLITE_BUSY_SNAPSHOT) y el busy_timeout NO lo reintenta — se
+  // pierde la correccion y la persona lee un 500. Con IMMEDIATE el candado se
+  // toma aqui, donde el busy_timeout si actua.
+  //
+  // El precio, que conviene saber: el que llega segundo espera el busy_timeout
+  // entero (5 s, PRAGMA de db.js) y, como DatabaseSync es sincrono, esos 5 s
+  // son el bucle de eventos de ese proceso PARADO. Es el intercambio correcto
+  // —antes se perdia el dato, ahora se espera—, pero no es gratis. Y hay un
+  // segundo escritor de verdad: docker-entrypoint.sh:64 arranca la app con
+  // `litestream replicate ... -exec "node src/server.js"`.
+  //
+  // El BEGIN va DENTRO del try: es la unica sentencia de este flujo capaz de
+  // bloquear y lanzar. Fuera, su excepcion se escapaba al manejador generico de
+  // server.js y la persona leia "Ocurrió un error en el servidor" en vez de
+  // "No se pudo corregir el gasto", y sin la linea de registro con contexto.
+  let respuesta = null;   // {codigo, error} si algo impide guardar. Se contesta
+  let abierta = false;    // DESPUES del try, para no contestar dos veces si
+  try {                   // algo revienta al salir.
+    db.exec('BEGIN IMMEDIATE');
+    abierta = true;
+
+    // La fila que importa es la que existe AHORA, no la que existia cuando
+    // llego la peticion. De aqui sale todo: la comparacion del cabo 3, los
+    // valores que el PATCH parcial conserva, y el "antes" del rastro.
+    const actual = db.prepare('SELECT concepto, monto, fuente, pagado_por FROM evento_org_gasto WHERE id = ?')
+      .get(gasto.id);
+
+    if (!actual) {
+      // Se borro entre la lectura temprana y esta. Misma respuesta que si el
+      // borrado hubiera llegado un instante antes: el resultado no puede
+      // depender de en que lado de la lectura temprana cae.
+      respuesta = { codigo: 404, error: 'Gasto no encontrado' };
+    } else if (visto && (visto.concepto !== actual.concepto
+                      || visto.monto !== actual.monto
+                      || visto.fuente !== actual.fuente
+                      || visto.pagado_por !== actual.pagado_por)) {
+      // Cabo 3: la pantalla mando lo que estaba viendo y ya no coincide, o sea
+      // que otro corrigio este gasto en el medio (la hoja queda abierta durante
+      // todo el almuerzo). No se aplica nada: 409 y a recargar. NULL es un valor
+      // mas ("no se sabe quien puso" tambien se puede pisar). Sin `visto`
+      // (cliente viejo) no se compara: sigue siendo el ultimo-que-llega-manda
+      // de siempre, que es lo que promete la spec.
+      respuesta = { codigo: 409, error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' };
+    } else {
+      const c = correccionDeGasto(req.body, actual, req.user.iglesia_id);
+      if (c.error) {
+        respuesta = { codigo: 400, error: c.error };
+      } else {
+        db.prepare('UPDATE evento_org_gasto SET concepto=?, monto=?, pagado_por=?, fuente=? WHERE id=?')
+          .run(c.concepto, c.monto, c.pagadoPor, c.fuente, gasto.id);
+        auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
+          detalleDeCorreccion(actual, c, req.user.iglesia_id), { tabla: 'evento_org', id: gasto.org_id });
+      }
+    }
+    db.exec(respuesta ? 'ROLLBACK' : 'COMMIT');
+    abierta = false;
   } catch (e) {
-    db.exec('ROLLBACK');
+    if (abierta) db.exec('ROLLBACK');   // si fallo el propio BEGIN no hay nada que deshacer
     console.error('[organizacion] corregir gasto fallo:', e);
     return res.status(500).json({ error: 'No se pudo corregir el gasto' });
   }
+  if (respuesta) return res.status(respuesta.codigo).json({ error: respuesta.error });
   res.json({ ok: true });
 });
 

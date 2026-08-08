@@ -3774,6 +3774,73 @@ async function vistaPerfilDirectorio(){
     <button class="btn" style="margin-top:16px" onclick="guardarPerfilDirectorio()">Guardar</button>
   </div>`;
 }
+// ============================================================
+//  EL AVISO DE "TU NOMBRE ANTERIOR SIGUE ESCRITO EN..." (cabo 2 de agosto)
+//
+//  La app NUNCA reescribe un texto libre: busca donde quedo el nombre viejo
+//  (la lista de quien puede retirar a un nino, el predicador de una predica) y
+//  avisa para que una persona lo corrija a mano.
+//
+//  El backend responde DOS formas distintas a proposito, y la diferencia es de
+//  privacidad, no cosmetica (spec de los cabos de agosto):
+//    'conteo'  (Mi perfil)      -> { ninos_n: <numero>,   predicas: <numero> }
+//    'detalle' (el del pastor)  -> { ninos: [<fichas>],   predicas: <numero> }
+//  Quien se corrige el nombre a si mismo no puede saber DE QUE ninos se trata:
+//  la busqueda es un LIKE y un nombre comun casa fichas ajenas.
+//
+//  Por que hay UN solo lector y no uno por pantalla: hasta la higiene B1 las
+//  dos formas viajaban bajo la misma clave `ninos` y cada manejador la leia a
+//  su manera (`a.ninos>0` aqui, `a.ninos.length` alla). Cruzarlos no rompia
+//  nada — `[{…}] > 0` es false — y el aviso DESAPARECIA en silencio; el aviso
+//  que existe justo para que un nombre viejo no se quede escrito en la ficha
+//  de un nino. Renombrar a secas no lo arregla: `undefined > 0` tambien es
+//  false y tambien calla. Asi que aqui no hay dos lectores que cruzar, hay uno,
+//  las claves son distintas, y una forma que no cuadra con el modo que declara
+//  la pantalla NO se ignora: se dice en pantalla. Devuelve true si mostro algo.
+// ============================================================
+function avisoNombreViejo(apariciones, modo){
+  // Sin respuesta no pasa nada, y es lo normal: reenviar el mismo nombre no es
+  // una correccion, el backend no busca y no manda nada.
+  if(!apariciones) return false;
+  const conteo=modo==='conteo', detalle=modo==='detalle';
+  const p=apariciones.predicas;
+  // La forma tiene que ser EXACTAMENTE la del modo: la clave que toca, con el
+  // tipo que toca, y sin la del otro modo. Un modo mal escrito no cuadra con
+  // ninguna y cae aqui tambien.
+  const formaOk = typeof p==='number' && (
+    (conteo  && typeof apariciones.ninos_n==='number' && apariciones.ninos===undefined) ||
+    (detalle && Array.isArray(apariciones.ninos)      && apariciones.ninos_n===undefined));
+  if(!formaOk){
+    // El grito. No se muestra el aviso a medias ni se nombra ninguna ficha (en
+    // modo conteo eso seria la fuga que la spec prohibe): se dice que la
+    // comprobacion no se pudo hacer y que hay que mirarlo a mano, que es lo
+    // unico cierto. El cambio de nombre SI se guardo: esto es solo el aviso.
+    modalAviso('El nombre sí se cambió, pero la app no pudo comprobar dónde quedó escrito el anterior. Hay que revisar a mano la lista de quién puede retirar a cada niño y el predicador de las prédicas.','No se pudo comprobar el nombre anterior');
+    return true;
+  }
+  if(conteo){
+    const n=apariciones.ninos_n;
+    if(!(n>0||p>0)) return false;
+    // La guarda es un OR, asi que el texto tambien: nombrar los dos lados
+    // siempre decia "en 0 ficha(s) de niños (…) y 2 prédica(s)" en los dos
+    // casos de un solo lado, que son los probables. Un cero ahi no informa de
+    // nada y hace dudar del numero de al lado.
+    //
+    // Tres ternarios (un trozo, la "y", el otro trozo): cada rama es un
+    // template literal completo con Number() sobre el contador, que es una
+    // forma que el barrido XSS del cuerpo reconoce sin excepciones.
+    modalAviso(`Tu nombre anterior sigue escrito en ${n>0?`${Number(n)} ficha(s) de niños (lista de quién puede retirarlos)`:''}${n>0&&p>0?' y ':''}${p>0?`${Number(p)} prédica(s)`:''}. Pídele a tu maestra o al pastor que lo actualicen donde corresponda.`,'Tu nombre aparece en otros lugares');
+    return true;
+  }
+  const fichas=apariciones.ninos;
+  if(!(fichas.length||p>0)) return false;
+  // Mismo patron de tres ternarios. Escrito con map(...).join() inline y no con
+  // un array armado a mano (partes.push/partes.join) porque el barrido XSS del
+  // cuerpo no puede demostrar que ese array solo contenga texto ya escapado;
+  // cada rama de aca si es una forma que el barrido reconoce.
+  modalAviso(`El nombre anterior sigue escrito en: ${fichas.length?fichas.map(f=>`la ficha de <b>${escHtml(f.nombre)}</b> (autorizados para retirarlo)`).join(', '):''}${fichas.length&&p>0?' y ':''}${p>0?`${Number(p)} prédica(s)`:''}. Corrígelo a mano donde corresponda.`,'El nombre viejo sigue escrito');
+  return true;
+}
 async function guardarPerfilDirectorio(){
   const body={
     nombre:$('dp-nombre').value.trim(),
@@ -3792,21 +3859,10 @@ async function guardarPerfilDirectorio(){
       toast('✅ Perfil actualizado');
       vistaDirectorio();
       // Cabo 2: si el nombre cambio y el viejo sigue escrito en textos libres
-      // (lista de retiro de un nino, predicas), avisar. Solo CONTEOS: el
-      // backend no manda fichas al autoservicio, a proposito.
-      const a=resp&&resp.apariciones;
-      if(a&&(a.ninos>0||a.predicas>0)){
-        // La guarda es un OR, asi que el texto tambien: nombrar los dos lados
-        // siempre decia "en 0 ficha(s) de niños (…) y 2 prédica(s)" en los dos
-        // casos de un solo lado, que son los probables. Un cero ahi no informa
-        // de nada y hace dudar del numero de al lado.
-        //
-        // Tres ternarios (un trozo, la "y", el otro trozo), el mismo patron que
-        // el aviso del pastor de adminCorregirNombre: cada rama es un template
-        // literal completo con Number() sobre el contador, que es una forma que
-        // el barrido XSS del cuerpo reconoce sin excepciones.
-        modalAviso(`Tu nombre anterior sigue escrito en ${a.ninos>0?`${Number(a.ninos)} ficha(s) de niños (lista de quién puede retirarlos)`:''}${a.ninos>0&&a.predicas>0?' y ':''}${a.predicas>0?`${Number(a.predicas)} prédica(s)`:''}. Pídele a tu maestra o al pastor que lo actualicen donde corresponda.`,'Tu nombre aparece en otros lugares');
-      }
+      // (lista de retiro de un nino, predicas), avisar. Esta pantalla pide el
+      // modo de solo numeros: el backend no manda fichas al autoservicio, a
+      // proposito, y el lector se niega a pintar nada que no sea eso.
+      avisoNombreViejo(resp&&resp.apariciones,'conteo');
     }catch(e){ toast(e.message); }
   }, file?'Subiendo foto…':'Guardando…');
 }
@@ -4205,16 +4261,9 @@ function adminCorregirNombre(id){
       toast('✅ Nombre corregido'); vistaAdmin();
       // Cabo 2, detalle para el pastor: que fichas siguen diciendo el nombre
       // viejo. La app no reescribe textos libres; el pastor corrige a mano.
-      const a=resp&&resp.apariciones;
-      if(a&&(a.ninos.length||a.predicas>0)){
-        // Une "fichas de niños" y "prédicas" con una "y" solo si hay ambas.
-        // Escrito como tres interpolaciones ternarias (no un array armado a
-        // mano con partes.push/partes.join) porque el barrido XSS del cuerpo
-        // no puede demostrar que ese array solo contenga texto ya escapado;
-        // cada rama de acá sí es una forma que el barrido reconoce (mapJoin
-        // o template literal completo).
-        modalAviso(`El nombre anterior sigue escrito en: ${a.ninos.length?a.ninos.map(n=>`la ficha de <b>${escHtml(n.nombre)}</b> (autorizados para retirarlo)`).join(', '):''}${a.ninos.length&&a.predicas>0?' y ':''}${a.predicas>0?`${Number(a.predicas)} prédica(s)`:''}. Corrígelo a mano donde corresponda.`,'El nombre viejo sigue escrito');
-      } }
+      // Mismo lector que "Mi perfil", pero pidiendo el modo con la lista.
+      avisoNombreViejo(resp&&resp.apariciones,'detalle');
+    }
     catch(e){ toast(e.message); }
   }, {titulo:'Corregir nombre', placeholder:'Nombre completo', valor:u.nombre, okLabel:'Guardar'});
 }
@@ -5559,11 +5608,23 @@ const Org = {
         else   await api('/organizacion/'+Org._hoja.id+'/gastos',{method:'POST',body:JSON.stringify(cuerpo)});
         Org.cancelarEdicionGasto();
         // Se ESPERA la recarga (el bloque del 409 de abajo ya lo hacia; este
-        // no). Mientras el GET viaja, Org._hoja sigue siendo la hoja de ANTES
-        // de la correccion: sin el await, el boton se reactiva y el ✏️ vuelve a
-        // ser clicable en ese hueco, y la instantanea que capture sera la
-        // caduca. Con el await, conBoton lo mantiene apagado hasta que la hoja
-        // este repintada.
+        // no), y lo que da el await son dos cosas:
+        //
+        //  1. `alDia` es un si/no de verdad. Sin el await seria una promesa, y
+        //     una promesa siempre es "si": el mensaje de abajo diria "Gasto
+        //     corregido" tambien cuando el GET se cae, que es justo lo que el
+        //     else esta ahi para no decir.
+        //  2. conBoton mantiene apagado EL BOTON QUE SE PULSO hasta que todo
+        //     esto termina, asi que no se puede encadenar otra correccion
+        //     sobre una hoja caduca desde el mismo boton.
+        //
+        // Lo que el await NO hace es apagar los ✏️ de las filas: a esos no los
+        // desactiva nadie, y mientras el GET viaja Org._hoja sigue siendo la
+        // hoja de ANTES, asi que un ✏️ pulsado en ese hueco captura la
+        // instantanea caduca. Es una ventana corta que se cierra sola en
+        // cuanto el GET aterriza y repinta la hoja; el caso que no se cierra
+        // solo —que el GET falle— es exactamente el que cubre el else de aqui
+        // abajo, que manda recargar la pagina antes de seguir.
         const alDia=await Org._recargar(true);
         // Y si el GET falla, el hueco no se cierra solo: Org._hoja se queda con
         // la fila vieja para siempre, el proximo ✏️ manda esa instantanea, el

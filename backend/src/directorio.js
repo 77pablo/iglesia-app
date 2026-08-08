@@ -16,7 +16,7 @@ import db from './db.js';
 import { authMiddleware, auditar } from './auth.js';
 import { enviarPush } from './push.js';
 import { validar, zRutaSubidaOpcional } from './seguridad.js';
-import { aparicionesDeNombre } from './apariciones-nombre.js';
+import { conteoDeApariciones } from './apariciones-nombre.js';
 
 const r = Router();
 r.use(authMiddleware);
@@ -155,9 +155,11 @@ r.patch('/perfil', validar(perfilSchema), (req, res) => {
       `${nombreViejo} → ${req.body.nombre}`);
     // El aviso del cabo 2: donde sigue escrito el nombre viejo. Al autoservicio
     // le llegan solo CONTEOS — un LIKE con un nombre comun puede casar fichas
-    // de ninos ajenas, y eso no es asunto de quien se corrige el nombre.
-    const ap = aparicionesDeNombre(nombreViejo, req.user.iglesia_id);
-    apariciones = { ninos: ap.ninos.length, predicas: ap.predicas };
+    // de ninos ajenas, y eso no es asunto de quien se corrige el nombre. Por
+    // eso se llama a `conteoDeApariciones` y no a la busqueda con detalle: la
+    // clave que sale de aqui es `ninos_n` (un numero) y no `ninos` (la lista
+    // del pastor), para que ninguna de las dos formas pueda pasar por la otra.
+    apariciones = conteoDeApariciones(nombreViejo, req.user.iglesia_id);
   }
   res.json(apariciones ? { ok: true, apariciones } : { ok: true });
 });
