@@ -474,12 +474,11 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // guardado, otro corrigio este gasto en el medio (la hoja queda abierta
   // durante todo el almuerzo). No se aplica nada: 409 y a recargar. NULL es un
   // valor mas ("no se sabe quien puso" tambien se puede pisar).
+  //
+  // La comparacion NO se hace aqui sino dentro de la transaccion (mas abajo):
+  // comparar contra una fila leida antes del BEGIN es mirar el pasado. Ver
+  // alli el porque. Esta lectura temprana se queda para el 404 y el permiso.
   const visto = req.body.visto;
-  if (visto && (visto.concepto !== gasto.concepto
-             || visto.monto !== gasto.monto
-             || visto.fuente !== gasto.fuente
-             || visto.pagado_por !== gasto.pagado_por))
-    return res.status(409).json({ error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' });
 
   const concepto = req.body.concepto ?? gasto.concepto;
   const monto = req.body.monto ?? gasto.monto;
@@ -546,18 +545,51 @@ r.patch('/gastos/:gastoId', validar(editarGastoSchema), (req, res) => {
   // borra el gasto, su correccion sigue apareciendo en el historial de la hoja.
   // Apuntando al gasto, el rastro quedaria huerfano justo en el caso en que mas
   // importa (alguien corrige un monto y despues borra la linea entera).
-  db.exec('BEGIN');
-  try {
-    db.prepare('UPDATE evento_org_gasto SET concepto=?, monto=?, pagado_por=?, fuente=? WHERE id=?')
-      .run(concepto, monto, pagadoPor, fuente, gasto.id);
-    auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
-      detalle, { tabla: 'evento_org', id: gasto.org_id });
-    db.exec('COMMIT');
+  //
+  // IMMEDIATE (y no el BEGIN a secas del resto del archivo) porque aqui dentro
+  // se RELEE para comparar: con un BEGIN diferido el candado de escritura se
+  // pide recien en el UPDATE, y entre la relectura y el UPDATE otro proceso
+  // todavia podria colarse — SQLite lo pillaria, pero soltando un error de
+  // "base ocupada" (un 500) en vez del 409 que la persona necesita leer.
+  db.exec('BEGIN IMMEDIATE');
+  let choque = false;   // se responde DESPUES del try: dentro habria que cuidar
+  try {                 // de no contestar dos veces si algo revienta al salir.
+    // La comparacion del cabo 3, AQUI y no antes del BEGIN: la fila que hay que
+    // comparar con lo que la pantalla vio es la que existe en el instante en que
+    // se va a escribir, no la que existia cuando llego la peticion. Hoy da igual
+    // —el manejador es sincrono desde el SELECT de arriba hasta el COMMIT, Node
+    // es de un solo hilo y no hay cluster ni workers (server.js, render.yaml,
+    // Dockerfile)—, pero el dia que la app corra en dos procesos, comparar fuera
+    // de la transaccion seria mirar el pasado: el 409 no saltaria y el gasto de
+    // la otra persona quedaria pisado. El precio de moverla es que ahora corre
+    // DESPUES de las validaciones de mas arriba, asi que una peticion que ademas
+    // traiga datos incoherentes recibe su 400 antes que el 409; en los dos casos
+    // no se escribe nada.
+    //
+    // Sin `visto` (cliente viejo) no se compara nada: el PATCH sigue siendo el
+    // ultimo-que-llega-manda de siempre, que es lo que promete la spec.
+    if (visto) {
+      const actual = db.prepare('SELECT concepto, monto, fuente, pagado_por FROM evento_org_gasto WHERE id = ?')
+        .get(gasto.id);
+      // Si ya no esta, tambien cambio: se borro mientras la hoja estaba abierta.
+      choque = !actual || visto.concepto !== actual.concepto
+                       || visto.monto !== actual.monto
+                       || visto.fuente !== actual.fuente
+                       || visto.pagado_por !== actual.pagado_por;
+    }
+    if (!choque) {
+      db.prepare('UPDATE evento_org_gasto SET concepto=?, monto=?, pagado_por=?, fuente=? WHERE id=?')
+        .run(concepto, monto, pagadoPor, fuente, gasto.id);
+      auditar(req.user.iglesia_id, req.user.persona_id, 'editar_gasto', 'organizacion',
+        detalle, { tabla: 'evento_org', id: gasto.org_id });
+    }
+    db.exec(choque ? 'ROLLBACK' : 'COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
     console.error('[organizacion] corregir gasto fallo:', e);
     return res.status(500).json({ error: 'No se pudo corregir el gasto' });
   }
+  if (choque) return res.status(409).json({ error: 'Alguien cambió este gasto mientras lo mirabas — recarga la hoja' });
   res.json({ ok: true });
 });
 

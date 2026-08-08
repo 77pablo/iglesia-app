@@ -7,8 +7,13 @@
 // ============================================================
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cargarDb } from './helpers.js';
 import { signToken } from '../src/auth.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let db;
 before(async () => { db = await cargarDb(); });
@@ -98,6 +103,70 @@ test('sin visto (cliente viejo) el PATCH sigue funcionando como hoy', async () =
     method: 'PATCH', headers: auth, body: JSON.stringify({ concepto: 'Carne asada' })
   });
   assert.equal(res.status, 200, 'compatibilidad: backend y frontend pueden no llegar juntos');
+});
+
+// --- Higiene A4: la comparacion se mudo DENTRO de la transaccion que escribe
+// (antes se hacia contra una fila leida al llegar la peticion, que el dia que
+// la app corra en dos procesos seria mirar el pasado). Dos consecuencias
+// visibles desde fuera, y las dos se fijan aqui.
+
+// Esta se comprueba leyendo el codigo, como la zona horaria del contenedor y
+// las reglas @media print, porque es lo unico que se puede hacer: la propiedad
+// es "no hay hueco entre mirar y escribir", y con un solo proceso y un solo
+// hilo NINGUNA prueba de Node puede abrir ese hueco. Sin esto, el cabo podria
+// volver a su sitio de antes sin que la suite se enterara.
+test('la comparacion se hace dentro de la transaccion, y la transaccion es IMMEDIATE', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'organizacion.js'), 'utf8');
+  const begin = src.indexOf("db.exec('BEGIN IMMEDIATE')");
+  assert.notEqual(begin, -1, 'la correccion del gasto abre su transaccion con BEGIN IMMEDIATE');
+  // El cierre, sea cual sea su forma: se busca COMMIT con la comilla pegada
+  // para no tropezar con la palabra COMMIT escrita en los comentarios.
+  const commit = src.indexOf("COMMIT'", begin);
+  const compara = src.indexOf('visto.concepto !== ');
+  assert.ok(compara > begin && compara < commit,
+    'la unica comparacion con `visto` vive entre el BEGIN y el cierre de la transaccion');
+  assert.equal(src.indexOf('visto.concepto !== ', compara + 1), -1,
+    'y es UNICA: una segunda comparacion antes del BEGIN volveria a decidir mirando el pasado');
+});
+
+test('el 409 no deja rastro: el apunte de auditoria vive en la transaccion que se deshace', async () => {
+  const b = await servidor();
+  const S = sembrar('VI5');
+  const { hojaId, auth } = await hoja(b, S);
+  const { id, visto } = await gastoSembrado(b, S, auth, hojaId);
+  const apuntes = () => db.prepare(
+    "SELECT COUNT(*) n FROM auditoria WHERE iglesia_id = ? AND accion = 'editar_gasto'"
+  ).get(S.iglesiaId).n;
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 22000 }) });
+  const antes = apuntes();
+  const res = await fetch(b + `/api/organizacion/gastos/${id}`, {
+    method: 'PATCH', headers: auth, body: JSON.stringify({ concepto: 'Carne asada', visto })
+  });
+  assert.equal(res.status, 409);
+  assert.equal(apuntes(), antes, 'una correccion que no se aplico no puede figurar en el historial de la hoja');
+});
+
+// El precio de mudarla: ahora corre DESPUES de validar lo que entra, asi que
+// una peticion con la instantanea vieja Y datos incoherentes recibe el 400
+// antes que el 409. Lo que se garantiza en los dos casos —y lo que de verdad
+// importa— es que no se escribe nada.
+test('instantanea vieja y datos incoherentes: contesta el 400 y la fila no se toca', async () => {
+  const b = await servidor();
+  const S = sembrar('VI6');
+  const { hojaId, auth } = await hoja(b, S);
+  const { id, visto } = await gastoSembrado(b, S, auth, hojaId);
+  // B lo pasa a "lo pago la caja": la fila queda con fuente 'caja' y sin pagador.
+  await fetch(b + `/api/organizacion/gastos/${id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ fuente: 'caja' }) });
+  // A, con su instantanea de antes, lo devuelve a 'devuelve' sin decir a quien:
+  // incoherente contra la fila de ahora (no hay pagador que conservar).
+  const res = await fetch(b + `/api/organizacion/gastos/${id}`, {
+    method: 'PATCH', headers: auth, body: JSON.stringify({ fuente: 'devuelve', visto })
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /Elige quien puso el dinero/);
+  const fila = db.prepare('SELECT fuente, pagado_por FROM evento_org_gasto WHERE id = ?').get(id);
+  assert.equal(fila.fuente, 'caja', 'lo de B sigue intacto');
+  assert.equal(fila.pagado_por, null);
 });
 
 test('el NULL tambien es un valor: pasar a "lo pago la caja" (fuente y pagador en null) se detecta', async () => {
