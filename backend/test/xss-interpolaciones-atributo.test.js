@@ -65,7 +65,18 @@
 //  con el mismo `<p class="muted" style="margin:8px 0 16px">${msg}</p>` que
 //  `modalConfirm`, entro como sumidero de innerHTML NUEVO, y nadie pudo
 //  decir nada. La prueba de alternarGrupo de mas abajo es este mismo miedo
-//  resuelto a mano para UNA excepcion; el conteo lo resuelve para todas.
+//  resuelto a mano para UNA excepcion; el conteo lo resuelve para las 25 de
+//  la lista EXCEPCIONES — y SOLO para esas. El atajo de location.origin, que
+//  vive fuera de la lista, perdona sin contar: un segundo
+//  value="${location.origin}/publico.html?ig=..." entraria con el barrido y
+//  el conteo los dos en verde. Puede permitirselo porque perdona una
+//  EXPRESION que es segura por si misma alla donde este (location.origin es
+//  una API del navegador; nadie la escribe), no un SITIO que sea seguro por
+//  quien lo llama. Es la diferencia con el `msg` de modalConfirm: aquel solo
+//  era seguro porque sus llamadores escapaban, asi que un llamador nuevo lo
+//  volvia peligroso y habia que enterarse. Si algun dia ese atajo se
+//  ensancha a una expresion cuya seguridad dependa del contexto, tiene que
+//  bajar a EXCEPCIONES y contar como todas.
 //
 //  Por eso cada excepcion declara a CUANTOS sitios cubre y el conteo se
 //  comprueba. Rompe la suite en las dos direcciones, que son los dos
@@ -109,15 +120,15 @@ const EXCEPCIONES = [
   },
   {
     firma: 'id::${prefijo}-dia',
-    motivo: 'prefijo es el parámetro de fechaSelectHTML(prefijo,...); en cada llamada del archivo se le pasa un literal fijo (\'en\',\'ev\',\'dp-cumple\'...), nunca un dato que escriba una persona.'
+    motivo: 'prefijo es el parámetro de fechaSelectHTML(prefijo,...); todas las llamadas del archivo le pasan un literal fijo (\'en\',\'ev\',\'dp-cumple\'...) menos UNA: formEditarLeccion le pasa \'el\'+id, y ese id le llega ya envuelto en Number() desde su único llamador (el botón Editar de la lista de lecciones), así que es \'el\' + un entero. Nunca un dato que escriba una persona.'
   },
   {
     firma: 'id::${prefijo}-mes',
-    motivo: 'mismo parámetro prefijo que arriba, mismo motivo: siempre un literal fijo del código.'
+    motivo: 'mismo parámetro prefijo que arriba, mismo motivo: literal fijo del código en todas las llamadas salvo el \'el\'+id entero de formEditarLeccion.'
   },
   {
     firma: 'id::${prefijo}-anio',
-    motivo: 'mismo parámetro prefijo que arriba, mismo motivo: siempre un literal fijo del código.'
+    motivo: 'mismo parámetro prefijo que arriba, mismo motivo: literal fijo del código en todas las llamadas salvo el \'el\'+id entero de formEditarLeccion.'
   },
   {
     firma: 'value::${c}',
@@ -212,22 +223,37 @@ const EXCEPCIONES_MAP = new Map(EXCEPCIONES.map(e => [e.firma, e]));
 // location.origin es una API del navegador, no un dato que nadie escribe.
 const EXCEPCION_LOCATION_ORIGIN_FIRMA_PREFIJO = 'value::${location.origin}/publico.html?ig=';
 
-// Los dos atajos que viven FUERA de la lista EXCEPCIONES. Se extraen aquí
-// para que el barrido y el conteo de abajo decidan con el MISMO criterio qué
+// El único atajo que vive FUERA de la lista EXCEPCIONES. Se extrae aquí para
+// que el barrido y el conteo de abajo decidan con el MISMO criterio qué
 // interpolación depende de la lista: si divergieran, el conteo mediría una
 // cosa distinta de la que el barrido perdona y el candado no valdría nada.
+// Por qué este atajo puede perdonar sin contar, y qué pasaría si se
+// ensanchara a algo que dependa del contexto: ver la cabecera.
+//
+// Aquí hubo un segundo atajo hasta el 7-ago: un `if` que perdonaba editFn y
+// delFn cuando atr.nombreAttr==='onclick'. Se borró porque era INALCANZABLE
+// por construcción, no por casualidad: clasificarInterpolaciones() enruta
+// cada grupo por su nombre de atributo, 'onclick' está en
+// ATRIBUTOS_DE_MANEJADOR, y hallarAtributos() devuelve solo la mitad
+// .atributo — así que nunca puede llegar aquí un grupo onclick. Un `if`
+// muerto en una red de seguridad no es neutro: o no hace nada (hoy) o hace
+// lo contrario de lo que se quiere (si mañana alguien saca 'onclick' de
+// ATRIBUTOS_DE_MANEJADOR, vuelve a la vida y regala un permiso general SIN
+// contarlo, justo el agujero que esta cabecera existe para cerrar). Sin él,
+// ese día el barrido falla y obliga a re-auditar: falla cerrado.
+// El sitio de verdad, onclick::${editFn}(${id}), tiene su excepción en
+// xss-manejadores.test.js; la prueba de accionesBtns() de más abajo se queda
+// porque es la que sostiene ESE motivo (ver la nota junto a ella).
 function cubiertoPorAtajo(atr, item) {
   if (item.expr === 'location.origin' && atr.firma.startsWith(EXCEPCION_LOCATION_ORIGIN_FIRMA_PREFIJO)) return true;
-  // ver la prueba de accionesBtns() más abajo, que verifica esto de verdad
-  if ((item.expr === 'editFn' || item.expr === 'delFn') && atr.nombreAttr === 'onclick') return true;
   return false;
 }
 
 // Un "sitio" es un ATRIBUTO ENTERO (un grupo: un value="..." concreto), no
 // cada ${...} suelto de dentro; y solo cuentan los atributos que de verdad
 // dependen de la lista EXCEPCIONES, es decir los que tienen al menos una
-// interpolación que ni las reglas mecánicas ni los dos atajos de arriba
-// aprueban. Contar los ${...} daría un número que no significa nada:
+// interpolación que ni las reglas mecánicas ni el atajo de arriba aprueban.
+// Contar los ${...} daría un número que no significa nada:
 // style="width:${size}px;height:${size}px" son dos interpolaciones y un solo
 // sitio que auditar.
 function sitiosQueNecesitanExcepcion() {
@@ -297,8 +323,15 @@ test('cada excepción de atributo cubre exactamente los sitios que declara (una 
 });
 
 test('accionesBtns: editFn/delFn solo se llaman con literales, nunca con datos', () => {
-  // Verificación real (no una afirmación en un comentario) de que la
-  // excepción de arriba es cierta: cada llamada a accionesBtns( en el
+  // Esta prueba vive aquí por historia, pero el sitio que sostiene NO está en
+  // este barrido: onclick="${editFn}(${id})" es un manejador, y su excepción
+  // está en xss-manejadores.test.js, cuyo motivo dice literalmente "lo fija la
+  // prueba de accionesBtns del barrido de atributos". No la borres por
+  // parecer huérfana desde que el atajo de editFn/delFn se fue de este
+  // archivo (ver la nota en cubiertoPorAtajo): si se va, ese motivo se queda
+  // sin nada que lo sostenga.
+  //
+  // Verificación real (no una afirmación en un comentario): cada llamada a accionesBtns( en el
   // archivo debe pasar como primeros dos argumentos un identificador o una
   // cadena literal (ambas formas se usan en este archivo), nunca una
   // expresión que dependa de un dato guardado por una persona.
