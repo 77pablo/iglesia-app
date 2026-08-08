@@ -687,11 +687,18 @@ test('una marca de una llamada anterior no sobrevive si ya no hay mensajes sin l
 test('el CSS del punto vive dentro del @media y se calla con el tema abierto', () => {
   const n = anchoMovilDelJs();
   const i = hoja.indexOf(`@media (max-width:${n}px){`);
+  // Las dos aserciones que la gemela de mas arriba si tiene y aqui faltaban.
+  // Sin la primera, un @media que cambie de forma deja i = -1, indexOf('{', -1)
+  // devuelve la PRIMERA llave de la hoja y `resto` pasa a ser la hoja entera:
+  // el "no hay reglas del punto fuera del @media" deja de comprobar nada y
+  // sigue en verde.
+  assert.ok(i >= 0, 'no se encontro el @media del movil');
   let saldo = 0, fin = -1;
   for (let j = hoja.indexOf('{', i); j < hoja.length; j++) {
     if (hoja[j] === '{') saldo++;
     else if (hoja[j] === '}') { saldo--; if (saldo === 0) { fin = j + 1; break; } }
   }
+  assert.ok(fin > 0, 'no se pudo cerrar el @media del movil');
   const movil = hoja.slice(i, fin);
   const resto = hoja.slice(0, i) + hoja.slice(fin);
   assert.ok(movil.includes('con-sin-leer'), 'el punto no esta estilizado en el @media del movil');

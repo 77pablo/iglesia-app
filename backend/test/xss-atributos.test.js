@@ -42,7 +42,12 @@ function extraer(nombre, dependencias = '') {
   return new Function(`${dependencias}\n${m[0]}\nreturn ${nombre};`)();
 }
 
-const escHtmlSrc = fuente.match(/^function escHtml\(.*$/m)[0];
+// El [0] sin comprobar revienta con un TypeError que no dice donde mirar.
+// escJsAttr se ejecuta con esta linea inyectada delante, asi que si escHtml
+// cambia de forma en web/app.js no hay prueba que valga: mejor decirlo.
+const escHtmlM = fuente.match(/^function escHtml\(.*$/m);
+assert.ok(escHtmlM, 'no se encontro la linea de escHtml() en web/app.js: escJsAttr se prueba con ella inyectada delante, asi que sin esto lo de abajo no prueba nada -- mira si escHtml cambio de nombre o dejo de caber en una sola linea');
+const escHtmlSrc = escHtmlM[0];
 const escHtml = extraer('escHtml');
 const escJsAttr = extraer('escJsAttr', escHtmlSrc);
 const safeColor = extraer('safeColor');

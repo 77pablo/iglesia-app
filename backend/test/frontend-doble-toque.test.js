@@ -26,16 +26,26 @@ const fuente = fs.readFileSync(path.join(WEB, 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(WEB, 'styles.css'), 'utf8');
 const lineas = fuente.split('\n');
 
+// ⚠️ La parada es una heuristica y falla de dos maneras. Quedarse CORTO es
+// ruidoso: el trozo sale a medias y revienta como SyntaxError dentro del
+// new Function() de mas abajo, se ve. DESBORDARSE no revienta nada: si la
+// declaracion no acaba en ';' ni en '}' -- una coma al final, o un comentario
+// detras de la llave -- el bucle llega al final del fichero y esto devuelve
+// desde la declaracion hasta el final de app.js. Las comprobaciones de abajo
+// pasarian a buscar su cadena en medio archivo y dejarian de cubrir lo que
+// cubrian, en verde. Por eso el assert del final: el segundo caso tambien
+// tiene que hacer ruido.
 function recortar(nombre) {
   const i = lineas.findIndex(l => new RegExp(`^(?:async function|function|const|let) ${nombre}\\b`).test(l));
   assert.ok(i >= 0, `no se encontro ${nombre} en web/app.js`);
-  let saldo = 0, trozo = [];
+  let saldo = 0, trozo = [], cerro = false;
   for (let j = i; j < lineas.length; j++) {
     const l = lineas[j];
     trozo.push(l);
     for (const ch of l) { if (ch === '{') saldo++; else if (ch === '}') saldo--; }
-    if (saldo <= 0 && (l.trimEnd().endsWith(';') || l.trimEnd().endsWith('}'))) break;
+    if (saldo <= 0 && (l.trimEnd().endsWith(';') || l.trimEnd().endsWith('}'))) { cerro = true; break; }
   }
+  assert.ok(cerro, `el recorte de ${nombre} llego al final de web/app.js sin cerrar: la parada (saldo a cero en una linea que acaba en ';' o en '}') no disparo nunca, asi que esto devolveria desde la declaracion hasta el final del fichero y las comprobaciones de abajo buscarian su cadena en medio app.js sin enterarse de nada. Mira como termina ${nombre} en web/app.js -- si acaba en ',' o lleva un comentario detras de la '}', lo que hay que arreglar es el corte, no la prueba`);
   return trozo.join('\n');
 }
 
