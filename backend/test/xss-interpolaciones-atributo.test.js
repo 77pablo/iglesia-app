@@ -54,6 +54,28 @@
 //  interpolación distinta que por casualidad use el mismo nombre de
 //  variable (n, r, c... son comunes en este archivo) no queda blanqueada
 //  por error.
+//
+//  CUANTOS SITIOS CUBRE CADA EXCEPCION (`sitios`, por defecto 1). Validar por
+//  el texto completo del atributo cierra el caso del nombre de variable
+//  repetido, pero NO cierra el del atributo repetido: dos trozos de HTML
+//  escritos igual dan la misma firma. Mientras el barrido solo preguntase
+//  "¿existe algun sitio con esta firma?", una excepcion escrita para una
+//  funcion blanquearia en silencio a cualquier otra que naciera con el mismo
+//  texto. Paso de verdad (7-ago) en el barrido de cuerpo: `modalAviso` nacio
+//  con el mismo `<p class="muted" style="margin:8px 0 16px">${msg}</p>` que
+//  `modalConfirm`, entro como sumidero de innerHTML NUEVO, y nadie pudo
+//  decir nada. La prueba de alternarGrupo de mas abajo es este mismo miedo
+//  resuelto a mano para UNA excepcion; el conteo lo resuelve para todas.
+//
+//  Por eso cada excepcion declara a CUANTOS sitios cubre y el conteo se
+//  comprueba. Rompe la suite en las dos direcciones, que son los dos
+//  agujeros:
+//   - de mas: un atributo nuevo que colisiona de firma con uno viejo y
+//     hereda su permiso sin que nadie lo audite — obliga a auditarlo y
+//     nombrarlo en el motivo.
+//   - de menos: desaparece uno de los sitios que la excepcion cubria —
+//     obliga a re-auditar el que queda en vez de heredarle el permiso.
+//     (Cero sitios es el caso zombi: la excepcion sobra y hay que borrarla.)
 // ============================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -103,7 +125,8 @@ const EXCEPCIONES = [
   },
   {
     firma: 'class::${okClase}',
-    motivo: 'okClase = opts.danger ? \'btn danger\' : \'btn\', un ternario entre dos literales de clase CSS asignado justo antes en la misma función (modalConfirm/modalPrompt); opts.danger es un booleano que decide la iglesia, nunca texto libre.'
+    sitios: 2,
+    motivo: 'okClase = opts.danger ? \'btn danger\' : \'btn\', un ternario entre dos literales de clase CSS asignado justo antes en la misma función; opts.danger es un booleano que decide la iglesia, nunca texto libre. DOS sitios con el mismo class: el botón cf-ok de modalConfirm y el mp-ok de modalPrompt, cada uno con su propia línea okClase = opts.danger ? ... verificada.'
   },
   {
     firma: 'data-r::${r}',
@@ -155,7 +178,8 @@ const EXCEPCIONES = [
   },
   {
     firma: 'class::estado-chip ${cls}',
-    motivo: 'cargarCasos()/verCaso(): cls sale de CASO_ESTADO[c.estado] (o del fallback [\'\',\'\',\'\']), y CASO_ESTADO es una constante de este archivo con solo tres claves conocidas -- si c.estado trae cualquier otra cosa, la búsqueda falla y cls cae al fallback vacío, nunca al dato crudo.'
+    sitios: 2,
+    motivo: 'cargarCasos()/verCaso(): cls sale de CASO_ESTADO[c.estado] (o del fallback [\'\',\'\',\'\']), y CASO_ESTADO es una constante de este archivo con solo tres claves conocidas -- si c.estado trae cualquier otra cosa, la búsqueda falla y cls cae al fallback vacío, nunca al dato crudo. DOS sitios con el mismo chip: la lista de casos (cargarCasos) y el detalle del caso (verCaso), cada uno con su propio destructuring de CASO_ESTADO verificado.'
   },
   {
     firma: 'style::color:var(${varColor});text-align:right',
@@ -188,6 +212,34 @@ const EXCEPCIONES_MAP = new Map(EXCEPCIONES.map(e => [e.firma, e]));
 // location.origin es una API del navegador, no un dato que nadie escribe.
 const EXCEPCION_LOCATION_ORIGIN_FIRMA_PREFIJO = 'value::${location.origin}/publico.html?ig=';
 
+// Los dos atajos que viven FUERA de la lista EXCEPCIONES. Se extraen aquí
+// para que el barrido y el conteo de abajo decidan con el MISMO criterio qué
+// interpolación depende de la lista: si divergieran, el conteo mediría una
+// cosa distinta de la que el barrido perdona y el candado no valdría nada.
+function cubiertoPorAtajo(atr, item) {
+  if (item.expr === 'location.origin' && atr.firma.startsWith(EXCEPCION_LOCATION_ORIGIN_FIRMA_PREFIJO)) return true;
+  // ver la prueba de accionesBtns() más abajo, que verifica esto de verdad
+  if ((item.expr === 'editFn' || item.expr === 'delFn') && atr.nombreAttr === 'onclick') return true;
+  return false;
+}
+
+// Un "sitio" es un ATRIBUTO ENTERO (un grupo: un value="..." concreto), no
+// cada ${...} suelto de dentro; y solo cuentan los atributos que de verdad
+// dependen de la lista EXCEPCIONES, es decir los que tienen al menos una
+// interpolación que ni las reglas mecánicas ni los dos atajos de arriba
+// aprueban. Contar los ${...} daría un número que no significa nada:
+// style="width:${size}px;height:${size}px" son dos interpolaciones y un solo
+// sitio que auditar.
+function sitiosQueNecesitanExcepcion() {
+  const porFirma = new Map();
+  for (const atr of hallarAtributos(fuente)) {
+    if (!atr.items.some(item => !esExprSegura(item.expr) && !cubiertoPorAtajo(atr, item))) continue;
+    if (!porFirma.has(atr.firma)) porFirma.set(atr.firma, []);
+    porFirma.get(atr.firma).push(atr.linea);
+  }
+  return porFirma;
+}
+
 test('todas las excepciones tienen un motivo real (no solo un nombre)', () => {
   for (const exc of EXCEPCIONES) {
     assert.ok(exc.motivo && exc.motivo.trim().length >= 20,
@@ -203,8 +255,7 @@ test('barrido: toda interpolación ${...} que arma el valor de un atributo="..."
   for (const atr of atributos) {
     for (const item of atr.items) {
       if (esExprSegura(item.expr)) continue;
-      if (item.expr === 'location.origin' && atr.firma.startsWith(EXCEPCION_LOCATION_ORIGIN_FIRMA_PREFIJO)) continue;
-      if ((item.expr === 'editFn' || item.expr === 'delFn') && atr.nombreAttr === 'onclick') continue; // ver la prueba de accionesBtns() más abajo, que verifica esto de verdad
+      if (cubiertoPorAtajo(atr, item)) continue;
       const exc = EXCEPCIONES_MAP.get(atr.firma);
       if (exc) continue;
       sinClasificar.push(`línea ${atr.linea}: atributo ${atr.nombreAttr}="${atr.textoValor}" (expresión sin escapar: ${JSON.stringify(item.expr)})`);
@@ -212,6 +263,37 @@ test('barrido: toda interpolación ${...} que arma el valor de un atributo="..."
   }
   assert.deepEqual(sinClasificar, [],
     'hay interpolaciones dentro de un atributo que no pasan por un ayudante seguro ni tienen excepción justificada:\n' + sinClasificar.join('\n'));
+
+  // Una excepción que ya no encuentra su sitio es una excepción que blanquea
+  // de más: el día que alguien escriba un atributo nuevo con ese mismo texto,
+  // entrará perdonado por un motivo que se escribió para OTRO código. Si el
+  // código cambió, la lista tiene que encoger con él.
+  const firmasUsadas = sitiosQueNecesitanExcepcion();
+  const sobrantes = EXCEPCIONES.filter(e => !firmasUsadas.has(e.firma)).map(e => e.firma);
+  assert.deepEqual(sobrantes, [],
+    'excepciones que ya no corresponden a ningún atributo del código: bórralas (una excepción sin sitio blanquea de más):\n' + sobrantes.join('\n'));
+});
+
+// El zombie-check de arriba solo pregunta "¿queda ALGUN atributo con esta
+// firma?", y la firma (atributo + texto completo del valor) no es única. Esto
+// cuenta los sitios: una excepción tiene que cubrir exactamente los que dice.
+//
+// Sin este candado, un atributo NUEVO escrito con el mismo texto que uno
+// viejo entra blanqueado y en silencio — que es lo que le pasó a modalAviso
+// en el barrido de cuerpo al nacer (ver la cabecera).
+test('cada excepción de atributo cubre exactamente los sitios que declara (una firma NO es única: dos atributos escritos igual la comparten)', () => {
+  const porFirma = sitiosQueNecesitanExcepcion();
+  const descuadres = [];
+  for (const exc of EXCEPCIONES) {
+    const lineas = porFirma.get(exc.firma) || [];
+    const declarados = exc.sitios || 1;
+    if (lineas.length !== declarados) {
+      descuadres.push(`${JSON.stringify(exc.firma)}: declara ${declarados} sitio(s), el barrido ve ${lineas.length}` +
+        (lineas.length ? ` (líneas ${lineas.join(', ')})` : ''));
+    }
+  }
+  assert.deepEqual(descuadres, [],
+    'excepciones cuyo número de sitios no cuadra. Si SOBRAN sitios, hay un atributo nuevo que heredó el permiso de otro sin que nadie lo auditara: audítalo y nómbralo en el motivo (o dale su propia firma). Si FALTAN, uno de los sitios desapareció: re-audita el que queda antes de bajar el número.\n' + descuadres.join('\n'));
 });
 
 test('accionesBtns: editFn/delFn solo se llaman con literales, nunca con datos', () => {
