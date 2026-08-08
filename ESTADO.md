@@ -1,5 +1,38 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
 
+## 🆕 8 DE AGOSTO DE 2026 · TARDE (2) — 🧺 las cosas a llevar avisan igual que el gasto
+
+**Fusionada a `main`** (merge de `chore/cosas-avisan`, `--no-ff`, suite
+**795/795 verde medida SOBRE la fusión**, rama borrada; no queda ninguna rama
+viva). Cierra la **asimetría** que este documento tenía anotada.
+
+`addCosa`, `borrarCosa` y `toggleCosa` llamaban a `_recargar()` **sin mirar el
+resultado**. Cuando ese GET falla, la lista se queda con la versión de antes y
+lo único que la persona lee es el *"Sin conexión"* genérico que suelta `abrir`
+por su cuenta — que habla de la red, no de **su** cambio. Y como la lista no lo
+enseña, lo natural es **volver a añadir lo mismo** (un duplicado en la hoja con
+la que el grupo se reparte qué lleva cada uno) o **volver a pulsar la ✕** sobre
+algo que ya no existe.
+
+Las tres esperan ahora su recarga, la piden **en silencio** (dos avisos
+apilados dejan arriba el genérico y debajo el único que dice qué hacer) y, si
+falla, dicen las dos cosas: que el cambio **sí** se guardó y por qué no se ve,
+con el motivo concreto de `api()` y **escapado**. `toggleCosa` es la distinta:
+en el camino bueno no recarga a propósito (la casilla ya se pintó sola), así
+que su aviso cubre el caso de que la casilla quede diciendo lo contrario de lo
+que hay guardado.
+
+⚠️ **Y destapó un arnés frágil, que se reparó:** el test *"borrar un gasto y
+borrar una cosa preguntan antes"* leía una **ventana fija de 14 líneas**
+(`slice(i, i + 14)`). Al crecer `borrarCosa`, el `danger:true` se salió por
+abajo y el test acusó al código de un defecto que no tenía. Ahora recorta el
+método contando llaves, con aviso si se desborda. **Un número mágico de líneas
+mide el tamaño del método, no lo que dice.** Acreditado por mutación: quitándole
+el `danger:true` a `borrarCosa` (`07ea187a` → `dbb5d221`) el test cae, y
+restaurado vuelve a verde.
+
+---
+
 ## 🆕 8 DE AGOSTO DE 2026 · TARDE — 🪢 tres cabos cortos cerrados y fusionados
 
 **FUSIONADA a `main`** (merge `851c6e7`, `--no-ff`), con la suite en **787/787
@@ -577,7 +610,7 @@ al tiro; abrir "🗒️ Gastos de eventos" y saltar a la hoja con "Ver hoja ›"
 Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
 
 ---
-*Última actualización: 8 de agosto de 2026, **tarde** (**tres cabos cortos**: el 400 que escribía media petición, `nino.familia` decidido, y el motivo del fallo de recarga dentro del aviso; suite **787**). ⚠️ **Queda UNA rama local sin fusionar, `chore/cabos-cortos`** (3 commits) — la fusión, el borrado y el push son de Pablo; mídelo con `git branch --no-merged main` y `git log origin/main..main --oneline`, no con esta línea. ⬆️ **Sin subir:** los 3 de la rama, más el commit de documentación que estás leyendo, más el de fusión si se hace — y encima los **3 del arnés de recortes ya fusionado hoy** (`c838d43`), que tampoco están arriba. **Cuéntalos, no los heredes:** esta línea se equivocó tres veces seguidas el 7-ago por olvidar el commit que se estaba escribiendo. ⚠️ Esta tanda **sí toca `web/app.js`** (`Org._porQue`, `Org._motivoFallo`), así que el despliegue sí se puede verificar buscando ese símbolo en el `app.js` que sirve Render — comparando por CONTENIDO, nunca por tamaño (el servido pesa un byte menos por línea, LF contra CRLF).*
+*Última actualización: 8 de agosto de 2026, **tarde (2)** (**las cosas a llevar avisan**: cerrada la asimetría de `addCosa`/`borrarCosa`/`toggleCosa`, y reparado un arnés que medía una ventana fija de 14 líneas; suite **795**, fusionada, sin ramas vivas). Lo anterior de la misma tarde: **tres cabos cortos** — el 400 que escribía media petición, `nino.familia` decidido, y el motivo del fallo de recarga dentro del aviso; suite **787**. ⚠️ **Queda UNA rama local sin fusionar, `chore/cabos-cortos`** (3 commits) — la fusión, el borrado y el push son de Pablo; mídelo con `git branch --no-merged main` y `git log origin/main..main --oneline`, no con esta línea. ⬆️ **Sin subir:** los 3 de la rama, más el commit de documentación que estás leyendo, más el de fusión si se hace — y encima los **3 del arnés de recortes ya fusionado hoy** (`c838d43`), que tampoco están arriba. **Cuéntalos, no los heredes:** esta línea se equivocó tres veces seguidas el 7-ago por olvidar el commit que se estaba escribiendo. ⚠️ Esta tanda **sí toca `web/app.js`** (`Org._porQue`, `Org._motivoFallo`), así que el despliegue sí se puede verificar buscando ese símbolo en el `app.js` que sirve Render — comparando por CONTENIDO, nunca por tamaño (el servido pesa un byte menos por línea, LF contra CRLF).*
 
 *Lo anterior, que ya caducó y se deja solo como aviso de cómo envejecen estas líneas: 8 de agosto de 2026, madrugada (**higiene de agosto**: los seis cabos del 7-ago cerrados, suite **778**). ⚠️ **Queda UNA rama local sin fusionar, `chore/higiene-agosto`** — aprobada; la fusión `--no-ff`, el borrado de la rama y el push son de Pablo. Compruébalo con `git branch --no-merged main`, no te fíes de esta línea. ⬆️ **Sin subir:** hoy `main` va **1** commit por delante de `origin/main`, y con esta rama fusionada serán **12** — los 9 de la rama, el commit de documentación que estás leyendo, y el commit de fusión. (Esta cuenta se equivocó **tres veces seguidas** el 7-ago, siempre por olvidar el commit que se estaba haciendo; ahora se cuentan los tres sumandos por separado a propósito. Mídelo igual: `git log origin/main..main --oneline`.) ⚠️ **Ningún commit de esta rama toca `web/app.js` salvo comentarios**, así que el despliegue no se verifica buscando código nuevo en el `app.js` de Render.*
 *Lo anterior, que sigue valiendo: los **cabos de agosto** (merge `1961032`) y el **candado de los sitios en los tres barridos XSS** (merge `a85de3c`, suite 755 medida sobre la fusión) ✅ **SUBIDOS Y DESPLEGADOS el mismo 7-ago:** Pablo hizo el push de los 33 commits; `main` y `origin/main` sincronizados, `/api/health` en 200, y el `app.js` que sirve Render ya trae `modalAviso` (8 apariciones, las mismas que el local) y el mensaje del choque de ediciones. ⚠️ Antes de subirse, esta línea llegó a decir **31** y luego **32**: las dos veces por no contar el commit de documentación que se estaba haciendo. Mide el número, no lo heredes. ⚠️ Y al comparar el `app.js` de producción con el local, **el desplegado pesa menos**: exactamente un byte por línea (CRLF contra LF). Eso **no** es un despliegue viejo — compara por contenido (`modalAviso`, una frase nueva), nunca por tamaño. **Cuántos planes quedan por ejecutar, el número de tests, y si `main` está fusionada, subida o desplegada caducan con cada rama** — no repitas de memoria nada de eso escrito aquí (ni siquiera esta línea): mira "POR DÓNDE RETOMAR (7-ago · noche 2)" aquí abajo, y compruébalo con `npm test`, `git branch --no-merged main` y `git log origin/main..main --oneline`, y contra el `app.js` que sirve Render.*
@@ -598,7 +631,7 @@ Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
 
 **Y queda una conversación abierta, no de código:** qué cosa nueva necesita la iglesia. Pablo iba a contarlo y no llegó a responderse.
 
-**No queda ninguna tanda aprobada pendiente.** Los cabos que dejaron los cabos de agosto están cerrados en dos tandas: el candado de los sitios en los tres barridos (`chore/candado-barridos-xss`, esa misma noche) y los seis restantes (`chore/higiene-agosto`, esta madrugada). **Lo que sigue abierto, y es corto** (actualizado la tarde del 8-ago, ver la sección de arriba): ~~el `UPDATE` antes del 400 en `admin.js`~~ **cerrado**, ~~`nino.familia`~~ **decidido y escrito**, ~~el texto del error en los caminos silenciosos~~ **cerrado**. ~~la razón principal del `await` sin prueba~~ **nunca estuvo abierto: medido el 8-ago por la tarde** (ver abajo). Queda: la asimetría de `addCosa`, que `sitios` cuente pero no identifique, y el `wip` `125c954`. **Nuevo, medido el 8-ago por la tarde:** 20 de los 198 handlers de `src/` tienen la forma "escribe y después rechaza" (la mayoría son ramas distintas, no defectos): clasificarlos es una tanda, no un cabo. Y lo que **ningún** candado cubre sigue en el **mapa de bordes** de la sección "7-ago · noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
+**No queda ninguna tanda aprobada pendiente.** Los cabos que dejaron los cabos de agosto están cerrados en dos tandas: el candado de los sitios en los tres barridos (`chore/candado-barridos-xss`, esa misma noche) y los seis restantes (`chore/higiene-agosto`, esta madrugada). **Lo que sigue abierto, y es corto** (actualizado la tarde del 8-ago, ver la sección de arriba): ~~el `UPDATE` antes del 400 en `admin.js`~~ **cerrado**, ~~`nino.familia`~~ **decidido y escrito**, ~~el texto del error en los caminos silenciosos~~ **cerrado**. ~~la razón principal del `await` sin prueba~~ **nunca estuvo abierto: medido el 8-ago por la tarde** (ver abajo). ~~la asimetría de `addCosa`~~ **cerrada la misma tarde** (ver la sección de las cosas a llevar). Queda: que `sitios` cuente pero no identifique, y el `wip` `125c954`. **Nuevo, medido el 8-ago por la tarde:** 20 de los 198 handlers de `src/` tienen la forma "escribe y después rechaza" (la mayoría son ramas distintas, no defectos): clasificarlos es una tanda, no un cabo. Y lo que **ningún** candado cubre sigue en el **mapa de bordes** de la sección "7-ago · noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
 
 **Las tandas que Pablo aprobó el 5-ago, todas cerradas** (se dejan aquí porque cada una explica qué cazó y qué dejó anotado):
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
