@@ -1,10 +1,15 @@
 # 📌 ESTADO DEL PROYECTO — App de Iglesia
 
-## 🆕 8 DE AGOSTO DE 2026 · TARDE — 🪢 tres cabos cortos cerrados (rama `chore/cabos-cortos`)
+## 🆕 8 DE AGOSTO DE 2026 · TARDE — 🪢 tres cabos cortos cerrados y fusionados
 
-**3 commits sobre `main`, SIN FUSIONAR al escribirse esto** — compruébalo con
-`git branch --no-merged main`, no te fíes de esta línea. Suite **787** verde
-(partía de 784, que es lo que dejó la fusión del arnés de recortes).
+**FUSIONADA a `main`** (merge `851c6e7`, `--no-ff`), con la suite en **787/787
+verde medida SOBRE la fusión**, la rama borrada y el árbol limpio: **no queda
+ninguna rama viva**. Partía de 784, que es lo que dejó la fusión del arnés de
+recortes. ⬆️ **Sin subir:** 8 commits contados con
+`git log origin/main..main --oneline` (los 3 del arnés con su fusión, los 3 de
+esta tanda con la suya), **más el commit de documentación que estás leyendo,
+que hace 9**. Vuelve a contarlos igualmente: esa suma se equivocó tres veces
+seguidas el 7-ago, siempre por olvidar el commit que se estaba escribiendo.
 
 **El día empezó midiendo, y desmintió a las notas dos veces:**
 1. Lo del 7 y 8 de agosto **ya estaba subido y desplegado** (`main` ==
@@ -568,8 +573,8 @@ Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
 ## 👉 POR DÓNDE RETOMAR (8-ago · tarde)
 
 **Lo primero es de Pablo, no de código, y en este orden:**
-1. **Fusionar `chore/cabos-cortos`** (`git merge --no-ff`, borrar la rama, y re-correr `cd backend && npm test` **sobre la fusión** — 787 en verde medido sobre la rama). Es la única rama viva: el arnés de recortes ya se fusionó hoy (`c838d43`) y `chore/limpieza-profunda` se borró por estar entera dentro de `main`.
-2. **Push** con GitHub Desktop — y esta vez sube también lo del arnés. Cuenta los commits con `git log origin/main..main --oneline`, no te fíes de ningún número escrito aquí. ⚠️ Esta tanda **sí toca `web/app.js`**: tras el deploy, `Org._motivoFallo` tiene que aparecer en el `app.js` que sirve Render. ⚠️ Si algo "no cambió", sospecha de la **caché del service worker** antes que de un bug: `web/sw.js` es cache-first, probar en incógnito.
+1. ~~Fusionar `chore/cabos-cortos`~~ **hecho** (merge `851c6e7`, 787 verde medido sobre la fusión, rama borrada). **No queda ninguna rama viva** — compruébalo con `git branch --no-merged main`, no te fíes de esta línea.
+2. **Push** con GitHub Desktop — sube de una vez lo del arnés y lo de esta tanda. Cuenta los commits con `git log origin/main..main --oneline`, no te fíes de ningún número escrito aquí. ⚠️ Esta tanda **sí toca `web/app.js`**: tras el deploy, `Org._motivoFallo` tiene que aparecer en el `app.js` que sirve Render. ⚠️ Si algo "no cambió", sospecha de la **caché del service worker** antes que de un bug: `web/sw.js` es cache-first, probar en incógnito.
 3. ⚠️ **Sigue en GitHub la rama `origin/chore/higiene-agosto`** en `3573032` (estado intermedio, anterior a los arreglos de su review). No contiene nada que `main` no tenga; borrarla es decisión de Pablo.
 
    ⚠️ En `main` sigue el `wip` `125c954` con la **suite roja a sabiendas**: explicado en la sección del 7-ago · noche. Aplastarlo con un rebase o dejarlo **sigue siendo decisión suya**, y cada tanda le añade commits encima.
