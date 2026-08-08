@@ -115,6 +115,78 @@ test('asistido: el pastor recibe el DETALLE — que fichas de ninos y cuantas pr
   assert.equal(apariciones.predicas, 2);
 });
 
+// --- Higiene A1: el nombre viaja dentro de un LIKE, y un LIKE tiene comodines.
+// Nadie valida que un nombre no lleve % o _ (perfilSchema solo exige 1..120
+// caracteres), asi que quien se ponga uno y luego se corrija recibiria el
+// recuento de TODAS las fichas y prédicas de su iglesia. Un nombre es texto
+// literal: no puede casar mas de lo que casaria escrito tal cual.
+function persona(S, usuario, nombre) {
+  return Number(db.prepare(
+    "INSERT INTO persona (iglesia_id, usuario, nombre, password_hash, es_pastor, activo) VALUES (?,?,?,'x',0,1)"
+  ).run(S.iglesiaId, usuario, nombre).lastInsertRowid);
+}
+
+async function renombrarse(b, S, personaId, nombreNuevo) {
+  const res = await fetch(b + '/api/directorio/perfil', {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(personaId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: nombreNuevo })
+  });
+  assert.equal(res.status, 200);
+  return (await res.json()).apariciones;
+}
+
+test('el % de un nombre no es un comodin: no arrastra las fichas ni las predicas de los demas', async () => {
+  const b = await servidor();
+  const S = sembrar('AP7');
+  sembrarRastros(S);   // un nino autoriza a "Rosa Diaz"; una predica y un sermon suyos
+  const comodinId = persona(S, 'com_AP7', '%');
+  assert.deepEqual(await renombrarse(b, S, comodinId, 'Juana Soto'), { ninos: 0, predicas: 0 },
+    'el texto literal "%" no esta escrito en ningun sitio; sin escapar saldrian 1 y 2');
+});
+
+test('el _ de un nombre tampoco: "R_sa Diaz" no encuentra a "Rosa Diaz"', async () => {
+  const b = await servidor();
+  const S = sembrar('AP8');
+  sembrarRastros(S);
+  const guionId = persona(S, 'gui_AP8', 'R_sa Diaz');
+  assert.deepEqual(await renombrarse(b, S, guionId, 'Rosa Diaz'), { ninos: 0, predicas: 0 },
+    'el _ casa "cualquier caracter" para SQLite, pero para una persona es solo un guion bajo');
+});
+
+// La barra es el caracter de escape, asi que hay que escaparla tambien. Si no,
+// "Rosa\Diaz" se buscaria como "RosaDiaz": misma cantidad de fichas, pero las
+// equivocadas. Por eso este va por la ruta del pastor, que dice CUAL ficha.
+test('escapar no ciega la busqueda: un nombre con \\ encuentra su propio rastro y no el ajeno', async () => {
+  const b = await servidor();
+  const S = sembrar('AP9');
+  db.prepare('INSERT INTO nino (iglesia_id, nombre, autorizados) VALUES (?,?,?)')
+    .run(S.iglesiaId, 'Con barra', 'Rosa\\Diaz, tia Carmen');
+  db.prepare('INSERT INTO nino (iglesia_id, nombre, autorizados) VALUES (?,?,?)')
+    .run(S.iglesiaId, 'Sin barra', 'RosaDiaz');
+  // Las predicas y los sermones son la otra consulta (y cada una lleva su
+  // propio ESCAPE): un senuelo sin barra en cada tabla para que se note.
+  db.prepare('INSERT INTO predica (iglesia_id, titulo, predicador) VALUES (?,?,?)')
+    .run(S.iglesiaId, 'La fe', 'Rosa\\Diaz');
+  db.prepare('INSERT INTO predica (iglesia_id, titulo, predicador) VALUES (?,?,?)')
+    .run(S.iglesiaId, 'Senuelo', 'RosaDiaz');
+  db.prepare('INSERT INTO sermon (iglesia_id, titulo, predicador) VALUES (?,?,?)')
+    .run(S.iglesiaId, 'Bosquejo', 'Rosa\\Diaz');
+  db.prepare('INSERT INTO sermon (iglesia_id, titulo, predicador) VALUES (?,?,?)')
+    .run(S.iglesiaId, 'Senuelo', 'RosaDiaz');
+  const barraId = persona(S, 'bar_AP9', 'Rosa\\Diaz');
+  const res = await fetch(b + `/api/admin/usuarios/${barraId}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + tok(S.pastorId, S.iglesiaId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: 'Rosa Diaz' })
+  });
+  assert.equal(res.status, 200);
+  const { apariciones } = await res.json();
+  assert.deepEqual(apariciones.ninos.map(n => n.nombre), ['Con barra'],
+    'la barra es literal: ni se la traga la D ni casa la ficha sin barra');
+  assert.equal(apariciones.predicas, 2, 'la predica y el sermon con barra, no los senuelos');
+});
+
 test('asistido: activar/desactivar sin tocar el nombre no trae apariciones', async () => {
   const b = await servidor();
   const S = sembrar('AP6');
