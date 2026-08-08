@@ -5184,9 +5184,26 @@ const Org = {
   // qué hacer—, y el de arriba tapa al que sirve. Los demás llamantes no lo
   // pasan y siguen avisando igual que siempre: son los que no miran el resultado.
   async abrir(id, origen, silencioso){
-    try{ const h=await api('/organizacion/'+id); Org._render(h, origen); return true; }
-    catch(e){ if(!silencioso) toast((e&&e.message)||'No se pudo abrir'); return false; }
+    try{ const h=await api('/organizacion/'+id); Org._render(h, origen); Org._motivoFallo=''; return true; }
+    catch(e){
+      // El motivo se GUARDA aparte en vez de devolverse. Quien mira el
+      // resultado lo usa como si/no (`if(alDia)`), y cualquier cosa que no sea
+      // un booleano —un objeto, un texto no vacio— siempre es "si": es el mismo
+      // fallo que este bloque ya pago una vez con una promesa sin await, y el
+      // sintoma seria decir "Gasto corregido" justo cuando la hoja se cayo.
+      Org._motivoFallo=(e&&e.message)||'';
+      if(!silencioso) toast(Org._motivoFallo||'No se pudo abrir');
+      return false;
+    }
   },
+  // El motivo concreto del ultimo fallo al releer la hoja, listo para meter en
+  // un aviso: entre parentesis, o cadena vacia si no se sabe. ESCAPADO, porque
+  // modalAviso mete su texto crudo en innerHTML y esto viene del servidor.
+  // Existe para que los avisos de guardarGasto dejen de tragarse lo que api()
+  // ya sabia: con un 429 la app tiene escrito "Espera un momento", y la persona
+  // leia en su lugar "recarga la pagina" — lo contrario de lo que hay que hacer.
+  _porQue(){ return Org._motivoFallo ? ' ('+escHtml(Org._motivoFallo)+')' : ''; },
+  _motivoFallo:'',
   _origen:'organizacion',
   volver(){ (ORG_ORIGEN[Org._origen]||ORG_ORIGEN.organizacion).ir(); },
   _hoja:null,
@@ -5635,9 +5652,14 @@ const Org = {
         // lo mismo que el bloque del 409: el aviso de aqui ya lo dice todo, y
         // el "Sin conexión" generico de abrir solo lo taparia.
         if(alDia) toast(id?'Gasto corregido':'Gasto añadido');
+        // El motivo va DENTRO de este aviso (Org._porQue(), escapado) en vez de
+        // salir en un toast aparte: dos avisos apilados de 2,8 s tapan al unico
+        // que dice que hacer, que es este. Asi la persona lee las dos cosas de
+        // una vez — que su dinero SI quedo anotado, y por que la hoja no se
+        // refresco.
         else modalAviso(id
-          ? 'Tu corrección sí se guardó, pero la hoja no se pudo actualizar. Recarga la página antes de seguir corrigiendo gastos.'
-          : 'El gasto sí se anotó, pero la hoja no se pudo actualizar. Recarga la página antes de seguir.',
+          ? 'Tu corrección sí se guardó, pero la hoja no se pudo actualizar'+Org._porQue()+'. Recarga la página antes de seguir corrigiendo gastos.'
+          : 'El gasto sí se anotó, pero la hoja no se pudo actualizar'+Org._porQue()+'. Recarga la página antes de seguir.',
           id?'Corrección guardada':'Gasto anotado');
       }catch(e){
         // El 409 solo puede darse en una CORRECCION (id puesto): es el backend
@@ -5685,11 +5707,13 @@ const Org = {
           // que el aviso se lea, y modalAviso es lo que la app tiene escrito
           // para "avisos que la persona necesita LEER".
           //
-          // Los dos textos son literales sin interpolacion: no hay dato de
-          // nadie que escapar (modalAviso mete el mensaje crudo en innerHTML).
+          // El unico trozo que NO es literal es el motivo de Org._porQue(), y
+          // sale ya escapado de ahi (modalAviso mete el mensaje crudo en
+          // innerHTML y ese texto viene del servidor). El resto sigue sin
+          // interpolar: no hay dato de nadie que meter aqui.
           modalAviso(alDia
             ? 'Otra persona cambió este gasto. Tu corrección no se guardó: abre el ✏️ de ese gasto y corrígelo de nuevo.'
-            : 'Tu corrección no se guardó y la hoja no se pudo actualizar. Recarga la página y vuelve a intentarlo.',
+            : 'Tu corrección no se guardó y la hoja no se pudo actualizar'+Org._porQue()+'. Recarga la página y vuelve a intentarlo.',
             'Tu corrección no se guardó');
           return;
         }
