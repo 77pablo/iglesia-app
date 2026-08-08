@@ -5497,17 +5497,40 @@ const Org = {
   // para quien necesite esperarla: los seis llamantes que solo repintan tras un
   // cambio propio la siguen ignorando y se comportan igual que antes.
   _recargar(silencioso){ return Org._hoja ? Org.abrir(Org._hoja.id, undefined, silencioso) : Promise.resolve(false); },
+  // Las tres de aquí abajo esperan su recarga y la piden EN SILENCIO. Mismo
+  // criterio que guardarGasto, y por la misma razón: `_recargar()` sin mirar el
+  // resultado deja la lista con la versión de ANTES, y lo único que la persona
+  // lee es el "Sin conexión" genérico que suelta `abrir` — que habla de la red,
+  // no de SU cambio. Como la lista no lo enseña, lo natural es volver a
+  // añadirlo: un duplicado en la hoja con la que el grupo se reparte qué lleva
+  // cada uno. El aviso tiene que decir las dos cosas, y el motivo va escapado
+  // (Org._porQue) porque modalAviso mete su texto crudo en innerHTML.
   async addCosa(){
     const nombre=$('org-cosa-nombre').value.trim(); const cantidad=Number($('org-cosa-cant').value)||1;
     if(!nombre) return toast('Escribe qué llevar');
     await conBoton(botonActual(), async()=>{
-      try{ await api('/organizacion/'+Org._hoja.id+'/cosas',{method:'POST',body:JSON.stringify({nombre,cantidad})}); Org._recargar(); }
+      try{
+        await api('/organizacion/'+Org._hoja.id+'/cosas',{method:'POST',body:JSON.stringify({nombre,cantidad})});
+        if(!await Org._recargar(true)) modalAviso(
+          'La cosa sí se añadió, pero la lista no se pudo actualizar'+Org._porQue()+'. Recarga la página para verla, y no la añadas otra vez.',
+          'Cosa añadida');
+      }
       catch(e){ toast((e&&e.message)||'No se pudo añadir'); }
     });
   },
   async toggleCosa(id, listo){
     try{ await api('/organizacion/cosas/'+id,{method:'PATCH',body:JSON.stringify({listo})}); }
-    catch(e){ toast((e&&e.message)||'No se pudo actualizar'); Org._recargar(); }
+    catch(e){
+      // Distinta a sus dos hermanas: en el camino bueno no recarga nada a
+      // propósito (la casilla ya se pintó sola). Esta recarga existe para
+      // devolver la pantalla a la verdad cuando el PATCH se rechaza — y si
+      // TAMBIÉN falla, la casilla se queda diciendo lo contrario de lo que hay
+      // guardado, y quien mire la lista creerá que eso ya lo lleva alguien.
+      if(await Org._recargar(true)) toast((e&&e.message)||'No se pudo actualizar');
+      else modalAviso(
+        'No se pudo marcar, y la lista tampoco se pudo actualizar'+Org._porQue()+'. Lo que ves en pantalla no es lo que está guardado: recarga la página.',
+        'No se pudo marcar');
+    }
   },
   // Preguntar antes de borrar: la ✕ es un botón pequeño en una lista larga, en
   // un teléfono, y esta línea puede llevar ya un responsable asignado y avisado.
@@ -5516,7 +5539,14 @@ const Org = {
     // la cosa lo escribe cualquier líder.
     const c=(Org._hoja&&Org._hoja.cosas||[]).find(x=>x.id===id);
     modalConfirm(`¿Quitar "${escHtml((c&&c.nombre)||'esta cosa')}" de la lista?`, async()=>{
-      try{ await api('/organizacion/cosas/'+id,{method:'DELETE'}); Org._recargar(); }
+      try{
+        await api('/organizacion/cosas/'+id,{method:'DELETE'});
+        // Sin esto la cosa sigue en pantalla y la ✕ se vuelve a pulsar sobre
+        // algo que ya no existe, que responde un error que no explica nada.
+        if(!await Org._recargar(true)) modalAviso(
+          'La cosa sí se quitó, pero la lista no se pudo actualizar'+Org._porQue()+'. Recarga la página: lo que sigue en pantalla ya no está.',
+          'Cosa quitada');
+      }
       catch(e){ toast((e&&e.message)||'No se pudo borrar'); }
     }, {danger:true});
   },
