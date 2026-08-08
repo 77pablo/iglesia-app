@@ -1,0 +1,346 @@
+{
+ "div class=\"mini-date\"><b>⟨⟩x.d": [
+  "chipFecha"
+ ],
+ "iv class=\"fecha-chip\"><b>⟨⟩x.d": [
+  "fechaChip"
+ ],
+ "((s%3600)/60); return m?`⟨⟩h": [
+  "duracionTxt"
+ ],
+ "0)/60); return m?`${h} h ⟨⟩m": [
+  "duracionTxt"
+ ],
+ "urn m?`${h} h ${m} min`:`⟨⟩h": [
+  "duracionTxt"
+ ],
+ "%86400)/3600); return h?`⟨⟩d": [
+  "duracionTxt"
+ ],
+ "/3600); return h?`${d} d ⟨⟩h": [
+  "duracionTxt"
+ ],
+ "eturn h?`${d} d ${h} h`:`⟨⟩d": [
+  "duracionTxt"
+ ],
+ " stroke-linejoin=\"round\">⟨⟩p": [
+  "_ic"
+ ],
+ "w.matchMedia(`(max-width:⟨⟩NAV_MOVIL_MAX": [
+  "esMovil",
+  "vigilarAnchoDelMenu"
+ ],
+ "📅 Próximos eventos</div>⟨⟩listaEventos": [
+  "renderDashboard"
+ ],
+ " Anuncios recientes</div>⟨⟩listaAnuncios": [
+  "renderDashboard"
+ ],
+ "<div class=\"anuncio-img\">⟨⟩IMG_AUDITORIO": [
+  "renderDashboard"
+ ],
+ " ${blanco?'selected':''}>⟨⟩t": [
+  "fechaSelectHTML"
+ ],
+ "{d===dDef?'selected':''}>⟨⟩d": [
+  "fechaSelectHTML"
+ ],
+ "1)===mDef?'selected':''}>⟨⟩nm": [
+  "fechaSelectHTML"
+ ],
+ "{a===yDef?'selected':''}>⟨⟩a": [
+  "fechaSelectHTML"
+ ],
+ "\" style=\"max-width:90px\">⟨⟩diaOpts": [
+  "fechaSelectHTML"
+ ],
+ "ustarDias('${prefijo}')\">⟨⟩mesOpts": [
+  "fechaSelectHTML"
+ ],
+ "ustarDias('${prefijo}')\">⟨⟩anioOpts": [
+  "fechaSelectHTML"
+ ],
+ "{x===dSel?'selected':''}>⟨⟩x": [
+  "fechaSelectAjustarDias"
+ ],
+ "ue) return ''; return `⟨⟩a.value": [
+  "fechaSelectValor"
+ ],
+ "''; return `${a.value}-⟨⟩String(m.value).padStart(2,'0')": [
+  "fechaSelectValor"
+ ],
+ ".value).padStart(2,'0')}-⟨⟩String(d.value).padStart(2,'0')": [
+  "fechaSelectValor"
+ ],
+ "ick=\"toggleFormEvento()\">⟨⟩label": [
+  "vistaCalendario"
+ ],
+ "d=>`<div class=\"cal-dow\">⟨⟩d": [
+  "renderCalendario"
+ ],
+ "dia++){ const fecha=`⟨⟩y": [
+  "renderCalendario"
+ ],
+ "`<div class=\"cal-puntos\">⟨⟩chips": [
+  "renderCalendario"
+ ],
+ "ntos\">${chips}</div>`:''}⟨⟩mas": [
+  "renderCalendario"
+ ],
+ " <div class=\"cal-grid\">⟨⟩celdas": [
+  "renderCalendario"
+ ],
+ " ${fechaTxt(fecha)}</div>⟨⟩btnPedir": [
+  "verDia"
+ ],
+ "v style=\"margin-top:6px\">⟨⟩badge": [
+  "verDia"
+ ],
+ " style=\"margin-top:16px\">⟨⟩inner": [
+  "verDia"
+ ],
+ "tyle=\"margin-bottom:4px\">⟨⟩titulo": [
+  "toggleFormEvento"
+ ],
+ "el><select id=\"ev-grupo\">⟨⟩opts": [
+  "toggleFormEvento"
+ ],
+ "on value=\"rol:${rl}\">🏷️ ⟨⟩ROL_LABEL[rl]||rl": [
+  "toggleFormAnuncio"
+ ],
+ " Toda la iglesia</option>⟨⟩grupos": [
+  "toggleFormAnuncio"
+ ],
+ "iglesia</option>${grupos}⟨⟩roles": [
+  "toggleFormAnuncio"
+ ],
+ "exto:'')}</textarea> ⟨⟩segHtml": [
+  "toggleFormAnuncio"
+ ],
+ "chip estado-${a.estado}\">⟨⟩si": [
+  "vistaMiServicio"
+ ],
+ "stado-${a.estado}\">${si} ⟨⟩sl": [
+  "vistaMiServicio"
+ ],
+ "Html(a.motivo):''}</span>⟨⟩acc": [
+  "vistaMiServicio"
+ ],
+ "\"pintarNoDispServicio()\">⟨⟩ev": [
+  "vistaServicio"
+ ],
+ "><select id=\"sv-persona\">⟨⟩ps": [
+  "vistaServicio"
+ ],
+ "ight:600;margin-top:4px\">⟨⟩accion": [
+  "filaNotif"
+ ],
+ "iltrarPanel(this.value)\">⟨⟩opts": [
+  "vistaPanel"
+ ],
+ "<select id=\"set-cancion\">⟨⟩opts": [
+  "cargarSetlist"
+ ],
+ " style=\"max-width:200px\">⟨⟩popts": [
+  "cargarPlan"
+ ],
+ " style=\"max-width:150px\">⟨⟩iopts": [
+  "cargarPlan"
+ ],
+ "-titulo\">🗓️ Ensayo</div>⟨⟩ensayoHtml": [
+  "cargarPlan"
+ ],
+ "mber(numPersonas)})</div>⟨⟩equipoHtml": [
+  "cargarPlan"
+ ],
+ "nas)})</div>${equipoHtml}⟨⟩addHtml": [
+  "cargarPlan"
+ ],
+ " <div style=\"flex:1\">⟨⟩titulo": [
+  "cargarMaterialMusica"
+ ],
+ "chip\">📌 Fijo</span>':''}⟨⟩sub": [
+  "cargarMaterialMusica"
+ ],
+ "h.n; if(!h.id) h.id=`⟨⟩h.seccion": [
+  "_normalizarHimnos"
+ ],
+ "h.id) h.id=`${h.seccion}-⟨⟩h.n": [
+  "_normalizarHimnos"
+ ],
+ "span class=\"muted small\">⟨⟩_hmTrans>0?'+'+_hmTrans:_hmTrans": [
+  "renderHimno"
+ ],
+ "span class=\"muted small\">⟨⟩_vcTrans>0?'+'+_vcTrans:_vcTrans": [
+  "renderVisorCancion"
+ ],
+ "ass=\"estado-chip ${cls}\">⟨⟩si": [
+  "cargarCasos",
+  "verCaso"
+ ],
+ "stado-chip ${cls}\">${si} ⟨⟩sl": [
+  "cargarCasos",
+  "verCaso"
+ ],
+ "accion-${m.id}\"> ⟨⟩chip": [
+  "filaMensajePortal"
+ ],
+ "${m.id}\"> ${chip}⟨⟩boton": [
+  "filaMensajePortal"
+ ],
+ "teriores a esta bandeja (⟨⟩d.previos": [
+  "vistaMensajesPortal"
+ ],
+ " : ''; z.innerHTML=`⟨⟩btnTodos": [
+  "vistaMensajesPortal"
+ ],
+ "Todos}<div id=\"mp-lista\">⟨⟩lista": [
+  "vistaMensajesPortal"
+ ],
+ " más</button>':''} ⟨⟩previos": [
+  "vistaMensajesPortal"
+ ],
+ "teriores a esta bandeja (⟨⟩_mpPreviosTotal": [
+  "atenderMensajePortal",
+  "borrarMensajePortal"
+ ],
+ ".saldo)}</b></p> ⟨⟩trans.porCategoria.length ? trans.porCategoria.map(g=>{const pct=trans.gastado?Math.round(g.monto/trans.gastado*100):0; return `<div class=\"dato-row\"><span>${escHtml(cap(g.categoria))}</span><span class=\"val\">${Number(pct)}% · ${money(g.monto)}</span></div>`;}).join('') : '<p class=\"muted small\">Cuando se registren gastos, aquí se verá en qué se fue el dinero.</p>'": [
+  "vistaTesoreria"
+ ],
+ " small\">No se pudo cargar⟨⟩que?' '+que:''": [
+  "errCargar"
+ ],
+ "n-items:center;gap:10px\">⟨⟩sel": [
+  "renderMiGrupo"
+ ],
+ "\"><div style=\"flex:1\"><b>⟨⟩ic": [
+  "verPredica"
+ ],
+ "span class=\"muted small\">⟨⟩link": [
+  "verPredica"
+ ],
+ "\" style=\"margin-top:8px\">⟨⟩recs||'<p class=\"muted small\">Sin recursos.</p>'": [
+  "verPredica"
+ ],
+ "<div class=\"widget-head\">⟨⟩titulo": [
+  "verIglesiaObispo"
+ ],
+ "get-head\">${titulo}</div>⟨⟩inner": [
+  "verIglesiaObispo"
+ ],
+ ":`<p class=\"muted small\">⟨⟩vacio": [
+  "verIglesiaObispo"
+ ],
+ "d small\">Iglesia:</span> ⟨⟩selIglesia": [
+  "verIglesiaObispo"
+ ],
+ "=\"flex:1;font-size:16px\">⟨⟩titulo": [
+  "modalDetalle"
+ ],
+ "ding:18px;overflow:auto\">⟨⟩html": [
+  "modalDetalle"
+ ],
+ "top:8px\">Sin notas.</p>'}⟨⟩recs?'<h3 class=\"section-title\" style=\"margin-top:14px\">Recursos</h3><div class=\"list\">'+recs+'</div>':''": [
+  "obPredica"
+ ],
+ ";gap:6px;flex-wrap:wrap\">⟨⟩chips": [
+  "cargarDirectorio"
+ ],
+ "\" style=\"margin-top:6px\">⟨⟩contacto": [
+  "cargarDirectorio"
+ ],
+ "tyle=\"margin:8px 0 16px\">⟨⟩msg": [
+  "modalAviso",
+  "modalConfirm"
+ ],
+ "=\"${okClase}\" id=\"cf-ok\">⟨⟩okLabel": [
+  "modalConfirm"
+ ],
+ "tyle=\"margin:8px 0 14px\">⟨⟩msg": [
+  "modalPrompt"
+ ],
+ "s=\"reason\" data-r=\"${r}\">⟨⟩r": [
+  "modalReason"
+ ],
+ "cHtml(u.usuario)}</span> ⟨⟩badges": [
+  "renderAdmin"
+ ],
+ "v style=\"margin-top:6px\">⟨⟩chips": [
+  "renderAdmin"
+ ],
+ "m-userform\"></div> ⟨⟩usuarios||'<p class=\"muted small\">Sin usuarios.</p>'": [
+  "renderAdmin"
+ ],
+ "-grupoform\"></div> ⟨⟩grupos||'<p class=\"muted small\">Sin grupos.</p>'": [
+  "renderAdmin"
+ ],
+ " al asignarlo.</p> ⟨⟩leyenda": [
+  "renderAdmin"
+ ],
+ "l(${Number(personaId)})\">⟨⟩window._admRolesOpts": [
+  "adminFormRol"
+ ],
+ "=\"ar-grupo-${personaId}\">⟨⟩window._admGruposOpts": [
+  "adminFormRol"
+ ],
+ "olor});text-align:right\">⟨⟩ico": [
+  "_persFila"
+ ],
+ "span class=\"muted small\">⟨⟩motivo": [
+  "_persFila"
+ ],
+ "s=\"muted small\">${motivo}⟨⟩cuando": [
+  "_persFila"
+ ],
+ "small\">${motivo}${cuando}⟨⟩retraso": [
+  "_persFila"
+ ],
+ "Ajuste('${g}','${val}')\">⟨⟩label": [
+  "vistaAjustes"
+ ],
+ " <div class=\"org-quien\">⟨⟩ed?quien:(x.responsable_nombre?'👤 '+escHtml(x.responsable_nombre):'')": [
+  "_render"
+ ],
+ "an class=\"muted small\">· ⟨⟩fuenteTxt": [
+  "_render"
+ ],
+ " <div id=\"org-cosas\">⟨⟩cosas": [
+  "_render"
+ ],
+ " <div id=\"org-gastos\">⟨⟩gastos": [
+  "_render"
+ ],
+ "tado)}</b></div> ⟨⟩aportes": [
+  "_render"
+ ],
+ " ${aportes} ⟨⟩correcciones": [
+  "_render"
+ ],
+ "o)}\" de ${money(g.monto)}⟨⟩quien": [
+  "borrarGasto"
+ ],
+ "||h.fecha; let txt=`*⟨⟩titulo": [
+  "copiarParaWhatsapp"
+ ],
+ "_llegada) txt+=`, llegar ⟨⟩h.hora_llegada": [
+  "copiarParaWhatsapp"
+ ],
+ " if(lugar) txt+=`\\n📍 ⟨⟩lugar": [
+  "copiarParaWhatsapp"
+ ],
+ "responsable_nombre ? ` — ⟨⟩c.responsable_nombre": [
+  "copiarParaWhatsapp"
+ ],
+ "turn `${c.listo?'✅':'•'} ⟨⟩c.nombre": [
+  "copiarParaWhatsapp"
+ ],
+ "to?'✅':'•'} ${c.nombre} ×⟨⟩c.cantidad": [
+  "copiarParaWhatsapp"
+ ],
+ "{c.nombre} ×${c.cantidad}⟨⟩quien": [
+  "copiarParaWhatsapp"
+ ],
+ "ow:auto;margin-top:10px\">⟨⟩opciones": [
+  "asignar"
+ ]
+}
