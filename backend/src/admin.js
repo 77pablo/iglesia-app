@@ -190,12 +190,26 @@ r.patch('/usuarios/:id', validar(editarUsuarioSchema), (req, res) => {
     return res.status(403).json({ error: 'Esta cuenta no se administra desde la iglesia' });
 
   const { activo, es_pastor, nombre } = req.body;
+
+  // Las dos guardias de "no puedes hacerte esto a ti mismo" van JUNTAS y ANTES
+  // de la primera escritura. Estaban cada una dentro de su bloque, y por eso un
+  // PATCH con {activo:true, es_pastor:false} sobre la propia cuenta escribia el
+  // `activo` y despues devolvia 400: un rechazo que dejaba la mitad hecha. Hoy
+  // ese UPDATE no cambiaba ninguna fila (sobre la propia cuenta `activo` solo
+  // puede escribirse a `true`, y quien pide ya esta activo porque auth.js lo
+  // relee en cada peticion), asi que no habia sintoma que ver — que es
+  // exactamente por que se arregla ahora y con un candado de forma
+  // (admin-guardias-antes-de-escribir.test.js) en vez de esperar al dia en que
+  // una guardia mas lo vuelva visible.
+  if (p.id === yo) {
+    if (activo === false) return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta' });
+    if (es_pastor === false) return res.status(400).json({ error: 'No puedes quitarte a ti mismo el rol de Pastor' });
+  }
+
   if (typeof activo === 'boolean') {
-    if (p.id === yo && !activo) return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta' });
     db.prepare('UPDATE persona SET activo = ? WHERE id = ?').run(activo ? 1 : 0, p.id);
   }
   if (typeof es_pastor === 'boolean') {
-    if (p.id === yo && !es_pastor) return res.status(400).json({ error: 'No puedes quitarte a ti mismo el rol de Pastor' });
     db.prepare('UPDATE persona SET es_pastor = ? WHERE id = ?').run(es_pastor ? 1 : 0, p.id);
   }
   // Corregir el nombre de otro: mismo patron de sincronizacion de una linea
