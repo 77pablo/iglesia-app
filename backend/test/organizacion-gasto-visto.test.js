@@ -130,6 +130,103 @@ test('otro proceso escribe entre la lectura y la transaccion: 409, y lo suyo que
   assert.equal(fila.concepto, 'Carne', 'y la nuestra no se aplico');
 });
 
+test('otro proceso BORRA el gasto entre la lectura y la transaccion: 404 y ni un apunte', async () => {
+  const b = await servidor();
+  const S = sembrar('TOC2');
+  const { hojaId, auth } = await hoja(b, S);
+  const { id, visto } = await gastoSembrado(b, S, auth, hojaId);
+  const apuntes = () => db.prepare(
+    "SELECT COUNT(*) n FROM auditoria WHERE iglesia_id = ? AND accion = 'editar_gasto'"
+  ).get(S.iglesiaId).n;
+  const antes = apuntes();
+
+  const { res, colado } = await conOtroProceso(async (armar, otro, seColo) => {
+    armar(o => o.prepare('DELETE FROM evento_org_gasto WHERE id = ?').run(id));
+    const res = await fetch(b + `/api/organizacion/gastos/${id}`, {
+      method: 'PATCH', headers: auth, body: JSON.stringify({ concepto: 'Carne asada', visto })
+    });
+    return { res, colado: seColo() };
+  });
+
+  assert.equal(colado, true);
+  // La misma respuesta que si el borrado hubiera llegado un instante ANTES: el
+  // resultado no puede depender de en que lado de la lectura temprana cae.
+  assert.equal(res.status, 404);
+  assert.equal(apuntes(), antes, 'no se audita la correccion de una fila que ya no existe');
+});
+
+// Esta es la que separa "mover la comparacion" de "mover el calculo". El PATCH
+// es parcial: lo que no viene se conserva de la fila. Si esa fila es la que se
+// leyo al llegar la peticion, un PATCH que solo toca el monto reescribe el
+// concepto viejo encima del que otro acaba de corregir — sin 409, porque el
+// cliente viejo no manda instantanea y no hay nada que comparar.
+test('lo que el PATCH no trae se conserva de la fila RELEIDA, no de la que se leyo al llegar', async () => {
+  const b = await servidor();
+  const S = sembrar('TOC3');
+  const { hojaId, auth } = await hoja(b, S);
+  const { id } = await gastoSembrado(b, S, auth, hojaId);   // "Carne", 20000
+
+  const { res } = await conOtroProceso(async (armar, otro, seColo) => {
+    armar(o => o.prepare("UPDATE evento_org_gasto SET concepto = 'Pan' WHERE id = ?").run(id));
+    // Cliente viejo (sin `visto`) que solo corrige el monto.
+    const res = await fetch(b + `/api/organizacion/gastos/${id}`, {
+      method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 25000 })
+    });
+    return { res, colado: seColo() };
+  });
+
+  assert.equal(res.status, 200);
+  const fila = db.prepare('SELECT concepto, monto FROM evento_org_gasto WHERE id = ?').get(id);
+  assert.equal(fila.concepto, 'Pan', 'el concepto que puso el otro sigue ahi: este PATCH no lo tocaba');
+  assert.equal(fila.monto, 25000, 'y el monto es el que se pidio');
+  const detalle = db.prepare(
+    "SELECT detalle FROM auditoria WHERE iglesia_id = ? AND accion = 'editar_gasto' ORDER BY id DESC"
+  ).get(S.iglesiaId).detalle;
+  assert.match(detalle, /^"Pan" \$20\.000 -> "Pan" \$25\.000$/,
+    'y el rastro dice el valor que de verdad habia antes, no uno que nunca estuvo');
+});
+
+// El BEGIN IMMEDIATE es la unica sentencia de este flujo capaz de esperar y
+// despues lanzar. Aqui se provoca de verdad: el otro proceso se queda con el
+// candado de escritura y no lo suelta. Lo que se comprueba es QUE MENSAJE lee
+// la persona — con el BEGIN fuera del try, la excepcion se escapa al manejador
+// generico de server.js y se convierte en "Ocurrió un error en el servidor",
+// sin dejar en el registro la linea de esta ruta.
+//
+// De paso mide lo que cuesta: se baja el busy_timeout a 200 ms para que la
+// prueba no tarde los 5 s reales del PRAGMA de db.js. Esos 5 s existen y, como
+// DatabaseSync es sincrono, son 5 s con el bucle de eventos parado.
+test('base ocupada al abrir la transaccion: contesta esta ruta, no el manejador generico', async () => {
+  const b = await servidor();
+  const S = sembrar('TOC4');
+  const { hojaId, auth } = await hoja(b, S);
+  const { id } = await gastoSembrado(b, S, auth, hojaId);
+
+  const otro = new DatabaseSync(process.env.DB_PATH);
+  let res, cuerpo, espera;
+  try {
+    otro.exec('BEGIN IMMEDIATE');          // y NO lo suelta: el candado se queda aqui
+    db.exec('PRAGMA busy_timeout = 200');
+    const t0 = Date.now();
+    res = await fetch(b + `/api/organizacion/gastos/${id}`, {
+      method: 'PATCH', headers: auth, body: JSON.stringify({ monto: 25000 })
+    });
+    espera = Date.now() - t0;
+    cuerpo = await res.json();
+  } finally {
+    db.exec('PRAGMA busy_timeout = 5000');
+    otro.exec('ROLLBACK');
+    otro.close();
+  }
+
+  assert.equal(res.status, 500);
+  assert.equal(cuerpo.error, 'No se pudo corregir el gasto',
+    'el mensaje de esta ruta; el generico significaria que la excepcion se escapo del try');
+  assert.ok(espera >= 180, `tuvo que esperar el busy_timeout, y espero ${espera} ms`);
+  assert.equal(db.prepare('SELECT monto FROM evento_org_gasto WHERE id = ?').get(id).monto, 20000,
+    'y no se escribio nada');
+});
+
 test('el pisoton da 409 y la fila queda como la dejo el otro', async () => {
   const b = await servidor();
   const S = sembrar('VI1');
@@ -227,11 +324,17 @@ test('el 409 no deja rastro: el apunte de auditoria vive en la transaccion que s
   assert.equal(apuntes(), antes, 'una correccion que no se aplico no puede figurar en el historial de la hoja');
 });
 
-// El precio de mudarla: ahora corre DESPUES de validar lo que entra, asi que
-// una peticion con la instantanea vieja Y datos incoherentes recibe el 400
-// antes que el 409. Lo que se garantiza en los dos casos —y lo que de verdad
-// importa— es que no se escribe nada.
-test('instantanea vieja y datos incoherentes: contesta el 400 y la fila no se toca', async () => {
+// Con la instantanea vieja Y datos incoherentes manda el 409, no el 400: la
+// fila se mira antes de aplicarle nada encima. Es el orden util —"recarga la
+// hoja" explica lo que pasa; "elige quien puso el dinero" culparia a quien
+// escribio bien— y ademas es el unico coherente, porque la coherencia de lo
+// que entra se juzga CONTRA la fila, y la fila es la releida.
+//
+// (Una version intermedia de este cabo movio solo la comparacion y dejaba los
+// calculos colgando de la lectura temprana; con aquello esto respondia 400.
+// Se fijo aqui como si fuera el precio a pagar. No lo era: era una mudanza a
+// medias.)
+test('instantanea vieja y datos incoherentes: manda el 409, y la fila no se toca', async () => {
   const b = await servidor();
   const S = sembrar('VI6');
   const { hojaId, auth } = await hoja(b, S);
@@ -243,8 +346,8 @@ test('instantanea vieja y datos incoherentes: contesta el 400 y la fila no se to
   const res = await fetch(b + `/api/organizacion/gastos/${id}`, {
     method: 'PATCH', headers: auth, body: JSON.stringify({ fuente: 'devuelve', visto })
   });
-  assert.equal(res.status, 400);
-  assert.match((await res.json()).error, /Elige quien puso el dinero/);
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /recarga la hoja/);
   const fila = db.prepare('SELECT fuente, pagado_por FROM evento_org_gasto WHERE id = ?').get(id);
   assert.equal(fila.fuente, 'caja', 'lo de B sigue intacto');
   assert.equal(fila.pagado_por, null);
