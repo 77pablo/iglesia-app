@@ -50,7 +50,21 @@ seguidas el 7-ago, siempre por olvidar el commit que se estaba escribiendo.
   promesa sin `await`). `Org._porQue()` lo entrega **escapado**, con test de
   `<img onerror>`, porque `modalAviso` mete su texto crudo en `innerHTML`.
 
-**Una corrección a este mismo documento:** la sección del 8-ago · madrugada
+**El cabo del `await` nunca estuvo abierto — y la nota que lo abría se
+equivocaba en las DOS mitades.** Decía: *"quitar los dos `await` deja la suite
+en verde: hoy la única defensa es un comentario"*, y que para arreglarlo hacía
+falta un arnés que no existía. Medido con el mutador (`web/app.js`, sha
+`5761d17c` → `580ff0e8`, dos ocurrencias sustituidas y verificadas):
+**quitar los dos `await` tira CUATRO tests**. Dos son de esta tanda, pero los
+otros dos —*"si además falla la recarga…"* y *"si el gasto se guardó pero la
+hoja no se pudo releer…"*— **ya estaban en `6245410`**, con las mismas
+aserciones (`recargaOk:false` → `modales.length === 1`), y esta tanda no tocó su
+lógica: solo añadió `_porQue` a la lista de métodos que montan. Sin el `await`,
+`alDia` es una promesa, toda promesa es "sí", sale el toast de "Gasto
+corregido" y esos dos asserts caen. **El candado llevaba ahí desde el 7-ago y
+nadie lo comprobó antes de escribir que no existía.**
+
+**Una corrección más a este mismo documento:** la sección del 8-ago · madrugada
 decía que hacía falta "un arnés que sepa recortar métodos del literal
 `const Org = {`" y que eso no era un arreglo de cinco líneas. **Ya existía**,
 en `organizacion-pagador-selector.test.js:68`, y monta nueve métodos reales de
@@ -584,7 +598,7 @@ Suite: **721** (714 + 7; medida al cerrar la rama; caduca con la próxima rama).
 
 **Y queda una conversación abierta, no de código:** qué cosa nueva necesita la iglesia. Pablo iba a contarlo y no llegó a responderse.
 
-**No queda ninguna tanda aprobada pendiente.** Los cabos que dejaron los cabos de agosto están cerrados en dos tandas: el candado de los sitios en los tres barridos (`chore/candado-barridos-xss`, esa misma noche) y los seis restantes (`chore/higiene-agosto`, esta madrugada). **Lo que sigue abierto, y es corto** (actualizado la tarde del 8-ago, ver la sección de arriba): ~~el `UPDATE` antes del 400 en `admin.js`~~ **cerrado**, ~~`nino.familia`~~ **decidido y escrito**, ~~el texto del error en los caminos silenciosos~~ **cerrado**. Queda: **la razón principal del `await` sin prueba** —y ojo, la excusa que había escrita aquí era falsa: el arnés que recorta métodos de `const Org = {` **ya existía** en `organizacion-pagador-selector.test.js:68`, así que esa prueba se puede escribir hoy—, la asimetría de `addCosa`, que `sitios` cuente pero no identifique, y el `wip` `125c954`. **Nuevo, medido el 8-ago por la tarde:** 20 de los 198 handlers de `src/` tienen la forma "escribe y después rechaza" (la mayoría son ramas distintas, no defectos): clasificarlos es una tanda, no un cabo. Y lo que **ningún** candado cubre sigue en el **mapa de bordes** de la sección "7-ago · noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
+**No queda ninguna tanda aprobada pendiente.** Los cabos que dejaron los cabos de agosto están cerrados en dos tandas: el candado de los sitios en los tres barridos (`chore/candado-barridos-xss`, esa misma noche) y los seis restantes (`chore/higiene-agosto`, esta madrugada). **Lo que sigue abierto, y es corto** (actualizado la tarde del 8-ago, ver la sección de arriba): ~~el `UPDATE` antes del 400 en `admin.js`~~ **cerrado**, ~~`nino.familia`~~ **decidido y escrito**, ~~el texto del error en los caminos silenciosos~~ **cerrado**. ~~la razón principal del `await` sin prueba~~ **nunca estuvo abierto: medido el 8-ago por la tarde** (ver abajo). Queda: la asimetría de `addCosa`, que `sitios` cuente pero no identifique, y el `wip` `125c954`. **Nuevo, medido el 8-ago por la tarde:** 20 de los 198 handlers de `src/` tienen la forma "escribe y después rechaza" (la mayoría son ramas distintas, no defectos): clasificarlos es una tanda, no un cabo. Y lo que **ningún** candado cubre sigue en el **mapa de bordes** de la sección "7-ago · noche (2)" — que es el sitio donde apuntar cualquier borde nuevo, en vez de volver a escribir que ya no quedan.
 
 **Las tandas que Pablo aprobó el 5-ago, todas cerradas** (se dejan aquí porque cada una explica qué cazó y qué dejó anotado):
 - ~~**Tanda D — cabos ARCO**~~ **hecha y fusionada el 6-ago** — ver su sección abajo. ⚠️ De sus dos cabos, **uno ya estaba hecho desde antes** (el bloqueo de des-anonimizar, commit `3c1aaad`, con guardia en servidor + botón escondido + test propio): otra vez la lista de pendientes envejeció sin avisar. Solo hubo que hacer el de `pertenencia`.
