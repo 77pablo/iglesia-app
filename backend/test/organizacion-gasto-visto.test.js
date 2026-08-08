@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import { cargarDb } from './helpers.js';
 import { signToken } from '../src/auth.js';
 
@@ -61,6 +62,74 @@ async function gastoSembrado(b, S, auth, hojaId) {
   return { id, visto: { concepto: 'Carne', monto: 20000, fuente: 'devuelve', pagado_por: S.anaId } };
 }
 
+// ---------- El otro proceso, de verdad ----------
+// En produccion NO hay un solo proceso tocando este fichero: el contenedor
+// arranca `litestream replicate ... -exec "node src/server.js"` (ver
+// docker-entrypoint.sh:64), o sea Litestream con su propia conexion de
+// escritura a la misma base. El hueco entre "mirar" y "escribir" no es un
+// futurible.
+//
+// Y SI se puede provocar desde una prueba, con un solo proceso de Node: una
+// segunda conexion DatabaseSync al mismo fichero es exactamente lo que seria
+// otro proceso, y una costura sincrona en db.exec la dispara en el instante
+// preciso. La costura es fea, pero es la unica pieza que no puede fabricarse
+// de otra forma: el manejador es sincrono de punta a punta, asi que no hay
+// ningun await donde colarse desde fuera. Vive dentro de un solo test y se
+// desmonta en el finally.
+//
+// (Esta prueba nacio de una revision: la que habia antes miraba DONDE estaba
+// una cadena de texto, y con eso `.get(gasto.id)` -> `.get(-999) || gasto`
+// borraba el cabo entero sin despeinar la suite.)
+async function conOtroProceso(fn) {
+  const otro = new DatabaseSync(process.env.DB_PATH);
+  otro.exec('PRAGMA busy_timeout = 5000');
+  const execOrig = db.exec.bind(db);
+  let colado = false;
+  // Se cuela JUSTO al abrir la transaccion del manejador: eso es despues de su
+  // lectura temprana y antes de que escriba. El mismo entrelazado que produce
+  // un segundo worker.
+  const armar = (accion) => {
+    db.exec = (sql) => {
+      if (!colado && /^BEGIN/i.test(sql.trim())) {
+        colado = true;
+        otro.exec('BEGIN IMMEDIATE');
+        accion(otro);
+        otro.exec('COMMIT');
+      }
+      return execOrig(sql);
+    };
+  };
+  try {
+    return await fn(armar, otro, () => colado);
+  } finally {
+    db.exec = execOrig;
+    otro.close();
+  }
+}
+
+test('otro proceso escribe entre la lectura y la transaccion: 409, y lo suyo queda intacto', async () => {
+  const b = await servidor();
+  const S = sembrar('TOC1');
+  const { hojaId, auth } = await hoja(b, S);
+  const { id, visto } = await gastoSembrado(b, S, auth, hojaId);
+
+  const { res, cuerpo, fila, colado } = await conOtroProceso(async (armar, otro, seColo) => {
+    armar(o => o.prepare('UPDATE evento_org_gasto SET monto = 22000 WHERE id = ?').run(id));
+    const res = await fetch(b + `/api/organizacion/gastos/${id}`, {
+      method: 'PATCH', headers: auth, body: JSON.stringify({ concepto: 'Carne asada', visto })
+    });
+    return {
+      res, cuerpo: await res.json(), colado: seColo(),
+      fila: otro.prepare('SELECT concepto, monto FROM evento_org_gasto WHERE id = ?').get(id)
+    };
+  });
+
+  assert.equal(colado, true, 'sin costura disparada esta prueba no prueba nada');
+  assert.equal(res.status, 409, `se esperaba 409 y llego ${res.status} ${JSON.stringify(cuerpo)}`);
+  assert.equal(fila.monto, 22000, 'la correccion del otro proceso sigue en pie');
+  assert.equal(fila.concepto, 'Carne', 'y la nuestra no se aplico');
+});
+
 test('el pisoton da 409 y la fila queda como la dejo el otro', async () => {
   const b = await servidor();
   const S = sembrar('VI1');
@@ -105,26 +174,38 @@ test('sin visto (cliente viejo) el PATCH sigue funcionando como hoy', async () =
   assert.equal(res.status, 200, 'compatibilidad: backend y frontend pueden no llegar juntos');
 });
 
-// --- Higiene A4: la comparacion se mudo DENTRO de la transaccion que escribe
-// (antes se hacia contra una fila leida al llegar la peticion, que el dia que
-// la app corra en dos procesos seria mirar el pasado). Dos consecuencias
-// visibles desde fuera, y las dos se fijan aqui.
-
-// Esta se comprueba leyendo el codigo, como la zona horaria del contenedor y
-// las reglas @media print, porque es lo unico que se puede hacer: la propiedad
-// es "no hay hueco entre mirar y escribir", y con un solo proceso y un solo
-// hilo NINGUNA prueba de Node puede abrir ese hueco. Sin esto, el cabo podria
-// volver a su sitio de antes sin que la suite se enterara.
-test('la comparacion se hace dentro de la transaccion, y la transaccion es IMMEDIATE', () => {
+// --- Higiene A4: la comparacion se mudo DENTRO de la transaccion que escribe.
+// Antes se hacia contra una fila leida al llegar la peticion, o sea contra el
+// pasado, y con Litestream escribiendo en el mismo fichero eso no era un
+// futurible. Quien guarda ese cabo es la prueba de las dos conexiones de mas
+// arriba; lo de aqui abajo es un complemento, no un sustituto.
+//
+// Aqui se lee el CODIGO, y hay que ser honesto sobre por que: no porque el
+// comportamiento no se pueda probar —se prueba arriba—, sino porque quedan dos
+// cosas que ninguna peticion HTTP distingue:
+//   - que la transaccion sea IMMEDIATE y no un BEGIN diferido. En la prueba de
+//     arriba el otro proceso confirma ANTES de nuestro BEGIN, asi que no hay
+//     pelea por el candado y las dos formas dan 409 igual. La diferencia solo
+//     aparece cuando los dos escriben a la vez, que es justo lo que una prueba
+//     de un proceso no puede orquestar.
+//   - que no reaparezca una SEGUNDA comparacion antes del BEGIN. Volveria a
+//     decidir mirando el pasado, y la de dentro taparia el sintoma.
+// (Una version anterior de este comentario decia que NINGUNA prueba de Node
+// podia observar el hueco. Era falso, y una revision lo demostro escribiendo
+// la prueba. Se deja escrito para que nadie herede la conclusion cómoda.)
+test('el codigo: transaccion IMMEDIATE, y una sola comparacion, dentro', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'organizacion.js'), 'utf8');
   const begin = src.indexOf("db.exec('BEGIN IMMEDIATE')");
   assert.notEqual(begin, -1, 'la correccion del gasto abre su transaccion con BEGIN IMMEDIATE');
   // El cierre, sea cual sea su forma: se busca COMMIT con la comilla pegada
   // para no tropezar con la palabra COMMIT escrita en los comentarios.
   const commit = src.indexOf("COMMIT'", begin);
+  const relee = src.indexOf('SELECT concepto, monto, fuente, pagado_por FROM evento_org_gasto');
+  assert.ok(relee > begin && relee < commit,
+    'la relectura de la fila vive entre el BEGIN y el cierre de la transaccion');
   const compara = src.indexOf('visto.concepto !== ');
   assert.ok(compara > begin && compara < commit,
-    'la unica comparacion con `visto` vive entre el BEGIN y el cierre de la transaccion');
+    'y la comparacion con `visto` tambien');
   assert.equal(src.indexOf('visto.concepto !== ', compara + 1), -1,
     'y es UNICA: una segunda comparacion antes del BEGIN volveria a decidir mirando el pasado');
 });
