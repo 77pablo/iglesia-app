@@ -120,15 +120,15 @@ const EXCEPCIONES = [
   },
   {
     firma: 'id::${prefijo}-dia',
-    motivo: 'prefijo es el parámetro de fechaSelectHTML(prefijo,...); todas las llamadas del archivo le pasan un literal fijo (\'en\',\'ev\',\'dp-cumple\'...) menos UNA: formEditarLeccion le pasa \'el\'+id, y ese id le llega ya envuelto en Number() desde su único llamador (el botón Editar de la lista de lecciones), así que es \'el\' + un entero. Nunca un dato que escriba una persona.'
+    motivo: 'prefijo es el parámetro de fechaSelectHTML(prefijo,...); todas las llamadas del archivo le pasan un literal fijo (\'en\',\'ev\',\'dp-cumple\'...) menos UNA: formEditarLeccion le pasa \'el\'+id, y ese id le llega ya envuelto en Number() desde su único llamador (el botón Editar de la lista de lecciones), así que es \'el\' + un entero. Nunca un dato que escriba una persona. Esto no es una promesa: lo fija la prueba de fechaSelectHTML de mas abajo, que recorre TODAS las llamadas del archivo.'
   },
   {
     firma: 'id::${prefijo}-mes',
-    motivo: 'mismo parámetro prefijo que arriba, mismo motivo: literal fijo del código en todas las llamadas salvo el \'el\'+id entero de formEditarLeccion.'
+    motivo: 'mismo parámetro prefijo que arriba, mismo motivo y misma prueba de fechaSelectHTML detrás: literal fijo del código en todas las llamadas salvo el \'el\'+id entero de formEditarLeccion.'
   },
   {
     firma: 'id::${prefijo}-anio',
-    motivo: 'mismo parámetro prefijo que arriba, mismo motivo: literal fijo del código en todas las llamadas salvo el \'el\'+id entero de formEditarLeccion.'
+    motivo: 'mismo parámetro prefijo que arriba, mismo motivo y misma prueba de fechaSelectHTML detrás: literal fijo del código en todas las llamadas salvo el \'el\'+id entero de formEditarLeccion.'
   },
   {
     firma: 'value::${c}',
@@ -342,6 +342,53 @@ test('accionesBtns: editFn/delFn solo se llaman con literales, nunca con datos',
     const [, arg1, arg2] = m;
     assert.ok(literalOIdentificador.test(arg1), `accionesBtns: primer argumento no es un identificador/literal fijo: ${arg1}`);
     assert.ok(literalOIdentificador.test(arg2), `accionesBtns: segundo argumento no es un identificador/literal fijo: ${arg2}`);
+  }
+});
+
+test('fechaSelectHTML: el prefijo de cada llamada es un literal fijo (o \'el\'+un id entero)', () => {
+  // Verificación real de CUATRO excepciones, tres aquí y una en el otro
+  // barrido; si esta prueba se borra, las cuatro se quedan sin nada que las
+  // sostenga y vuelven a ser una afirmación en un comentario:
+  //   - id::${prefijo}-dia, id::${prefijo}-mes, id::${prefijo}-anio (arriba)
+  //   - onchange::fechaSelectAjustarDias('${prefijo}') (xss-manejadores.test.js)
+  // Las cuatro dicen lo mismo: `prefijo` nunca trae un dato que escriba una
+  // persona. Eso solo es cierto mientras TODAS las llamadas del archivo le
+  // pasen un literal fijo, y el día que alguien escriba
+  // fechaSelectHTML(p.nombre, ...) el id y el onchange que salen de ahí se
+  // los tragan las cuatro excepciones sin que nada se entere. Esto lo caza.
+  //
+  // Formas admitidas para el PRIMER argumento, y solo estas dos:
+  //   (a) una cadena literal: 'ev', 'dp-cumple', 'prp-desde'...
+  //   (b) 'literal'+identificador: la única es 'el'+id, de formEditarLeccion.
+  //       Que ese id sea un entero tampoco se da por supuesto — se fija abajo.
+  // Si aparece una llamada que no encaja, NO ensanches esta lista para que
+  // quepa: averigua de dónde sale ese prefijo. Si puede venir de una persona,
+  // es un fallo de seguridad, no un número que ajustar.
+  const cabezaSegura = /^fechaSelectHTML\(\s*(?:'[\w-]+'|'[\w-]+'\s*\+\s*[A-Za-z_$][\w$]*)\s*[,)]/;
+  // El archivo menciona fechaSelectHTML( en un comentario de documentación
+  // (la firma de la función); eso no es una llamada.
+  const enComentario = (pos) => fuente.slice(fuente.lastIndexOf('\n', pos) + 1, pos).includes('//');
+  const sitios = [...fuente.matchAll(/fechaSelectHTML\(/g)]
+    .filter(m => !/function $/.test(fuente.slice(Math.max(0, m.index - 9), m.index)))
+    .filter(m => !enComentario(m.index));
+  assert.ok(sitios.length >= 10, 'no se encontraron las llamadas a fechaSelectHTML(); si se renombró, esta prueba hay que actualizarla, no borrarla');
+  for (const m of sitios) {
+    const cabeza = fuente.slice(m.index, m.index + 160);
+    assert.ok(cabezaSegura.test(cabeza),
+      `fechaSelectHTML: el prefijo no es un literal fijo ni 'el'+id — de aquí salen los id="${'${prefijo}'}-dia/-mes/-anio" y el onchange, que cuatro excepciones dan por seguros: ${cabeza.split('\n')[0]}`);
+  }
+
+  // La única llamada de la forma (b) es 'el'+id, dentro de
+  // formEditarLeccion(id). Que ese id sea un entero no es una promesa: su
+  // único llamador lo envuelve en Number(), y esto lo fija.
+  const sitiosLeccion = [...fuente.matchAll(/formEditarLeccion\(/g)]
+    .filter(m => !/function $/.test(fuente.slice(Math.max(0, m.index - 9), m.index)))
+    .filter(m => !enComentario(m.index));
+  assert.ok(sitiosLeccion.length > 0, 'no se encontró ninguna llamada a formEditarLeccion(); si se renombró, esta prueba hay que actualizarla, no borrarla');
+  for (const m of sitiosLeccion) {
+    const cabeza = fuente.slice(m.index, m.index + 80);
+    assert.ok(/^formEditarLeccion\(\$\{Number\([\w$.]+\)\}\)/.test(cabeza),
+      `formEditarLeccion ya no recibe su id envuelto en Number(): entonces 'el'+id deja de ser 'el'+un entero y el prefijo de fechaSelectHTML deja de ser demostrable: ${cabeza.split('\n')[0]}`);
   }
 });
 

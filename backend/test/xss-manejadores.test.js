@@ -59,7 +59,7 @@ const EXCEPCIONES = [
   {
     firma: "onchange::fechaSelectAjustarDias('${prefijo}')",
     sitios: 2,
-    motivo: 'prefijo es el parametro de fechaSelectHTML(prefijo,...); en cada llamada del archivo se le pasa un literal fijo (\'en\',\'ev\',\'dp-cumple\'...) o \'el\'+id con un id entero, nunca un dato que escriba una persona. Mismo motivo que las excepciones id::${prefijo}-dia/-mes/-anio del barrido de atributos. DOS sitios con el mismo onchange, los dos dentro de fechaSelectHTML y con el mismo prefijo: el <select> del mes y el del año (los dos recalculan los dias del mes elegido).'
+    motivo: 'prefijo es el parametro de fechaSelectHTML(prefijo,...); en cada llamada del archivo se le pasa un literal fijo (\'en\',\'ev\',\'dp-cumple\'...) o \'el\'+id con un id entero, nunca un dato que escriba una persona. No es una promesa: lo fija la prueba "fechaSelectHTML: el prefijo de cada llamada es un literal fijo" del barrido de atributos, que recorre TODAS las llamadas — la misma que sostiene las excepciones id::${prefijo}-dia/-mes/-anio de alli. DOS sitios con el mismo onchange, los dos dentro de fechaSelectHTML y con el mismo prefijo: el <select> del mes y el del año (los dos recalculan los dias del mes elegido).'
   },
   {
     firma: "onclick::verDia('${fecha}')",
